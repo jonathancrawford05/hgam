@@ -518,8 +518,14 @@ def test_fit_engine_gam_multistart_matches_default_shape() -> None:
 
     # Both calls pin the L-BFGS-B search this wiring test is about (ADR-248
     # made Newton the default; multistart is an L-BFGS-B-only diagnostic).
-    single = fit_engine_gam(model, data, y, maxiter=60, outer="lbfgsb")
-    multi = fit_engine_gam(model, data, y, maxiter=60, multistart=True, n_starts=3, outer="lbfgsb")
+    # The analytic gradient keeps the convergence check off the finite-difference
+    # path: with finite differences only the centre start converged (2 of 3 starts
+    # stopped ABNORMAL in the line search), and on one CI runner that start missed
+    # too (PR #3, run 43771088820). With the analytic gradient all three converge.
+    single = fit_engine_gam(model, data, y, maxiter=60, outer="lbfgsb", analytic_gradient=True)
+    multi = fit_engine_gam(
+        model, data, y, maxiter=60, multistart=True, n_starts=3, outer="lbfgsb", analytic_gradient=True
+    )
     assert multi.converged
     assert multi.log_lambda.shape == single.log_lambda.shape == (4,)
     assert multi.eta.shape == single.eta.shape == (150,)

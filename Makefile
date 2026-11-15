@@ -2,9 +2,9 @@
 test:
 	uv run pytest -q
 lint:
-	uv run ruff check src tests && uv run ruff format --check src tests
+	uv run ruff check src tests oracle && uv run ruff format --check src tests oracle
 format:
-	uv run ruff format src tests && uv run ruff check --fix src tests
+	uv run ruff format src tests oracle && uv run ruff check --fix src tests oracle
 # Regenerate reference fixtures. Needs R with mgcv; CI does this inside the pinned oracle image.
 fixtures:
 	Rscript oracle/make_fixtures.R tests/fixtures

@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-15, by the setup session.
+Last updated: 2026-11-15, by the setup session. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -24,14 +24,13 @@ functions ported from mgcv source gain their counterpart lines. Each step is don
 ## Routines
 
 - Daily development: `docs/routines/DAILY_DEV.md`. Review: `docs/routines/PR_REVIEW.md`. Merging:
-  `docs/routines/SETTINGS.md` (`auto_merge` is off until Jonathan turns it on).
+  `docs/routines/SETTINGS.md` (`auto_merge` is on, behind five conditions).
 - Both run as Claude Code scheduled tasks bound to sessions with this repository attached.
 
 ## Open items for Jonathan
 
-1. Run the `oracle-fixtures` workflow once and commit its tier 3 fixtures in place of the tier 1 ones.
-   The image is pinned to R-Gam-base build 10 (R 4.6.1, mgcv 1.9.4).
-2. Decide `auto_merge` in `docs/routines/SETTINGS.md`.
+None. The first development run should download the `fixtures-tier3` artifact from the latest CI run on `main`
+and commit it over the tier 1 fixtures, as part of its first pull request.
 
 ## Open questions
 

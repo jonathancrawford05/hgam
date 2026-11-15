@@ -11,7 +11,7 @@ About 40 pull-request-sized slices. The slice counts are rough estimates.
 | M4 Inference | `predict`, `vcov`, `summary`, `gam.check` | 5 |
 | Packaging | Documentation, first release | 3 |
 
-## M0, second slice: move the engine
+## M0, second slice: move the engine (done 2026-11-15)
 
 The starting point is the engine in `jonathancrawford05/polaris-re`: about 9,700 lines in 27 files
 under `src/polaris_re/analytics/gam_*.py` and `src/polaris_re/gam/`. It depends on polaris-re only

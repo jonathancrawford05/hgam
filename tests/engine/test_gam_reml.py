@@ -1,0 +1,504 @@
+"""``docs/PLAN_mgcv_parity_engine.md`` slice 4, part A — the generalized REML score.
+
+Every check here is self-consistency (does the score match Wood (2011)'s
+explicit formula in closed form, does the EXACT relationship to the
+already-verified-but-formula-incomplete Poisson score hold, does it reject
+what it must reject), mirroring ``test_gam_family.py``'s own framing: cheap
+to run before spending a tier-1/tier-3 R round trip. The actual parity claim
+against ``mgcv`` lives in ``scripts/gam_reml_probe.R`` /
+``gam_reml_conformance.py`` (``docs/VERIFICATION_STANDARD.md``).
+"""
+
+import numpy as np
+import pytest
+
+from hgam.engine.gam_family import (
+    binomial_cloglog,
+    binomial_logit,
+    gaussian_identity,
+    poisson_log,
+    quasipoisson_log,
+)
+from hgam.engine.gam_fit import penalized_irls_general
+from hgam.engine.gam_reml import penalty_block_square_roots, reml_score_general
+from hgam.engine.gam_reml_appendix_b import appendix_b_transform
+from hgam.errors import HgamValidationError
+
+
+@pytest.fixture
+def rng() -> np.random.Generator:
+    return np.random.default_rng(20260818)
+
+
+def _design(rng: np.random.Generator, n: int, p: int) -> np.ndarray:
+    return np.column_stack([np.ones(n), rng.normal(size=(n, p - 1))])
+
+
+class TestClosedFormSingleColumnCase:
+    """The genuine closed-form check (PR #203 review [P2-a]): a single-column
+    design collapses every term to scalar arithmetic worked out by hand below
+    — no `np.linalg.slogdet`/`np.linalg.eigvalsh` call on the expected side at
+    all, unlike `TestMatchesWoodsFormulaDirectly` below, which recomputes the
+    same intermediate numpy calls the implementation makes (a useful
+    regression net, but not an independent derivation, since it would not
+    catch an error shared by both call sites — e.g. a wrong deviance
+    definition or working-weight convention)."""
+
+    def test_single_column_poisson_reduces_to_scalar_arithmetic(self) -> None:
+        n = 5
+        x = np.ones((n, 1))
+        y = np.full(n, 3.0)
+        c, s = 0.5, 2.0
+        coef = np.array([c])
+        penalty = np.array([[s]])
+        family = poisson_log()
+
+        # eta_i = c for every row (single column of ones), so mu is constant:
+        mu = np.exp(c)
+        # Poisson deviance, all n rows identical: D = 2n[y*log(y/mu) - (y - mu)]
+        deviance = 2.0 * n * (3.0 * np.log(3.0 / mu) - (3.0 - mu))
+        dp = deviance + c**2 * s  # Dp = D(beta_hat) + beta_hat^T S beta_hat
+
+        # log link: dmu/deta = mu, V(mu) = mu, so w_i = mu^2/mu = mu for every row.
+        # H = X^T W X + S is the 1x1 scalar (n*mu + s) — no matrix algebra needed.
+        h = n * mu + s
+        logdet_h = np.log(h)
+        logdet_s = np.log(s)  # the sole eigenvalue of a 1x1 matrix is its entry
+        # p - r = 1 - 1 = 0 (S is full rank here), so the gamma-scale term vanishes.
+        expected = 0.5 * dp + 0.5 * logdet_h - 0.5 * logdet_s
+
+        actual = reml_score_general(y, x, family, coef, (penalty,), np.array([1.0]))
+        assert actual == pytest.approx(expected, abs=1e-12, rel=1e-12)
+
+
+class TestMatchesWoodsFormulaDirectly:
+    """NOT a closed-form test (PR #203 review [P2-a] — see
+    `TestClosedFormSingleColumnCase` above for the genuine one). This
+    recomputes `deviance`/the working weight/`logdet_h`/`logdet_s` from
+    formulas written out IN THE TEST, not by calling
+    `Family.observed_information_weight` or
+    `gam_reml_appendix_b.logdet_s_plus` (PR #215 review [P1-3]: an earlier
+    revision called those two functions directly — "the implementation's
+    own helpers, the same two calls `reml_score_general` makes" — which
+    weakened this from an independent re-derivation to a tautology). Worth
+    keeping as a regression net for a dropped term, a sign flip, or a wrong
+    ½ — Wood (2011) §2 eq. (4) names `Dp = D(beta_hat) + beta_hat^T S
+    beta_hat` explicitly and this pins the decomposition against it — but
+    it cannot catch an error shared by both call sites (a wrong deviance
+    definition or log-determinant convention), since it inherits those from
+    the implementation it is checking.
+
+    **Two cases, for a reason:** the CANONICAL-link case
+    (`binomial_logit`) inlines the plain FISHER weight as `expected` — valid
+    because `alpha_i == 1` exactly for a canonical link (Wood §3.2,
+    `TestObservedInformationWeight`'s own canonical-link tests), so this
+    is a genuinely different computation that would still have to agree.
+    It alone cannot exercise Defect B's own fix (the observed/Fisher split
+    only bites for a NON-canonical link), so a second case
+    (`binomial_cloglog`) inlines Wood's `alpha_i` formula directly from
+    the paper's `V'(mu)/V(mu) + g''(mu)/g'(mu)` — duplicating the maths,
+    not calling `observed_information_weight` — so a bug in that method
+    would have to also appear, independently, in this test's own inlined
+    formula to go undetected."""
+
+    def test_score_equals_the_explicit_dp_formula_canonical_link(self, rng: np.random.Generator) -> None:
+        n, p = 120, 5
+        x = _design(rng, n, p)
+        beta_true = rng.normal(scale=0.3, size=p)
+        eta_true = x @ beta_true
+        prob = 1.0 / (1.0 + np.exp(-eta_true))
+        trials = np.full(n, 25.0)
+        y = np.round(trials * prob) / trials
+        d = np.diff(np.eye(p), n=2, axis=0)
+        block = d.T @ d
+        lambdas = np.array([6.0])
+        penalty = 6.0 * block
+        coef = beta_true
+        family = binomial_logit()
+
+        eta = x @ coef
+        mu = family.link.linkinv(eta)
+        deviance = family.deviance(y, mu, trials)
+        dp = deviance + float(coef @ penalty @ coef)
+
+        # The plain FISHER weight, inlined — NOT a call to
+        # observed_information_weight. Valid as "expected" only because
+        # binomial_logit is CANONICAL (alpha_i == 1 exactly), so the
+        # observed and expected Hessians coincide here by a textbook
+        # identity independent of this module's own implementation.
+        deta_dmu = family.link.mu_eta(eta)
+        fisher_weights = trials * deta_dmu**2 / family.variance(mu)
+        _, logdet_h = np.linalg.slogdet(x.T @ (fisher_weights[:, None] * x) + penalty)
+        # The naive fixed-tolerance eigenvalue cut, inlined — NOT a call to
+        # logdet_s_plus. Valid as "expected" only because this fixture is a
+        # SINGLE, well-conditioned block (Wood: "the problem vanishes for a
+        # full rank S1"), where Appendix B and the naive cut necessarily
+        # agree (`TestAgreesWithNaiveAtFlatLambda` pins that agreement on
+        # its own terms).
+        eigenvalues = np.linalg.eigvalsh(penalty)
+        positive = eigenvalues[eigenvalues > eigenvalues.max() * 1e-10]
+        logdet_s = float(np.sum(np.log(positive)))
+        expected = 0.5 * dp + 0.5 * float(logdet_h) - 0.5 * logdet_s
+
+        actual = reml_score_general(y, x, family, coef, (block,), lambdas, weights=trials)
+        assert actual == pytest.approx(expected, abs=1e-9, rel=1e-9)
+
+    def test_score_equals_the_explicit_dp_formula_noncanonical_link(self, rng: np.random.Generator) -> None:
+        """The non-canonical case Defect B's fix actually changes —
+        `binomial_logit` above cannot exercise it, since Fisher and
+        observed coincide there regardless of whether the fix exists."""
+        n, p = 120, 5
+        x = _design(rng, n, p)
+        beta_true = rng.normal(scale=0.3, size=p)
+        eta_true = x @ beta_true
+        prob = 1.0 - np.exp(-np.exp(eta_true))
+        trials = np.full(n, 25.0)
+        y = np.clip(np.round(trials * prob) / trials, 1.0 / trials, 1.0 - 1.0 / trials)
+        d = np.diff(np.eye(p), n=2, axis=0)
+        block = d.T @ d
+        lambdas = np.array([6.0])
+        penalty = 6.0 * block
+        coef = beta_true
+        family = binomial_cloglog()
+
+        eta = x @ coef
+        mu = family.link.linkinv(eta)
+        deviance = family.deviance(y, mu, trials)
+        dp = deviance + float(coef @ penalty @ coef)
+
+        # Wood (2011) section 3.2's alpha_i, written out from the paper —
+        # NOT a call to observed_information_weight. V'(mu) = 1 - 2*mu for
+        # binomial; g''(mu)/g'(mu) for cloglog derived independently here
+        # via the SAME chain rule the implementation's docstring states
+        # (g''(mu)/g'(mu) = -d2mu/deta2 / (dmu/deta)^2), but with
+        # d2mu/deta2 = mu_eta(eta) * (1 - exp(eta)) written inline rather
+        # than calling Link.d2mu_deta2.
+        mu_eta = family.link.mu_eta(eta)
+        d2mu_deta2 = mu_eta * (1.0 - np.exp(eta))
+        variance_prime = 1.0 - 2.0 * mu
+        alpha = 1.0 + (y - mu) * (variance_prime / family.variance(mu) - d2mu_deta2 / mu_eta**2)
+        fisher_weights = trials * mu_eta**2 / family.variance(mu)
+        observed_weights_inline = alpha * fisher_weights
+        _, logdet_h = np.linalg.slogdet(x.T @ (observed_weights_inline[:, None] * x) + penalty)
+        eigenvalues = np.linalg.eigvalsh(penalty)
+        positive = eigenvalues[eigenvalues > eigenvalues.max() * 1e-10]
+        logdet_s = float(np.sum(np.log(positive)))
+        expected = 0.5 * dp + 0.5 * float(logdet_h) - 0.5 * logdet_s
+
+        actual = reml_score_general(y, x, family, coef, (block,), lambdas, weights=trials)
+        assert actual == pytest.approx(expected, abs=1e-9, rel=1e-9)
+        # Sanity that this fixture actually exercises alpha != 1 (i.e. the
+        # non-canonical branch), not a degenerate case that happens to
+        # collapse to the canonical one.
+        assert not np.allclose(alpha, 1.0, atol=1e-6)
+
+
+class TestGeneralizesBeyondPoisson:
+    """The point of the generalization: it must also run for the target
+    formula's own family (binomial), not just reduce correctly on Poisson."""
+
+    def test_binomial_logit_runs_and_is_finite(self, rng: np.random.Generator) -> None:
+        n, p = 200, 5
+        x = _design(rng, n, p)
+        beta_true = rng.normal(scale=0.3, size=p)
+        eta_true = x @ beta_true
+        prob = 1.0 / (1.0 + np.exp(-eta_true))
+        trials = np.full(n, 20.0)
+        y = np.round(trials * prob) / trials
+        d = np.diff(np.eye(p), n=2, axis=0)
+        block = d.T @ d
+
+        score = reml_score_general(
+            y, x, binomial_logit(), beta_true, (block,), np.array([4.0]), weights=trials
+        )
+        assert np.isfinite(score)
+
+    def test_is_deterministic_and_pure_across_n_blocks(self, rng: np.random.Generator) -> None:
+        """**Superseded premise, PLAN slice 5c.** Until this slice,
+        `reml_score_general` took ONE caller-summed `penalty` matrix and had
+        no concept of "blocks" in its signature, so this test's original
+        point was that a caller could assemble `S_lambda = sum_j lambda_j
+        S_j` however it liked before calling in — true, but (PR #203 review
+        [P2-1]) never actually exercised by two bit-identical float arrays.
+        Appendix B's null-space determination NEEDS the individual blocks
+        (a summed matrix cannot be un-summed), so the signature now takes
+        `penalty_blocks`/`lambdas` directly — blocks are no longer incidental,
+        they are the point. What is still worth pinning: calling twice with
+        the SAME blocks/lambdas gives the SAME score (pure, no hidden state
+        — e.g. would catch a caching bug), across more than the 2-block case
+        every other test in this file uses."""
+        n, p1, p2, p3 = 120, 3, 4, 2
+        p = p1 + p2 + p3
+        x = _design(rng, n, p)
+        beta_true = rng.normal(scale=0.2, size=p)
+        mu_true = np.exp(x @ beta_true)
+        y = rng.poisson(mu_true).astype(np.float64)
+
+        d1 = np.diff(np.eye(p1), n=2, axis=0)
+        s1 = np.zeros((p, p))
+        s1[:p1, :p1] = d1.T @ d1
+        d2 = np.diff(np.eye(p2), n=2, axis=0)
+        s2 = np.zeros((p, p))
+        s2[p1 : p1 + p2, p1 : p1 + p2] = d2.T @ d2
+        s3 = np.zeros((p, p))
+        s3[p1 + p2 :, p1 + p2 :] = np.eye(p3)
+        blocks = (s1, s2, s3)
+        lambdas = np.array([3.0, 7.0, 0.5])
+
+        score_a = reml_score_general(y, x, poisson_log(), beta_true, blocks, lambdas)
+        score_b = reml_score_general(y, x, poisson_log(), beta_true, blocks, lambdas)
+        assert score_a == score_b
+        assert np.isfinite(score_a)
+
+
+class TestPenaltyBlockSquareRoots:
+    """PLAN slice 7h (ADR-223): ``penalty_block_square_roots`` and the
+    ``penalty_sqrt_blocks`` parameter it feeds ``reml_score_general``."""
+
+    def test_an_all_zero_block_yields_an_empty_root_without_raising(self) -> None:
+        """The clip/guard path's own edge case (PR #229 review [P2]): a
+        block that is exactly zero has no eigenvalue negative beyond noise
+        (both its largest and smallest eigenvalue are exactly ``0.0``, no
+        rounding involved), so it must NOT raise — and the root correctly
+        has zero columns, contributing nothing to the quadratic form."""
+        p = 4
+        block = np.zeros((p, p))
+
+        (root,) = penalty_block_square_roots((block,))
+        assert root.shape == (p, 0)
+
+    def test_rejects_a_genuinely_indefinite_block(self) -> None:
+        """PR #229 review [P2]: an eigenvalue negative FAR beyond numerical
+        noise (not a PSD-by-construction block at all) must raise rather
+        than be silently clipped away, which would absorb an upstream
+        defect instead of surfacing it."""
+        block = np.diag([1.0, -1.0, 2.0])
+
+        with pytest.raises(HgamValidationError, match="positive semi-definite"):
+            penalty_block_square_roots((block,))
+
+    def test_genuine_numerical_noise_is_still_clipped_not_rejected(self) -> None:
+        """The guard's own threshold, from the other side: an eigenvalue
+        negative by a tiny amount RELATIVE to the block's own scale (exactly
+        the noise the clip exists to absorb) must not raise."""
+        block = np.diag([1.0, -1e-16])
+
+        (root,) = penalty_block_square_roots((block,))
+        assert root.shape == (2, 1)  # the noise eigenvalue is dropped, not kept
+
+    def test_reconstructs_a_full_rank_block_exactly(self, rng: np.random.Generator) -> None:
+        """``L @ L.T == S`` (to float precision) for a well-conditioned,
+        full-rank block — closed form via a random SPD matrix built by hand
+        (`A.T @ A` for a full-rank `A`, never via the function under test)."""
+        p = 6
+        a = rng.normal(size=(p, p))
+        block = a.T @ a  # SPD by construction, full rank almost surely
+
+        (root,) = penalty_block_square_roots((block,))
+        assert root.shape == (p, p)  # no rank deficiency to drop
+        np.testing.assert_allclose(root @ root.T, block, atol=1e-10, rtol=1e-10)
+
+    def test_reconstructs_a_rank_deficient_block_on_its_own_row_space(self) -> None:
+        """A second-difference penalty (``D.T @ D`` for ``D = diff(I_p, n=2)``)
+        has an EXACTLY known null space — degree-1 polynomials, dimension 2 —
+        so its rank is ``p - 2`` by construction, independent of anything the
+        function under test computes."""
+        p = 8
+        d = np.diff(np.eye(p), n=2, axis=0)
+        block = d.T @ d
+        expected_rank = p - 2  # closed form: the null space of a 2nd-order
+
+        # difference penalty is exactly {1, x} (dimension 2), for any p >= 3.
+        (root,) = penalty_block_square_roots((block,))
+        assert root.shape == (p, expected_rank)
+        np.testing.assert_allclose(root @ root.T, block, atol=1e-10, rtol=1e-10)
+
+    def test_quadratic_form_matches_the_naive_contraction_when_well_conditioned(
+        self, rng: np.random.Generator
+    ) -> None:
+        """``sum_j lambda_j ||L_j^T v||^2 == v^T (sum_j lambda_j S_j) v`` —
+        the algebraic identity slice 7h relies on, checked directly (not
+        through ``reml_score_general``'s own scaffolding) on blocks small
+        and well-scaled enough that BOTH forms should agree tightly."""
+        p = 5
+        blocks = tuple(rng.normal(size=(p, p)) for _ in range(3))
+        blocks = tuple(a.T @ a for a in blocks)
+        lambdas = np.array([2.0, 0.5, 10.0])
+        v = rng.normal(size=p)
+
+        roots = penalty_block_square_roots(blocks)
+        sum_of_squares = sum(
+            lam * float(np.sum((root.T @ v) ** 2)) for lam, root in zip(lambdas, roots, strict=True)
+        )
+        s = sum(lam * block for lam, block in zip(lambdas, blocks, strict=True))
+        naive = float(v @ s @ v)
+        assert sum_of_squares == pytest.approx(naive, abs=1e-9, rel=1e-9)
+
+    def test_reml_score_general_is_unaffected_by_passing_the_precomputed_roots(
+        self, rng: np.random.Generator
+    ) -> None:
+        """The optional ``penalty_sqrt_blocks`` is a caching hint, not a
+        different code path with different behaviour: passing it explicitly
+        must reproduce exactly what letting the function compute it
+        internally already gives."""
+        n, p = 100, 5
+        x = _design(rng, n, p)
+        beta_true = rng.normal(scale=0.3, size=p)
+        mu_true = np.exp(x @ beta_true)
+        y = rng.poisson(mu_true).astype(np.float64)
+        d = np.diff(np.eye(p), n=2, axis=0)
+        blocks = (d.T @ d,)
+        lambdas = np.array([4.0])
+        family = poisson_log()
+
+        without = reml_score_general(y, x, family, beta_true, blocks, lambdas)
+        precomputed = penalty_block_square_roots(blocks)
+        with_precomputed = reml_score_general(
+            y, x, family, beta_true, blocks, lambdas, penalty_sqrt_blocks=precomputed
+        )
+        np.testing.assert_array_equal(with_precomputed, without)
+
+    def test_rejects_a_penalty_sqrt_blocks_length_mismatch(self, rng: np.random.Generator) -> None:
+        n, p = 50, 3
+        x = _design(rng, n, p)
+        y = rng.poisson(5.0, size=n).astype(np.float64)
+        block = np.eye(p)
+
+        with pytest.raises(HgamValidationError, match="penalty_sqrt_blocks"):
+            reml_score_general(
+                y,
+                x,
+                poisson_log(),
+                np.zeros(p),
+                (block,),
+                np.array([1.0]),
+                penalty_sqrt_blocks=(np.eye(p), np.eye(p)),
+            )
+
+
+class TestRejectsWhatItMustReject:
+    def test_rejects_a_free_scale_family_with_non_default_gamma(self, rng: np.random.Generator) -> None:
+        """PLAN slice 3 (L5): a free-scale family no longer raises unconditionally
+        (that was the blocker this slice closes) — but ``gamma != 1.0`` still
+        raises, since this module has no derivation for what ``gamma`` should do
+        to a free-scale criterion (module docstring)."""
+        n, p = 80, 4
+        x = _design(rng, n, p)
+        beta_true = rng.normal(scale=0.2, size=p)
+        mu_true = np.exp(x @ beta_true)
+        y = rng.poisson(mu_true).astype(np.float64)
+        penalty = np.zeros((p, p))
+
+        with pytest.raises(HgamValidationError, match="dispersion_fixed=False"):
+            reml_score_general(y, x, quasipoisson_log(), beta_true, (penalty,), np.array([1.0]), gamma=1.4)
+
+    def test_rejects_nonpositive_gamma(self, rng: np.random.Generator) -> None:
+        n, p = 50, 3
+        x = _design(rng, n, p)
+        y = rng.poisson(5.0, size=n).astype(np.float64)
+        penalty = np.zeros((p, p))
+
+        with pytest.raises(HgamValidationError, match="gamma must be positive"):
+            reml_score_general(y, x, poisson_log(), np.zeros(p), (penalty,), np.array([1.0]), gamma=0.0)
+
+    def test_rejects_a_free_scale_family_with_no_residual_degrees_of_freedom(
+        self, rng: np.random.Generator
+    ) -> None:
+        """``n <= Mp`` (null-space dimension) leaves nothing to estimate ``phi``
+        from — raises rather than dividing by a non-positive residual df."""
+        n, p = 3, 3  # unpenalized: Mp = p = 3 = n
+        x = _design(rng, n, p)
+        y = rng.normal(size=n)
+        penalty = np.zeros((p, p))
+        coef = np.linalg.lstsq(x, y, rcond=None)[0]
+
+        with pytest.raises(HgamValidationError, match="cannot estimate a free scale"):
+            reml_score_general(y, x, gaussian_identity(), coef, (penalty,), np.array([1.0]))
+
+
+class TestFreeScaleBranch:
+    """PLAN slice 3 (ladder), L5 — the profiled free-scale criterion.
+
+    Self-consistency checks, mirroring this module's own known-scale test
+    classes: does the score match the closed-form REML variance estimator in
+    the unpenalized case, does the formula's own algebra (as coded) reproduce
+    a from-scratch NumPy evaluation. The actual `mgcv` parity claim is
+    `scripts/gam_free_scale_reml_score_probe.R` /
+    `gam_free_scale_reml_conformance.py` (`docs/VERIFICATION_STANDARD.md`).
+    """
+
+    def test_unpenalized_phi_hat_is_the_classical_reml_variance_estimator(
+        self, rng: np.random.Generator
+    ) -> None:
+        """No penalty (``S=0``): the classical result is
+        ``phi_hat = RSS / (n - p)`` — REML's own unbiased variance estimator,
+        distinct from the ``RSS / n`` a plain-ML estimate would give. This is
+        the ``r=0``, ``Mp=p`` corner of the derivation and needs no
+        eigendecomposition to check by hand."""
+        n, p = 60, 4
+        x = _design(rng, n, p)
+        beta_true = rng.normal(scale=0.5, size=p)
+        y = x @ beta_true + rng.normal(scale=0.3, size=n)
+        coef = np.linalg.lstsq(x, y, rcond=None)[0]
+        rss = float(np.sum((y - x @ coef) ** 2))
+        penalty = np.zeros((p, p))
+
+        score = reml_score_general(y, x, gaussian_identity(), coef, (penalty,), np.array([1.0]))
+
+        phi_hat = rss / (n - p)
+        _, logdet_xtx = np.linalg.slogdet(x.T @ x)
+        expected = (
+            0.5 * (n - p) * (1.0 + np.log(phi_hat)) + 0.5 * logdet_xtx + 0.5 * (n - p) * np.log(2.0 * np.pi)
+        )
+        np.testing.assert_allclose(score, expected, rtol=1e-12)
+
+    def test_matches_a_from_scratch_evaluation_of_the_same_algebra(self, rng: np.random.Generator) -> None:
+        """A penalized case (``r > 0``), evaluated independently in NumPy from
+        the module docstring's own stated formula — a regression net for a
+        dropped term or a wrong ``0.5``, not independent of a bug shared by
+        both call sites (the `mgcv`-side conformance module is what earns the
+        closed-form label; this is `TestMatchesWoodsFormulaDirectly`'s own
+        precedent, applied to the free-scale branch)."""
+        n, p = 100, 5
+        x = _design(rng, n, p)
+        d = np.diff(np.eye(p - 1), n=2, axis=0)
+        block = np.zeros((p, p))
+        block[1:, 1:] = d.T @ d
+        lam = 3.5
+        beta_true = rng.normal(scale=0.4, size=p)
+        y = x @ beta_true + rng.normal(scale=0.25, size=n)
+        fit = penalized_irls_general(x, y, family=gaussian_identity(), penalty=lam * block)
+        coef = fit.coef
+
+        score = reml_score_general(y, x, gaussian_identity(), coef, (block,), np.array([lam]))
+
+        deviance = float(np.sum((y - x @ coef) ** 2))
+        penalty_quad = float(lam * coef @ block @ coef)
+        dp = deviance + penalty_quad
+        ab = appendix_b_transform((block,), np.array([lam]))
+        r = ab.rank
+        mp = p - r
+        phi_hat = dp / (n - mp)
+        logdet_h = np.linalg.slogdet(x.T @ x + lam * block)[1]
+        expected = (
+            0.5 * (n - mp) * (1.0 + np.log(phi_hat))
+            + 0.5 * logdet_h
+            - 0.5 * ab.logdet_s_plus
+            + 0.5 * (n - mp) * np.log(2.0 * np.pi)
+        )
+        np.testing.assert_allclose(score, expected, rtol=1e-10)
+
+    def test_quasipoisson_free_scale_branch_runs_and_is_finite(self, rng: np.random.Generator) -> None:
+        """Smoke test that the SAME branch (only ``family.deviance`` differs)
+        produces a finite score for the epic's other free-scale family."""
+        n, p = 80, 4
+        x = _design(rng, n, p)
+        beta_true = rng.normal(scale=0.2, size=p)
+        mu_true = np.exp(x @ beta_true)
+        y = rng.poisson(mu_true).astype(np.float64)
+        penalty = np.zeros((p, p))
+        family = quasipoisson_log()
+        fit = penalized_irls_general(x, y, family=family, penalty=penalty)
+
+        score = reml_score_general(y, x, family, fit.coef, (penalty,), np.array([1.0]))
+        assert np.isfinite(score)

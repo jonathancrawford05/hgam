@@ -1,0 +1,626 @@
+"""``docs/PLAN_mgcv_parity_engine.md`` slice 4, part B — the continuous outer search.
+
+Self-consistency and regression checks, mirroring ``test_gam_reml.py``'s own
+framing: cheap to run before spending a tier-1/tier-3 R round trip. The actual
+parity measurement against ``mgcv`` — does the continuous search's selected
+``log10(lambda)`` land closer to ``mgcv``'s own free-``sp`` selection than the
+production grid does (ADR-198's registered prediction) — is a probe script
+(``scripts/reml_continuous_optimizer_probe.py``), not a pytest test: it needs
+the committed ``python_reference.json`` plus a locally-generated
+``mgcv_reference.json`` (produced by ``scripts/mgcv_conformance.R``, never
+committed — see ``.gitignore``) and is read at tier 1/tier 3 per
+``docs/ROUTINE_MGCV_PARITY.md``.
+"""
+
+from unittest.mock import patch
+
+import numpy as np
+import pytest
+
+from hgam.engine.gam_family import binomial_logit, poisson_log
+from hgam.engine.gam_fit import penalized_irls_general
+from hgam.engine.gam_reml import reml_score_general
+from hgam.engine.gam_reml_gradient import reml_score_gradient
+from hgam.engine.gam_reml_optimize import (
+    _BOUND_ATOL,
+    _FINITE_DIFF_STEP,
+    ContinuousLambdaSelection,
+    penalized_fit_and_score,
+    penalized_fit_score_and_gradient,
+    projected_gradient,
+    select_lambdas_continuous,
+    select_lambdas_continuous_multistart,
+)
+from hgam.errors import HgamComputationError, HgamValidationError
+
+
+@pytest.fixture
+def rng() -> np.random.Generator:
+    return np.random.default_rng(20260822)
+
+
+def _design(rng: np.random.Generator, n: int, p: int) -> np.ndarray:
+    return np.column_stack([np.ones(n), rng.normal(size=(n, p - 1))])
+
+
+class TestPenalizedFitAndScore:
+    """The per-point wrapper is a thin assembly step — these are self-consistency
+    checks against calling ``penalized_irls_general``/``reml_score_general``
+    directly, not a fresh formula."""
+
+    def test_matches_a_direct_call_at_one_block(self, rng: np.random.Generator) -> None:
+        n, p = 60, 5
+        x = _design(rng, n, p)
+        y = rng.poisson(5.0, size=n).astype(np.float64)
+        s = np.eye(p)
+        family = poisson_log()
+
+        coef, score = penalized_fit_and_score(y, x, family, (s,), np.array([1.5]))
+
+        direct_fit = penalized_irls_general(x, y, family=family, penalty=(10.0**1.5) * s)
+        direct_score = reml_score_general(y, x, family, direct_fit.coef, (s,), np.array([10.0**1.5]))
+        np.testing.assert_allclose(coef, direct_fit.coef, rtol=1e-12)
+        assert score == pytest.approx(direct_score, rel=1e-12)
+
+    def test_sums_multiple_blocks(self, rng: np.random.Generator) -> None:
+        n, p = 80, 6
+        x = _design(rng, n, p)
+        y = rng.poisson(5.0, size=n).astype(np.float64)
+        s1 = np.eye(p)
+        s2 = np.diag(np.arange(p, dtype=np.float64))
+        family = poisson_log()
+        log_lambda = np.array([0.5, 1.5])
+
+        coef, score = penalized_fit_and_score(y, x, family, (s1, s2), log_lambda)
+
+        penalty = (10.0**0.5) * s1 + (10.0**1.5) * s2
+        direct_fit = penalized_irls_general(x, y, family=family, penalty=penalty)
+        direct_score = reml_score_general(
+            y, x, family, direct_fit.coef, (s1, s2), np.array([10.0**0.5, 10.0**1.5])
+        )
+        np.testing.assert_allclose(coef, direct_fit.coef, rtol=1e-12)
+        assert score == pytest.approx(direct_score, rel=1e-12)
+
+    def test_penalty_sqrt_blocks_is_passed_through_unchanged(self, rng: np.random.Generator) -> None:
+        """PLAN slice 7h (ADR-223): the optional caching hint reaches
+        ``reml_score_general`` unchanged and does not alter the result —
+        checked here at the wrapper level (``gam_reml.py``'s own tests cover
+        the formula identity itself)."""
+        from hgam.engine.gam_reml import penalty_block_square_roots
+
+        n, p = 60, 5
+        x = _design(rng, n, p)
+        y = rng.poisson(5.0, size=n).astype(np.float64)
+        s = np.eye(p)
+        family = poisson_log()
+
+        without = penalized_fit_and_score(y, x, family, (s,), np.array([1.5]))
+        roots = penalty_block_square_roots((s,))
+        with_roots = penalized_fit_and_score(y, x, family, (s,), np.array([1.5]), penalty_sqrt_blocks=roots)
+        np.testing.assert_array_equal(without[0], with_roots[0])
+        np.testing.assert_array_equal(without[1], with_roots[1])
+
+    def test_rejects_a_log_lambda_length_mismatch(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 20, 3)
+        y = rng.poisson(5.0, size=20).astype(np.float64)
+        s = np.eye(3)
+        with pytest.raises(HgamValidationError, match="penalty_blocks"):
+            penalized_fit_and_score(y, x, poisson_log(), (s,), np.array([0.0, 0.0]))
+
+    def test_propagates_non_convergence(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 20, 3)
+        y = rng.poisson(5.0, size=20).astype(np.float64)
+        s = np.eye(3)
+        with (
+            patch(
+                "hgam.engine.gam_reml_optimize.penalized_irls_general",
+                side_effect=HgamComputationError("did not converge"),
+            ),
+            pytest.raises(HgamComputationError),
+        ):
+            penalized_fit_and_score(y, x, poisson_log(), (s,), np.array([0.0]))
+
+
+class TestSelectLambdasContinuousValidation:
+    def test_rejects_empty_penalty_blocks(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 20, 3)
+        y = rng.poisson(5.0, size=20).astype(np.float64)
+        with pytest.raises(HgamValidationError, match="at least one penalty block"):
+            select_lambdas_continuous(y, x, poisson_log(), ())
+
+    def test_rejects_an_x0_shape_mismatch(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 20, 3)
+        y = rng.poisson(5.0, size=20).astype(np.float64)
+        s = np.eye(3)
+        with pytest.raises(HgamValidationError, match="x0 has shape"):
+            select_lambdas_continuous(y, x, poisson_log(), (s,), x0=np.array([0.0, 0.0]))
+
+    def test_raises_when_every_trial_point_is_rejected(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 20, 3)
+        y = rng.poisson(5.0, size=20).astype(np.float64)
+        s = np.eye(3)
+        with (
+            patch(
+                "hgam.engine.gam_reml_optimize.penalized_irls_general",
+                side_effect=HgamComputationError("did not converge"),
+            ),
+            pytest.raises(HgamComputationError, match="rejected every one"),
+        ):
+            select_lambdas_continuous(y, x, poisson_log(), (s,), maxiter=5)
+
+
+class TestPenaltySqrtBlocksCaching:
+    """PLAN slice 7h (ADR-223): ``select_lambdas_continuous`` computes
+    ``penalty_block_square_roots`` ONCE per search, not once per trial
+    point — the module's own Definition of Done."""
+
+    def test_computes_the_square_roots_exactly_once_per_search(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 60, 4)
+        y = rng.poisson(5.0, size=60).astype(np.float64)
+        s = np.eye(4)
+
+        with patch(
+            "hgam.engine.gam_reml_optimize.penalty_block_square_roots",
+            wraps=__import__(
+                "hgam.engine.gam_reml", fromlist=["penalty_block_square_roots"]
+            ).penalty_block_square_roots,
+        ) as spy:
+            selection = select_lambdas_continuous(y, x, poisson_log(), (s,), maxiter=25)
+
+        # A converged search visits several trial points (finite-difference
+        # gradients alone cost 1 + 2*n_blocks IRLS solves per iteration) —
+        # exactly one call proves the roots are cached across all of them,
+        # not recomputed inside the objective.
+        assert spy.call_count == 1
+        assert selection.n_function_evals > 1
+
+
+class TestSelectLambdasContinuousOnAToyProblem:
+    """A single-block problem with a closed-enough optimum: does the search
+    actually descend, not just run without error?"""
+
+    def test_selects_a_finite_interior_lambda_on_a_well_posed_design(self, rng: np.random.Generator) -> None:
+        n, p = 300, 8
+        x = _design(rng, n, p)
+        true_coef = np.zeros(p)
+        true_coef[0] = 1.0
+        eta = x @ true_coef
+        mu = np.exp(eta)
+        y = rng.poisson(mu)
+        s = np.eye(p)
+        s[0, 0] = 0.0  # leave the intercept unpenalized, like a real smooth's null space
+
+        selection = select_lambdas_continuous(y, x, poisson_log(), (s,), gtol=1e-6)
+
+        assert selection.converged
+        assert np.isfinite(selection.log_lambda).all()
+        assert -2.0 < selection.log_lambda[0] < 8.0
+        assert selection.n_function_evals > 0
+        assert selection.coef.shape == (p,)
+
+    def test_binomial_logit_also_converges(self, rng: np.random.Generator) -> None:
+        n, p = 300, 6
+        x = _design(rng, n, p)
+        true_coef = np.zeros(p)
+        true_coef[0] = 0.2
+        eta = x @ true_coef
+        mu = 1.0 / (1.0 + np.exp(-eta))
+        y = rng.binomial(1, mu).astype(np.float64)
+        s = np.eye(p)
+        s[0, 0] = 0.0
+
+        selection = select_lambdas_continuous(y, x, binomial_logit(), (s,), gtol=1e-6)
+
+        assert selection.converged
+        assert np.isfinite(selection.reml_score)
+
+
+class TestPenalizedFitScoreAndGradient:
+    """PLAN slice 7d — one fit produces both the score and the gradient."""
+
+    def test_score_matches_penalized_fit_and_score(self, rng: np.random.Generator) -> None:
+        n, p = 60, 5
+        x = _design(rng, n, p)
+        y = rng.poisson(5.0, size=n).astype(np.float64)
+        s = np.eye(p)
+        log_lambda = np.array([0.7])
+
+        coef_a, score_a = penalized_fit_and_score(y, x, poisson_log(), (s,), log_lambda)
+        coef_b, score_b, gradient = penalized_fit_score_and_gradient(y, x, poisson_log(), (s,), log_lambda)
+        np.testing.assert_allclose(coef_a, coef_b, rtol=1e-12)
+        assert score_a == pytest.approx(score_b, rel=1e-12)
+        assert gradient.shape == (1,)
+
+    def test_gradient_matches_a_direct_call_to_reml_score_gradient(self, rng: np.random.Generator) -> None:
+        n, p = 60, 5
+        x = _design(rng, n, p)
+        y = rng.poisson(5.0, size=n).astype(np.float64)
+        s = np.eye(p)
+        log_lambda = np.array([0.7])
+
+        coef, _score, gradient = penalized_fit_score_and_gradient(y, x, poisson_log(), (s,), log_lambda)
+        expected_natural = reml_score_gradient(y, x, poisson_log(), coef, (s,), 10.0**log_lambda)
+        np.testing.assert_allclose(gradient, expected_natural * np.log(10.0), rtol=1e-12)
+
+
+class TestAnalyticGradient:
+    """PLAN slice 7d — ``select_lambdas_continuous(analytic_gradient=True)``
+    wires :func:`~hgam.engine.gam_reml_gradient.reml_score_gradient`
+    into SciPy's own ``jac=True`` combined-objective protocol, instead of a
+    forward-difference estimate."""
+
+    def test_analytic_gradient_reaches_scipy_via_jac_true(self, rng: np.random.Generator) -> None:
+        """Wiring test, mirroring ``TestFiniteDiffStep``'s own
+        ``test_the_eps_option_reaches_scipy_minimize``: a future refactor
+        that stops passing ``jac=True``/drops the combined-objective
+        function must fail a test, not silently regress to a
+        finite-difference estimate."""
+        x = _design(rng, 30, 3)
+        y = rng.poisson(5.0, size=30).astype(np.float64)
+        s = np.eye(3)
+
+        with patch(
+            "hgam.engine.gam_reml_optimize.minimize",
+            wraps=__import__("scipy.optimize", fromlist=["minimize"]).minimize,
+        ) as spy:
+            select_lambdas_continuous(y, x, poisson_log(), (s,), maxiter=5, analytic_gradient=True)
+
+        assert spy.call_count >= 1
+        assert spy.call_args.kwargs["jac"] is True
+        assert "eps" not in spy.call_args.kwargs["options"]
+
+    def test_default_behaviour_is_unchanged_when_analytic_gradient_is_not_requested(
+        self, rng: np.random.Generator
+    ) -> None:
+        x = _design(rng, 30, 3)
+        y = rng.poisson(5.0, size=30).astype(np.float64)
+        s = np.eye(3)
+
+        with patch(
+            "hgam.engine.gam_reml_optimize.minimize",
+            wraps=__import__("scipy.optimize", fromlist=["minimize"]).minimize,
+        ) as spy:
+            select_lambdas_continuous(y, x, poisson_log(), (s,), maxiter=5)
+
+        assert spy.call_args.kwargs["jac"] is None
+        assert spy.call_args.kwargs["options"]["eps"] == _FINITE_DIFF_STEP
+
+    def test_reaches_the_same_region_as_the_finite_difference_default(self, rng: np.random.Generator) -> None:
+        """Not a parity claim — a regression/sanity check that the analytic
+        path converges to a comparably-good REML score on an easy,
+        well-conditioned toy problem, mirroring
+        ``TestSelectLambdasContinuousOnAToyProblem``'s own framing."""
+        n, p = 200, 6
+        x = _design(rng, n, p)
+        beta_true = rng.normal(scale=0.3, size=p)
+        y = rng.poisson(np.exp(x @ beta_true)).astype(np.float64)
+        d = np.diff(np.eye(p), n=2, axis=0)
+        s = d.T @ d
+
+        fd_selection = select_lambdas_continuous(y, x, poisson_log(), (s,))
+        analytic_selection = select_lambdas_continuous(y, x, poisson_log(), (s,), analytic_gradient=True)
+        assert fd_selection.converged
+        assert analytic_selection.converged
+        # Same criterion, same design: the two searches should land at a
+        # comparably good score, not merely "both converged" — the toy
+        # problem here is well-conditioned (unlike PLAN slice 7d's own N=4/
+        # N=7 measurements), so a large gap would indicate a wiring defect
+        # rather than a genuine optimiser-convergence finding.
+        assert abs(fd_selection.reml_score - analytic_selection.reml_score) < 0.1
+
+    def test_select_lambdas_continuous_multistart_passes_analytic_gradient_through(
+        self, rng: np.random.Generator
+    ) -> None:
+        x = _design(rng, 60, 4)
+        y = rng.poisson(5.0, size=60).astype(np.float64)
+        s = np.eye(4)
+
+        with patch(
+            "hgam.engine.gam_reml_optimize.minimize",
+            wraps=__import__("scipy.optimize", fromlist=["minimize"]).minimize,
+        ) as spy:
+            select_lambdas_continuous_multistart(
+                y, x, poisson_log(), (s,), n_starts=2, maxiter=5, analytic_gradient=True
+            )
+
+        assert spy.call_count >= 1
+        assert all(call.kwargs["jac"] is True for call in spy.call_args_list)
+
+
+class TestSelectLambdasContinuousMultistart:
+    """PLAN slice 5e, candidate (1) — best-of-N starts as a reusable building
+    block rather than a one-off diagnostic script (ADR-211's own blind
+    multi-start check). These are self-consistency/wiring checks; the actual
+    N>4-block robustness measurement is a diagnostic script
+    (``scripts/gam_multistart_robustness_diagnostic.py``), not a pytest test,
+    for the same reason the module-level docstring gives for the single-start
+    search's own parity measurement."""
+
+    def test_rejects_empty_penalty_blocks(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 30, 3)
+        y = rng.poisson(5.0, size=30).astype(np.float64)
+        with pytest.raises(HgamValidationError, match="at least one penalty block"):
+            select_lambdas_continuous_multistart(y, x, poisson_log(), ())
+
+    def test_rejects_fewer_than_one_start(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 30, 3)
+        y = rng.poisson(5.0, size=30).astype(np.float64)
+        s = np.eye(3)
+        with pytest.raises(HgamValidationError, match="n_starts >= 1"):
+            select_lambdas_continuous_multistart(y, x, poisson_log(), (s,), n_starts=0)
+
+    def test_first_start_is_the_bounds_centre(self, rng: np.random.Generator) -> None:
+        """Index 0 must read as "what a single-start search alone would have
+        tried" — the same default :func:`select_lambdas_continuous` itself
+        uses — so a caller can compare best-of-N against a single start
+        without a second search call."""
+        x = _design(rng, 30, 3)
+        y = rng.poisson(5.0, size=30).astype(np.float64)
+        s = np.eye(3)
+        result = select_lambdas_continuous_multistart(
+            y, x, poisson_log(), (s,), bounds=(-2.0, 8.0), n_starts=3, maxiter=5
+        )
+        np.testing.assert_array_equal(result.starts[0], np.array([3.0]))
+
+    def test_deterministic_starts_across_calls(self, rng: np.random.Generator) -> None:
+        """Same seed, same starts, bit-identical — the whole point of pinning
+        `numpy.random.default_rng` rather than an unseeded draw (ADR-074)."""
+        x = _design(rng, 30, 3)
+        y = rng.poisson(5.0, size=30).astype(np.float64)
+        s = np.eye(3)
+        first = select_lambdas_continuous_multistart(y, x, poisson_log(), (s,), n_starts=5, maxiter=5)
+        second = select_lambdas_continuous_multistart(y, x, poisson_log(), (s,), n_starts=5, maxiter=5)
+        for a, b in zip(first.starts, second.starts, strict=True):
+            np.testing.assert_array_equal(a, b)
+
+    def test_total_function_evals_sums_every_start(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 30, 3)
+        y = rng.poisson(5.0, size=30).astype(np.float64)
+        s = np.eye(3)
+        result = select_lambdas_continuous_multistart(y, x, poisson_log(), (s,), n_starts=4, maxiter=10)
+        assert len(result.starts) == 4
+        assert len(result.scores) == 4
+        assert len(result.converged) == 4
+        assert result.total_function_evals > 0
+
+    def test_best_is_never_worse_than_the_single_default_start(self, rng: np.random.Generator) -> None:
+        """Best-of-N's own score must be <= the bounds-centre-only score on
+        this well-posed toy problem, where start 0 (bounds-centre, the same
+        point the single-start default uses) converges. This is NOT a
+        general guarantee of the function: `best` minimises only over
+        CONVERGED runs (`converged_indices` in
+        `select_lambdas_continuous_multistart`), so if start 0 fails to
+        converge while some other start does, `best` is drawn from that
+        other, converged run and can legitimately score WORSE than a
+        non-converged single-start reading (this is the correct behaviour —
+        a converged point is preferred over a lower but non-converged score
+        — see PR #218 review [P1], and ADR-213's own N=4/4-thread reading,
+        where the single default start does not converge). This test only
+        exercises the case both converge; it asserts that precondition
+        explicitly rather than assuming it."""
+        x = _design(rng, 40, 3)
+        y = rng.poisson(5.0, size=40).astype(np.float64)
+        s = np.eye(3)
+        single = select_lambdas_continuous(y, x, poisson_log(), (s,))
+        multi = select_lambdas_continuous_multistart(y, x, poisson_log(), (s,), n_starts=5, seed=1)
+        assert single.converged
+        assert multi.best.converged
+        assert multi.best.reml_score <= single.reml_score + 1e-9
+
+    def test_best_prefers_a_converged_run_over_a_lower_scoring_non_converged_one(
+        self, rng: np.random.Generator
+    ) -> None:
+        """The actual guarantee `best` provides (PR #218 review [P1]): drawn
+        from the converged runs when any exist, even if a non-converged run
+        reports a numerically lower (better-looking) score. Fakes
+        `select_lambdas_continuous` directly rather than relying on a real
+        fixture to happen to reproduce this shape."""
+        x = _design(rng, 30, 3)
+        y = rng.poisson(5.0, size=30).astype(np.float64)
+        s = np.eye(3)
+
+        def fake_search(*args: object, x0: np.ndarray, **kwargs: object) -> ContinuousLambdaSelection:
+            # The first start (bounds-centre) "fails to converge" but reports
+            # a lower score than every other, converged start -- the exact
+            # shape ADR-213 measured at N=4/4-threads.
+            not_converged = np.isclose(x0, np.array([3.0]))[0]
+            score = 1.0 if not_converged else 5.0 + float(x0[0])
+            return ContinuousLambdaSelection(
+                log_lambda=x0,
+                lambda_=10.0**x0,
+                coef=np.zeros(3),
+                reml_score=score,
+                edf_total=1.0,
+                n_function_evals=10,
+                n_rejected=0,
+                converged=not not_converged,
+                at_bound=False,
+                message="fake",
+            )
+
+        with patch(
+            "hgam.engine.gam_reml_optimize.select_lambdas_continuous",
+            side_effect=fake_search,
+        ):
+            result = select_lambdas_continuous_multistart(y, x, poisson_log(), (s,), n_starts=3, seed=1)
+
+        assert result.any_converged
+        assert result.best.converged
+        # The non-converged start (index 0, score 1.0) is numerically lower
+        # than every converged alternative -- `best` must NOT pick it.
+        assert result.best.reml_score > 1.0
+        assert result.best_start_index != 0
+
+    def test_all_starts_rejected_raises(self, rng: np.random.Generator) -> None:
+        x = _design(rng, 30, 3)
+        y = rng.poisson(5.0, size=30).astype(np.float64)
+        s = np.eye(3)
+        with (
+            patch(
+                "hgam.engine.gam_reml_optimize.select_lambdas_continuous",
+                side_effect=HgamComputationError("nothing converged"),
+            ),
+            pytest.raises(HgamComputationError, match="every one of 3 starts"),
+        ):
+            select_lambdas_continuous_multistart(y, x, poisson_log(), (s,), n_starts=3)
+
+
+class TestProjectedGradient:
+    """PLAN slice 7f (ADR-222) — the KKT residual under box bounds, verified
+    against the definition by hand rather than against another implementation
+    of itself. Every case is a closed form: for a minimisation under
+    ``lo <= x <= hi`` a bound-pinned component is stationary exactly when the
+    only feasible direction left to it would INCREASE the objective."""
+
+    def test_interior_components_pass_the_gradient_through_unchanged(self) -> None:
+        g = np.array([1.5, -2.5, 0.0], dtype=np.float64)
+        pt = np.array([0.0, 1.0, -1.0], dtype=np.float64)
+        np.testing.assert_allclose(projected_gradient(g, pt, (-2.0, 2.0)), g, rtol=0.0, atol=1e-15)
+
+    def test_at_the_lower_bound_only_a_negative_gradient_survives(self) -> None:
+        """At ``lo`` only ``dx >= 0`` is feasible, so a POSITIVE gradient (which
+        would only increase the objective going up) is stationary and clips to
+        zero, while a negative one is a real descent direction and survives."""
+        pt = np.array([-2.0, -2.0], dtype=np.float64)
+        g = np.array([3.0, -3.0], dtype=np.float64)
+        np.testing.assert_allclose(
+            projected_gradient(g, pt, (-2.0, 2.0)),
+            np.array([0.0, -3.0]),
+            rtol=0.0,
+            atol=1e-15,
+        )
+
+    def test_at_the_upper_bound_only_a_positive_gradient_survives(self) -> None:
+        """The mirror image: at ``hi`` only ``dx <= 0`` is feasible, so a
+        negative gradient is stationary and a positive one survives."""
+        pt = np.array([2.0, 2.0], dtype=np.float64)
+        g = np.array([3.0, -3.0], dtype=np.float64)
+        np.testing.assert_allclose(
+            projected_gradient(g, pt, (-2.0, 2.0)),
+            np.array([3.0, 0.0]),
+            rtol=0.0,
+            atol=1e-15,
+        )
+
+    def test_a_kkt_point_has_zero_residual_even_with_a_large_raw_gradient(self) -> None:
+        """The property the whole fix rests on: a large gradient at a pinned
+        bound is NOT evidence of an unconverged search. Using the raw norm here
+        would flag a correct answer as a defect."""
+        pt = np.array([-2.0, 2.0], dtype=np.float64)
+        g = np.array([50.0, -50.0], dtype=np.float64)
+        assert float(np.max(np.abs(projected_gradient(g, pt, (-2.0, 2.0))))) == 0.0
+
+    def test_a_component_within_the_bound_tolerance_counts_as_pinned(self) -> None:
+        """SciPy returns a bound-active component as the bound to within its own
+        rounding, not exactly. An equality test would read it as interior and
+        then report the bound's own restoring gradient as an unconverged
+        residual — the false positive ``_BOUND_ATOL`` exists to prevent."""
+        pt = np.array([-2.0 + _BOUND_ATOL / 2.0], dtype=np.float64)
+        g = np.array([7.0], dtype=np.float64)
+        np.testing.assert_allclose(projected_gradient(g, pt, (-2.0, 2.0)), np.zeros(1), rtol=0.0, atol=1e-15)
+
+    def test_rejects_a_shape_mismatch_and_inverted_bounds(self) -> None:
+        with pytest.raises(HgamValidationError, match="same 1-D shape"):
+            projected_gradient(np.zeros(3), np.zeros(2), (-1.0, 1.0))
+        with pytest.raises(HgamValidationError, match="not lo < hi"):
+            projected_gradient(np.zeros(2), np.zeros(2), (1.0, 1.0))
+
+
+class TestGtolRestart:
+    """PLAN slice 7f (ADR-222) — re-entering ``minimize`` when SciPy exits with
+    the caller's ``gtol`` unmet on the TRUE projected gradient.
+
+    The headline measurement (the N=7 ``select=True`` fixture, where the restart
+    takes the score from 524.788031 to 523.677681) needs R and lives in the
+    session log; these tests pin the wiring and the invariants, which do not."""
+
+    @staticmethod
+    def _toy() -> tuple:
+        rng = np.random.default_rng(20260905)
+        n = 240
+        xs = np.linspace(0.0, 1.0, n)
+        design = np.column_stack([np.ones(n), xs, xs**2, np.sin(3.0 * xs)])
+        blocks = (
+            np.diag(np.array([0.0, 1.0, 0.0, 0.0])),
+            np.diag(np.array([0.0, 0.0, 1.0, 1.0])),
+        )
+        eta = 0.4 + 1.1 * xs
+        y = rng.poisson(np.exp(eta)).astype(np.float64)
+        return y, design, poisson_log(), blocks
+
+    def test_a_negative_budget_is_rejected(self) -> None:
+        y, design, family, blocks = self._toy()
+        with pytest.raises(HgamValidationError, match="max_gtol_restarts"):
+            select_lambdas_continuous(y, design, family, blocks, analytic_gradient=True, max_gtol_restarts=-1)
+
+    def test_the_default_is_off_and_reports_no_residual(self) -> None:
+        """``max_gtol_restarts=0`` must leave the pre-7f path exactly as it was:
+        no restarts, and no residual claimed that was never measured."""
+        y, design, family, blocks = self._toy()
+        sel = select_lambdas_continuous(y, design, family, blocks, analytic_gradient=True)
+        assert sel.n_gtol_restarts == 0
+        assert sel.max_abs_projected_gradient is None
+
+    def test_a_budget_without_the_analytic_gradient_raises(self) -> None:
+        """Gated on ``analytic_gradient`` deliberately: a finite-differenced
+        gradient's own noise floor sits far above any sensible ``gtol``
+        (ADR-212), so testing it would spin the loop on noise. It RAISES rather
+        than silently ignoring the budget — a negative budget already raises,
+        and a caller who sets an inapplicable one deserves the same signal
+        (PR #228 review [P2-3])."""
+        y, design, family, blocks = self._toy()
+        with pytest.raises(HgamValidationError, match="analytic_gradient=True"):
+            select_lambdas_continuous(y, design, family, blocks, max_gtol_restarts=8)
+
+    def test_passing_the_budget_explicitly_as_zero_changes_nothing(self) -> None:
+        """``max_gtol_restarts=0`` and the default take the same code path, so
+        this pins DETERMINISM — no hidden global state, no unseeded draw —
+        rather than equivalence to the pre-7f engine, which no in-repo test can
+        establish without a pre-7f reference (PR #228 review round 2 [P2-A]).
+        That the pre-7f path is unchanged is structural, not experimental: at
+        ``0`` the restart block is unreachable. Uses ``assert_array_equal``
+        throughout, matching this file's own ``test_deterministic_starts_across_calls``
+        rather than a bare float ``==`` (round 1 [P2-4])."""
+        y, design, family, blocks = self._toy()
+        without = select_lambdas_continuous(y, design, family, blocks)
+        with_zero = select_lambdas_continuous(y, design, family, blocks, max_gtol_restarts=0)
+        np.testing.assert_array_equal(without.log_lambda, with_zero.log_lambda)
+        np.testing.assert_array_equal(without.reml_score, with_zero.reml_score)
+        np.testing.assert_array_equal(without.n_function_evals, with_zero.n_function_evals)
+        assert with_zero.n_gtol_restarts == 0
+        assert with_zero.max_abs_projected_gradient is None
+
+    def test_enabling_restarts_measures_and_reports_the_residual(self) -> None:
+        y, design, family, blocks = self._toy()
+        sel = select_lambdas_continuous(
+            y, design, family, blocks, analytic_gradient=True, max_gtol_restarts=4
+        )
+        assert sel.max_abs_projected_gradient is not None
+        assert sel.max_abs_projected_gradient >= 0.0
+        assert 0 <= sel.n_gtol_restarts <= 4
+
+    def test_restarting_never_worsens_the_score(self) -> None:
+        """The loop keeps a restart only on STRICT improvement, so more budget
+        can never return a worse answer than less."""
+        y, design, family, blocks = self._toy()
+        none = select_lambdas_continuous(
+            y, design, family, blocks, analytic_gradient=True, max_gtol_restarts=0
+        )
+        some = select_lambdas_continuous(
+            y, design, family, blocks, analytic_gradient=True, max_gtol_restarts=6
+        )
+        assert some.reml_score <= none.reml_score + 1e-12
+
+    def test_the_budget_is_threaded_through_multistart_and_defaults_off(self) -> None:
+        y, design, family, blocks = self._toy()
+        multi = select_lambdas_continuous_multistart(
+            y,
+            design,
+            family,
+            blocks,
+            n_starts=2,
+            analytic_gradient=True,
+            max_gtol_restarts=2,
+        )
+        assert multi.any_converged
+        assert multi.best.max_abs_projected_gradient is not None

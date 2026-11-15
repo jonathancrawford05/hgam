@@ -1,0 +1,1089 @@
+"""the hgam engine — the production path from a ``ModelSpec`` (mgcv-parity engine,
+``docs/PLAN_mgcv_parity_engine.md`` slice 5b,
+``docs/WORK_ORDER_multi_term_assembly.md``).
+
+ADR-207 amended Anchor 7 to permit a production path built from the epic's
+already tier-3-verified components. This module is that path, for the scope
+the work order names: a model built from any mix of ``"cr"`` (with or without
+a numeric ``by``) and ``"ti"`` terms, fitting itself and choosing its own
+smoothing parameters.
+
+**Nothing here is a new numeric formula.** :func:`assemble_model_design` is
+the ``ModelSpec``-driven generalisation of
+:func:`~hgam.engine.gam_multiterm_conformance.assemble_multiterm_design`'s
+column/penalty-padding logic (that module now calls this one — the work
+order's step 1, "extract the shared assembly so the harness and the engine
+cannot drift"). :func:`fit_engine_gam` composes three already-independently-
+verified pieces unchanged: the basis producers
+(:func:`~hgam.engine.gam_term_build.build_python_cr_term` /
+:func:`~hgam.engine.gam_term_build.build_python_ti_term` — ADR-194,
+ADR-200, ADR-205), the smoothing-parameter search — by default (ADR-248) the
+safeguarded Newton search
+(:func:`~hgam.engine.gam_reml_newton.newton_select_lambdas`,
+ADR-241..247), with the continuous L-BFGS-B search
+(:func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous` —
+ADR-199) kept as an opt-in diagnostic (``outer="lbfgsb"``) — and the general
+penalized fitter it already calls internally
+(:func:`~hgam.engine.gam_fit.penalized_irls_general` — ADR-195).
+
+The paragraphs below record the L-BFGS-B search's history; they describe
+``outer="lbfgsb"``, not the default.
+
+**What this module does NOT do.** ``select = TRUE`` (PLAN slice 7) is
+wired into :func:`assemble_model_design` — set ``ModelSpec.select = True``
+and each term's own null-space penalty
+(:func:`~hgam.engine.gam_select_penalty.null_space_penalty`, Stage-A
+verified against ``mgcv``, ADR-217) is appended after its existing
+block(s). :func:`fit_engine_gam`'s own outer search has now been measured
+on the doubled (7-)block count this produces (PLAN slice 7b): single-start
+disagrees badly with ``mgcv``'s own free-``sp`` selection on this structure
+(worse than the N=4 non-``select`` case ever did), but ``multistart=True``
+(:func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous_multistart`,
+ADR-213) closes ``eta``/``edf`` agreement to the same order every other
+Stage-B measurement in this epic has reached, leaving a raw ``log10(sp)``
+residual on two of the three terms' own EXISTING blocks (not the null-space
+ones) that a warm-start diagnostic shows is optimiser-convergence on a
+weakly-identified surface, not a formula defect — see ADR-218. Nothing here
+selects the extra smoothing parameters any differently from an ordinary
+block. :func:`assemble_model_design` raises on any basis it does
+not recognise rather than silently skipping a term. ``"sz"`` terms (slice 6b,
+``docs/PLAN_mgcv_parity_engine.md``) ARE built by :func:`assemble_model_design`
+via :func:`~hgam.engine.gam_term_build.build_python_sz_term` (ADR-215),
+but :func:`fit_engine_gam`'s own outer search
+(:func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous`)
+has never been exercised on an ``sz``-shaped block structure (one smoothing
+parameter per factor level) — slice 6b's own scope is the fixed-``sp``
+assembly and fit, not extending the free-``sp`` search to this shape. It
+does not touch ``experience_gam_penalized`` or ``experience_gam``
+(PLAN Anchor 7) — those stay the production tensor-MI surface until a caller
+is explicitly moved, which this module does not do on its own. It does not
+compute an unconditional (Kass-Steffey / Wood-Pya-Saefken) covariance — the
+work order's own §3 scope is ``eta``, selected ``log10(sp)``, and edf, not
+uncertainty.
+
+``"parametric"`` terms (capability ladder rung L4, ``docs/
+PLAN_mgcv_capability_ladder.md`` slice 5) ARE built by
+:func:`assemble_model_design`, via
+:func:`~hgam.engine.gam_term_build.build_python_parametric_term`
+(:mod:`~hgam.engine.gam_basis_parametric`) — an unpenalized main
+effect or interaction of one or more factors, e.g. the target formula's own
+``FaceSize + Smoke + FaceSize:Smoke``. It contributes zero penalty blocks
+(``TermBlock.n_penalties == 0``), so it is never affected by
+``model.select`` and needs no change to the smoothing-parameter search — the
+existing block-padding logic in this function already handles a term with no
+penalty at all, unchanged.
+"""
+
+import warnings
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Literal, NotRequired, TypedDict, overload
+
+import numpy as np
+
+from hgam.engine.gam_dispersion import DispersionEstimates, dispersion_estimates
+from hgam.engine.gam_family import (
+    Family,
+    binomial_cloglog,
+    binomial_logit,
+    gaussian_identity,
+    poisson_log,
+    quasipoisson_log,
+)
+from hgam.engine.gam_initial_sp import initial_log10_lambda
+from hgam.engine.gam_predict import TermState, fit_term_state, predict_design
+from hgam.engine.gam_rank_pivot import pivot_out, unidentified_directions
+from hgam.engine.gam_reml_newton import NewtonLambdaSelection, newton_select_lambdas
+from hgam.engine.gam_reml_optimize import (
+    ContinuousLambdaSelection,
+    select_lambdas_continuous,
+    select_lambdas_continuous_multistart,
+)
+from hgam.engine.gam_select_penalty import null_space_penalty
+from hgam.engine.gam_term_build import (
+    TermExtract,
+    build_python_cr_by_factor_term,
+    build_python_cr_term,
+    build_python_parametric_term,
+    build_python_re_term,
+    build_python_sz_term,
+    build_python_ti_term,
+    build_python_tp_term,
+)
+from hgam.engine.gam_term_spec import ModelSpec, TermSpec
+from hgam.engine.gam_vcov import (
+    CoefficientCovariance,
+    coefficient_covariance,
+    linear_predictor_se,
+)
+from hgam.errors import (
+    HgamComputationError,
+    HgamRankDeficiencyWarning,
+    HgamValidationError,
+)
+
+__all__ = [
+    "TP_LOG10_BOUNDS",
+    "ModelDesign",
+    "EngineGAMFit",
+    "TermBlock",
+    "assemble_model_design",
+    "fit_engine_gam",
+    "pivot_design",
+    "resolve_family",
+]
+
+_FAMILY_LINKS: dict[tuple[str, str], Callable[[], Family]] = {
+    ("gaussian", "identity"): gaussian_identity,
+    ("poisson", "log"): poisson_log,
+    ("quasipoisson", "log"): quasipoisson_log,
+    ("binomial", "logit"): binomial_logit,
+    ("binomial", "cloglog"): binomial_cloglog,
+}
+"""Every ``(family, link)`` pair this module resolves.
+``ModelSpec.family``/``.link`` are free-text strings (Anchor 3), but this module
+only ever resolves them to one of these — deliberately no "unknown but assume
+Poisson-shaped" fallback, since a silently-wrong family would fail nowhere near
+where the mistake was made.
+
+**All five pairs are verified against ``mgcv``, but not to the same reach**, and
+the fault line is **the free scale**, not the count/binary divide:
+
+* **All five** — penalized IRLS at **fixed ``sp``**. Slice 3 / ADR-195 for the
+  four count/binary pairs; ladder rung L1 / ADR-229 for ``gaussian``/``identity``.
+* **``quasipoisson``/``log`` and ``gaussian``/``identity`` stop there**, and for
+  the same reason: both carry ``dispersion_fixed=False``, and
+  ``reml_score_general`` raises on a free scale until rung **L5**. So **L5
+  unblocks two families, not one**.
+* **Free-``sp`` selection** is measured on ``binomial``/``cloglog`` — the target
+  formula's own family — by the REML and selection work (ADR-210, ADR-217/218,
+  slices 5b/7b), *not* by ADR-195, which is the fixed-``sp`` result.
+
+``gaussian``/``identity`` is *also* verified against **closed forms** —
+unpenalized IRLS against ``lstsq``, penalized against ``(X'X + S)^-1 X'y``, both
+to ``1e-12`` (``tests/test_analytics/test_gam_family.py``) — which is real
+verification and is not the same claim as mgcv parity.
+
+``docs/MGCV_FEATURE_COVERAGE.md`` §2.2 is the authority on the Stage B column;
+this docstring exists so the reach travels with the code rather than only with
+the table.
+
+``gaussian``/``identity`` is listed first because it is the simplest: constant
+variance and a linear link collapse IRLS to one weighted least-squares solve,
+which is what makes it the ladder's diagnostic floor."""
+
+
+PRODUCTION_LOG10_BOUNDS = (-2.0, 12.0)
+""":func:`fit_engine_gam`'s own default search domain for
+:func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous` —
+deliberately wider than that module's own
+``DEFAULT_LOG10_BOUNDS = (-2.0, 8.0)``.
+
+**Measured, not guessed (PR #212 review [P1]):** on the target formula's own
+three-term `cr`+`by`+`ti` structure, `mgcv`'s own free-sp REML selection
+reaches `log10(sp) ~ 9.87` on the by-term's block —
+outside `DEFAULT_LOG10_BOUNDS` entirely. A caller fitting this exact model
+shape with the module default would have its search silently clamped at 8,
+short of where the criterion's own minimum lies (or at least short of where
+`mgcv`'s optimiser lands — see ADR-208 for what that comparison does and
+does not establish). `gam_model_conformance._SEARCH_BOUNDS = (-2, 11)`
+already widened the comparator's own search to reach this region;
+this constant gives `fit_engine_gam` itself the same headroom (plus a
+margin) by default, rather than leaving every caller to discover the clamp
+independently. `select_lambdas_continuous`'s own default is untouched
+(PLAN Anchor 7 — that module and its constant are ADR-199's tier-3-verified
+artifact)."""
+
+
+TP_LOG10_BOUNDS = (-8.0, 12.0)
+""":func:`fit_engine_gam`'s default search domain for a model with a ``tp`` term (Slice R4,
+ADR-261): the lower edge is widened from ``-2`` to ``-8``.
+
+**Measured, not guessed:** with ``mgcv``'s own ``scale.penalty`` (which the ``tp`` basis
+reproduces, :mod:`~hgam.engine.gam_basis_tp`), ``mgcv``'s REML optimum for a plain
+``s(x)`` sits at ``sp = 4.9e-3`` (``log10 = -2.3``) on a 300-row smooth signal, already below
+the ``cr``-era lower edge; the guard that rejects a lower-bound selection as "always a
+conditioning defect" would then reject ``mgcv``'s own answer. The widening moves the search
+domain, not a tolerance or an acceptance criterion, and a selection at the new lower edge is
+still reported by the same guard. ``PRODUCTION_LOG10_BOUNDS`` and every ``cr``/``ti`` fit are
+unchanged."""
+
+
+def resolve_family(family: str, link: str) -> Family:
+    """The ``(family, link)`` -> :class:`Family` lookup every ``ModelSpec``-driven
+    fit needs. Raises rather than guessing on an unrecognised pair."""
+    try:
+        return _FAMILY_LINKS[(family, link)]()
+    except KeyError:
+        raise HgamValidationError(
+            f"resolve_family: no Family/Link constructor for family={family!r}, "
+            f"link={link!r}. Supported combinations: "
+            f"{sorted(_FAMILY_LINKS)}."
+        ) from None
+
+
+class TermBlock(TypedDict):
+    """One term's column span in the assembled design, and how many
+    independently-scaled penalty blocks it contributed (1 for ``cr``, 2 for
+    ``ti`` — ADR-205 decision 2)."""
+
+    label: str
+    start: int
+    end: int
+    n_penalties: int
+
+
+class ModelDesign(TypedDict):
+    """The assembled design and every independently-scaled penalty block, in
+    ``ModelSpec.terms`` order — the same convention
+    :class:`~hgam.engine.gam_multiterm_conformance.MultiTermDesign`
+    already used, generalised from exactly three fixed terms to any
+    ``ModelSpec`` built from ``"cr"``/``"ti"`` terms."""
+
+    x: np.ndarray
+    penalty_blocks: tuple[np.ndarray, ...]
+    term_blocks: tuple[TermBlock, ...]
+    kept_columns: NotRequired[tuple[int, ...]]
+    """Present only on a design :func:`pivot_design` reduced (Slice 9): the retained
+    column indices of the FULL layout. Then ``x`` and ``penalty_blocks`` carry only
+    these columns, while ``term_blocks`` keeps describing the full layout (``mgcv``'s
+    ``last.para - first.para + 1`` counts the pivoted-out coefficients too)."""
+    full_width: NotRequired[int]
+    """The full column count, present with ``kept_columns``."""
+
+
+def _build_term_extract(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermExtract:
+    if term.basis == "cr":
+        x = np.asarray(data[term.variables[0]], dtype=np.float64)
+        if term.by_factor is not None:
+            group = np.asarray(data[term.by_factor], dtype=np.int64)
+            return build_python_cr_by_factor_term(x, group, term)
+        by = None if term.by is None else np.asarray(data[term.by], dtype=np.float64)
+        return build_python_cr_term(x, term, by=by)
+    if term.basis == "tp":
+        return build_python_tp_term(np.asarray(data[term.variables[0]], dtype=np.float64), term)
+    if term.basis == "ti":
+        x1 = np.asarray(data[term.variables[0]], dtype=np.float64)
+        x2 = np.asarray(data[term.variables[1]], dtype=np.float64)
+        return build_python_ti_term(x1, x2, term)
+    if term.basis == "sz":
+        # TermSpec's own documented order for basis="sz": (factor_name, smoothed_name).
+        factor_name, smoothed_name = term.variables
+        x = np.asarray(data[smoothed_name], dtype=np.float64)
+        group = np.asarray(data[factor_name], dtype=np.int64)
+        if term.n_levels is None:
+            raise HgamValidationError(
+                f"assemble_model_design: TermSpec {term.label!r} is basis='sz' "
+                "with n_levels=None — the factor-level count is an input "
+                "(Anchor 4), not derived from a sample's own observed group "
+                "codes. Set TermSpec.n_levels explicitly."
+            )
+        return build_python_sz_term(x, group, term.n_levels, term)
+    if term.basis == "re":
+        factor_name = term.variables[0]
+        group = np.asarray(data[factor_name], dtype=np.int64)
+        if term.n_levels is None:
+            raise HgamValidationError(
+                f"assemble_model_design: TermSpec {term.label!r} is basis='re' "
+                "with n_levels=None — the factor-level count is an input "
+                "(Anchor 4), not derived from a sample's own observed group "
+                "codes. Set TermSpec.n_levels explicitly."
+            )
+        return build_python_re_term(group, term.n_levels, term)
+    if term.basis == "parametric":
+        groups = tuple(np.asarray(data[variable], dtype=np.int64) for variable in term.variables)
+        return build_python_parametric_term(groups, term)
+    raise HgamValidationError(
+        f"assemble_model_design: TermSpec {term.label!r} has basis={term.basis!r}, "
+        "which the hgam engine does not build yet — only 'cr', 'ti', 'sz', 're' and "
+        "'parametric' are wired. 'raw' supplies its own design/penalty directly "
+        "and has no recipe for this function to build from."
+    )
+
+
+def assemble_model_design(model: ModelSpec, data: Mapping[str, np.ndarray]) -> ModelDesign:
+    """Build the full design and every penalty block from a ``ModelSpec`` and
+    the covariate data it names — never from ``mgcv``'s own ``X``/``coef``
+    (there is none in ``data`` to read).
+
+    An unpenalized intercept column comes first (``mgcv``'s own convention
+    for a formula with no explicit parametric terms), then each term's own
+    columns in ``model.terms`` order. Each penalty block is padded with zeros
+    outside its own term's columns — the same convention
+    polaris-re's ``analytics.experience_mgcv_conformance.DesignExport``
+    and
+    :func:`~hgam.engine.gam_multiterm_conformance.assemble_multiterm_design`
+    (now built on this function) already use.
+
+    Args:
+        model: every term must be ``basis="cr"``, ``basis="ti"``, ``basis="sz"``,
+            ``basis="re"`` or ``basis="parametric"`` — see
+            :func:`_build_term_extract`. When ``model.select`` is ``True`` (PLAN
+            slice 7), each term's own null-space penalty
+            (:func:`~hgam.engine.gam_select_penalty.null_space_penalty`)
+            is appended after that term's own existing block(s) — skipped for
+            a term whose existing blocks are already full rank (nothing left
+            to penalise, which is always true of a ``"parametric"`` term:
+            it starts with zero penalty blocks, so there is nothing for
+            ``select`` to double), never padded in as an all-zero block.
+        data: covariate arrays keyed by name, e.g. ``{"AttdAge": ..., "PolYear":
+            ..., "StudyYear_C": ...}`` — a numeric-``by`` term reads its scaling
+            variable from here via ``term.by``, a ``ti`` term reads both of
+            ``term.variables`` from here, an ``sz`` term reads its factor's
+            0-indexed level codes (``term.variables[0]``) and its smoothed
+            margin's values (``term.variables[1]``) from here, a ``re``
+            term reads its single factor's 0-indexed level codes
+            (``term.variables[0]``) from here, and a ``parametric`` term reads
+            one 0-indexed level-code array per entry of ``term.variables``
+            (one for a main effect, two or more for an interaction).
+
+    Raises:
+        HgamValidationError: if a term names a basis this function does not
+            build, or if ``data`` is missing a variable a term names.
+    """
+    extracts = [(term, _build_term_extract(term, data)) for term in model.terms]
+    n = extracts[0][1].design.shape[0]
+
+    intercept = np.ones((n, 1), dtype=np.float64)
+    columns = [intercept]
+    term_blocks: list[TermBlock] = []
+    raw_blocks: list[tuple[int, np.ndarray]] = []
+    col = 1
+    for term, extract in extracts:
+        width = extract.design.shape[1]
+        columns.append(extract.design)
+        term_s = list(extract.s)
+        if model.select and extract.s:
+            # A term with NO existing penalty block (a "parametric" term,
+            # module docstring — the only basis this function builds with
+            # zero blocks) has no null space to penalise, and
+            # null_space_penalty raises on an empty input rather than
+            # returning None for it (its own docstring: "at least one
+            # penalty block"). This is the term-level generalisation of the
+            # existing "already full rank -> None -> skip" branch below, for
+            # the degenerate zero-block case that branch cannot reach on its
+            # own.
+            null_result = null_space_penalty(extract.s)
+            if null_result is not None:
+                term_s.append(null_result[0])
+        term_blocks.append(TermBlock(label=term.label, start=col, end=col + width, n_penalties=len(term_s)))
+        raw_blocks.extend((col, block) for block in term_s)
+        col += width
+
+    x = np.hstack(columns)
+    p_total = x.shape[1]
+
+    def _pad(start: int, block: np.ndarray) -> np.ndarray:
+        width = block.shape[0]
+        padded = np.zeros((p_total, p_total), dtype=np.float64)
+        padded[start : start + width, start : start + width] = block
+        return padded
+
+    penalty_blocks = tuple(_pad(start, block) for start, block in raw_blocks)
+    return ModelDesign(x=x, penalty_blocks=penalty_blocks, term_blocks=tuple(term_blocks))
+
+
+def pivot_design(design: ModelDesign) -> ModelDesign:
+    """Eliminate the coefficients the data cannot identify (Slice 9, ``mgcv``'s pivoting).
+
+    Returns ``design`` unchanged when it is identified; otherwise a design whose ``x``
+    and ``penalty_blocks`` carry only the retained columns, with ``kept_columns`` and
+    ``full_width`` recording the full layout. See :mod:`~hgam.engine.gam_rank_pivot`
+    for why the fitted function space, ``eta``, edf and ``log|S|_+`` are unchanged.
+    """
+    x_kept, blocks_kept, kept = pivot_out(design["x"], design["penalty_blocks"])
+    full_width = design["x"].shape[1]
+    if len(kept) == full_width:
+        return design
+    return ModelDesign(
+        x=x_kept,
+        penalty_blocks=blocks_kept,
+        term_blocks=design["term_blocks"],
+        kept_columns=kept,
+        full_width=full_width,
+    )
+
+
+def _warn_if_rank_deficient(full: ModelDesign, pivoted: ModelDesign, *, stacklevel: int) -> None:
+    """Warn, once per fit, when the specification has unidentified coefficients (ADR-256).
+
+    This is the single choke point: ``gam()`` and every direct ``fit_engine_gam`` call
+    assemble and pivot here, and the test is the structural one the pivot itself uses
+    (``S_j v = 0`` for every penalty and ``X v = 0``), so it does not depend on the response
+    or the smoothing parameters. The terms named are those the redundant direction runs
+    through, not the (arbitrary) column that was eliminated.
+    """
+    if pivoted.get("kept_columns") is None:
+        return
+    v = unidentified_directions(full["x"], full["penalty_blocks"])
+    n_dir = v.shape[1]
+    involved = np.abs(v).max(axis=1) > 1e-8
+    labels = [b["label"] for b in full["term_blocks"] if bool(involved[b["start"] : b["end"]].any())]
+    warnings.warn(
+        f"The model specification has {n_dir} redundant direction(s) the data cannot identify, "
+        f"running through the terms {labels}; typically a smooth and a by-factor smooth of the "
+        "same covariate share a null space. The fit is valid: fitted values, edf_total and the "
+        "Vp-based standard errors are well defined. Per-term edf and the unconditional "
+        "covariance (Vc) depend on which coefficient is eliminated and are NOT identified "
+        "(mgcv's own values change between runs, ADR-256): Vc is refused and per-term edf "
+        "should not be interpreted. To remove the redundancy, drop the bare s(x) and fit "
+        "f + s(x, by=f).",
+        HgamRankDeficiencyWarning,
+        stacklevel=stacklevel,
+    )
+
+
+def _per_term_edf(
+    design: ModelDesign,
+    family: Family,
+    eta: np.ndarray,
+    mu: np.ndarray,
+    penalty: np.ndarray,
+    weights: np.ndarray | None,
+) -> dict[str, float]:
+    """``tr(F)`` restricted to each term's own columns, at the final IRLS
+    working weights — the same identity
+    ``experience_gam_penalized.PenalizedTensorMIModel.fit``'s ``edf_tensor``/
+    ``edf_factors`` split uses (``f_diag[:n_tensor].sum()`` etc.), generalised
+    from two fixed blocks to any number of named terms.
+
+    Deliberately excludes the intercept column, matching ``mgcv``'s own
+    ``summary.gam``'s per-smooth-term ``edf`` column — a reader summing this
+    dict's values gets the *smooth* terms' total, not
+    :attr:`EngineGAMFit.edf_total` (which also counts the intercept and would
+    be off by approximately 1).
+    """
+    x = design["x"]
+    n = mu.shape[0]
+    w = np.ones(n, dtype=np.float64) if weights is None else weights
+    deta_dmu = family.link.mu_eta(eta)
+    irls_weights = w * deta_dmu**2 / family.variance(mu)
+    xtwx = x.T @ (irls_weights[:, None] * x)
+    hat = np.linalg.solve(xtwx + penalty, xtwx)
+    diag = np.diag(hat)
+    kept = design.get("kept_columns")
+    if kept is not None:
+        # a pivoted-out coefficient is fixed at zero and carries no degrees of freedom
+        full = np.zeros(design["full_width"], dtype=np.float64)
+        full[np.asarray(kept, dtype=np.intp)] = diag
+        diag = full
+    return {tb["label"]: float(diag[tb["start"] : tb["end"]].sum()) for tb in design["term_blocks"]}
+
+
+def _dispersion_or_nan(
+    y: np.ndarray,
+    mu: np.ndarray,
+    family: Family,
+    edf_total: float,
+    weights: np.ndarray | None,
+) -> DispersionEstimates:
+    """The fit's dispersion diagnostic, which must never block the fit: a
+    near-saturated fit (no residual df) or a saturated binomial ``mu`` (``V = 0``)
+    reports NaN estimates instead of raising. The standalone
+    :func:`dispersion_estimates` keeps raising on no residual df."""
+    nan = float("nan")
+    try:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return dispersion_estimates(y, mu, family, edf_total, weights=weights)
+    except HgamValidationError:
+        return DispersionEstimates(
+            pearson=nan,
+            fletcher=nan,
+            deviance=nan,
+            s_bar=nan,
+            residual_df=float(y.size) - edf_total,
+        )
+
+
+@dataclass(frozen=True)
+class EngineGAMFit:
+    """A ``ModelSpec`` fitted to data, with its own selected smoothing
+    parameters. No coefficient is ever the object of a parity comparison
+    (Anchor 2) — this dataclass carries ``coef`` because a caller needs it to
+    predict, not because it is meant to be compared against ``mgcv``'s."""
+
+    model: ModelSpec
+    design: ModelDesign
+    coef: np.ndarray
+    eta: np.ndarray
+    log_lambda: np.ndarray
+    """``log10(lambda)``, one entry per penalty block, in
+    ``design["penalty_blocks"]`` order (:class:`TermBlock` order, and within a
+    term, its penalties in the order its basis producer returned them)."""
+    lambda_: np.ndarray
+    edf_total: float
+    """``tr(F)`` over the WHOLE design, intercept included — Anchor 4's EDF
+    definition, unchanged from
+    :func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous`."""
+    edf_per_term: dict[str, float]
+    """See :func:`_per_term_edf` — excludes the intercept, matching ``mgcv``'s
+    own per-smooth-term convention."""
+    reml_score: float
+    converged: bool
+    n_function_evals: int
+    n_rejected: int
+    at_bound: bool
+    """Whether any penalty block's selected ``log10(lambda)`` sits at the
+    UPPER bound of the search — see :func:`fit_engine_gam`'s ``strict``
+    parameter. The lower bound is never reported here: a selection there is
+    always a defect signal and :func:`fit_engine_gam` raises before
+    returning (PR #212 review [P1])."""
+    at_bound_blocks: tuple[str, ...]
+    """Term labels whose selected ``log10(lambda)`` sits at the upper bound
+    — a term ``mgcv``'s own ``select = TRUE`` would routinely shrink to its
+    null space (PLAN slice 7), not necessarily a defect. Empty unless
+    :attr:`at_bound` is ``True``."""
+    dispersion: DispersionEstimates
+    """Pearson / Fletcher / deviance dispersion estimates at the fitted ``mu``
+    (slice 3c). **Reported, never acted on**: no threshold or default is
+    attached. ``dispersion.fletcher`` is what ``mgcv`` reports as ``m$scale``
+    for a free-scale quasi-family under REML. For a ``dispersion_fixed`` family
+    (Poisson, binomial) these are overdispersion diagnostics, not the model's
+    own scale — read ``dispersion.pearson`` off a Poisson fit to supply as
+    ``gamma=`` to a second fit (the optional, non-standard two-stage route; see
+    :mod:`hgam.engine.gam_dispersion`). NaN estimates mean the
+    diagnostic was undefined for this fit (no residual degrees of freedom, or a
+    saturated ``mu`` with ``V = 0``) — it never blocks the fit itself."""
+    term_states: tuple[TermState, ...] = ()
+    """Per-term knots and absorbed constraints from the TRAINING rows — what
+    ``mgcv`` keeps in ``m$smooth`` — so :meth:`predict` can rebuild each basis at
+    new rows (ADR-249). Empty only on a fit built by hand rather than by
+    :func:`fit_engine_gam`; :meth:`predict` then raises."""
+    y: np.ndarray | None = None
+    """The training response, kept so :meth:`vcov` can rebuild the observed
+    information (ADR-250). ``None`` only on a fit built by hand."""
+    prior_weights: np.ndarray | None = None
+    """The training prior weights (``None`` = all one)."""
+    offset: np.ndarray | None = None
+    """The training offset (``None`` = zero)."""
+    n_iterations: int | None = None
+    """Newton iterations the outer search took (``None`` for ``outer="lbfgsb"`` and
+    for a fit built by hand). Reported by ``GamFit.summary()`` (preview Slice P4)."""
+    max_abs_projected_gradient: float | None = None
+    """``max |g^P|`` of the REML score at the stop, natural-log units (Newton only)."""
+    gradient_tolerance: float | None = None
+    """The score-scaled tolerance ``max |g^P|`` was tested against:
+    ``epsilon_rel * (1 + |score|)`` (Newton only)."""
+    vp_override: np.ndarray | None = None
+    """A coefficient covariance ``Vp`` supplied by the fitter, in the fit's (pivoted) column layout.
+    Set only by the ``bam`` path: ``bgam.fitd``'s ``Vp = PP * scale`` uses the EXPECTED (Fisher)
+    working weights, which differ from the observed-information weights :meth:`vcov` otherwise
+    rebuilds for a non-canonical link (cloglog). ``None`` everywhere else."""
+    fit_method: str = "REML"
+    """``"REML"`` for :func:`fit_engine_gam`'s Laplace-REML search; ``"fREML-discrete"`` for
+    the ``gam`` package's ``fit_engine_bam`` (``bam(method="fREML", discrete=TRUE)``'s
+    performance iteration, which does NOT minimise the exact REML — the smoothing parameters
+    are the iteration's end state). A fit with the second value refuses the quantities that
+    are defined by the exact REML (``vcov(unconditional=True)``), and its ``reml_score`` is
+    NaN (not ported): check this field before reading ``reml_score``."""
+
+    def vcov(self, unconditional: bool = False) -> np.ndarray:
+        """The coefficient covariance (``mgcv``'s ``vcov(m)``), ``(p, p)``.
+
+        ``unconditional=False`` is ``Vp = phi (XᵀWX + S_lambda)⁻¹`` (the Bayesian
+        posterior covariance, scaled by the fit's dispersion); ``True`` adds the
+        Wood-Pya-Säfken smoothing-parameter-uncertainty correction (``Vc``, ADR-202)
+        using the exact REML Hessian. Coefficient covariances are basis-dependent
+        (Anchor 2): compare ``mgcv`` through :meth:`predict`'s ``se_fit``, which is
+        not. See :mod:`hgam.engine.gam_vcov`.
+        """
+        cov = self._covariance(unconditional)
+        v = cov.vc if unconditional else cov.vp
+        kept = self.design.get("kept_columns")
+        if kept is None:
+            return v
+        # Slice 9: expand to the full layout; a pivoted-out coefficient is fixed at zero,
+        # so its variance and covariances are zero (this engine's convention: mgcv's own
+        # vcov has no zero row here, and mgcv's coefficients are a different basis, Anchor 2).
+        idx = np.asarray(kept, dtype=np.intp)
+        full = np.zeros((self.design["full_width"],) * 2, dtype=np.float64)
+        full[np.ix_(idx, idx)] = v
+        return full
+
+    @property
+    def coef_full(self) -> np.ndarray:
+        """``coef`` in the full column layout (``mgcv``'s ``coef(m)``): zero at the
+        coefficients pivoted out of a structurally rank-deficient design (Slice 9)."""
+        kept = self.design.get("kept_columns")
+        if kept is None:
+            return self.coef
+        full = np.zeros(self.design["full_width"], dtype=np.float64)
+        full[np.asarray(kept, dtype=np.intp)] = self.coef
+        return full
+
+    @property
+    def pivoted_columns(self) -> tuple[int, ...]:
+        """Full-layout indices of the coefficients eliminated as unidentified (Slice 9);
+        empty for an identified design."""
+        kept = self.design.get("kept_columns")
+        if kept is None:
+            return ()
+        return tuple(sorted(set(range(self.design["full_width"])) - set(kept)))
+
+    def _covariance(self, unconditional: bool) -> CoefficientCovariance:
+        if unconditional and self.fit_method != "REML":
+            raise HgamValidationError(
+                "EngineGAMFit.vcov: unconditional=True is refused for a "
+                f"{self.fit_method!r} fit. Vc is defined at a REML optimum by the exact REML "
+                "Hessian; a performance-iteration fit is not at one, and bam's own Vc comes "
+                "from the iteration's last working-model Hessian (not ported). Use "
+                "unconditional=False (Vp)."
+            )
+        if self.vp_override is not None:
+            # scale=1.0 is right only because the bam path is restricted to fixed-scale
+            # families (poisson, binomial); a free-scale port must carry its own scale here.
+            return CoefficientCovariance(vp=self.vp_override, first_order=None, second_order=None, scale=1.0)
+        if self.y is None:
+            raise HgamValidationError(
+                "EngineGAMFit.vcov: this fit carries no training response "
+                "(it was not built by fit_engine_gam)."
+            )
+        if unconditional and self.pivoted_columns:
+            raise HgamComputationError(
+                "EngineGAMFit.vcov: the unconditional covariance (Vc) is refused for a fit "
+                f"with pivoted-out coefficients {list(self.pivoted_columns)} (Slice 9). Vp, "
+                "eta, edf and the Vp-based se are pivot-invariant, but eq. (7)'s V'' term "
+                "depends on the square root of V_beta, hence on which coefficient is "
+                "eliminated: re-fitting one design with different pivots moved Vc se by "
+                "1.8e-2..9.5e-2 against mgcv (tier 1, ADR-255). Use unconditional=False."
+            )
+        family = resolve_family(self.model.family, self.model.link)
+        scale = 1.0 if family.dispersion_fixed else float(self.dispersion.fletcher)
+        return coefficient_covariance(
+            y=self.y,
+            x=self.design["x"],
+            family=family,
+            penalty_blocks=self.design["penalty_blocks"],
+            log10_lambda=self.log_lambda,
+            coef=self.coef,
+            offset=self.offset,
+            weights=self.prior_weights,
+            scale=scale,
+            unconditional=unconditional,
+        )
+
+    @overload
+    def predict(
+        self,
+        newdata: Mapping[str, np.ndarray],
+        type: Literal["link", "response"] = "link",
+        *,
+        se_fit: Literal[False] = False,
+        unconditional: bool = False,
+    ) -> np.ndarray: ...
+
+    @overload
+    def predict(
+        self,
+        newdata: Mapping[str, np.ndarray],
+        type: Literal["link", "response"] = "link",
+        *,
+        se_fit: Literal[True],
+        unconditional: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray]: ...
+
+    def predict(
+        self,
+        newdata: Mapping[str, np.ndarray],
+        type: Literal["link", "response"] = "link",
+        *,
+        se_fit: bool = False,
+        unconditional: bool = False,
+    ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+        """The fitted model evaluated at ``newdata``'s rows (``predict.gam``).
+
+        With ``se_fit=True`` returns ``(fit, se)`` — ``predict.gam(se.fit=TRUE)``:
+        ``se = sqrt(rowSums((X_new @ V) * X_new))`` with ``V`` from :meth:`vcov`
+        (``unconditional`` selects ``Vc``); on ``type="response"`` the delta method
+        scales it by ``|dmu/deta|``. The offset contributes no variance.
+
+        ``newdata`` carries the same columns the fit read (numeric covariates,
+        0-indexed factor codes, and the offset column if the model has one —
+        ``predict.gam`` also requires the offset variable). ``type="link"``
+        returns ``eta = offset + X beta``; ``"response"`` applies the inverse
+        link. Numeric covariates outside the training range extrapolate
+        linearly, as ``mgcv``'s ``cr`` does (ADR-249); a factor code the fit did
+        not see raises.
+        """
+        if type not in ("link", "response"):
+            raise HgamValidationError(
+                f"EngineGAMFit.predict: type must be 'link' or 'response', got {type!r}."
+            )
+        if not self.term_states:
+            raise HgamValidationError(
+                "EngineGAMFit.predict: this fit carries no stored term states "
+                "(it was not built by fit_engine_gam)."
+            )
+        x_new = predict_design(self.model, self.term_states, newdata)
+        kept = self.design.get("kept_columns")
+        if kept is not None:
+            x_new = x_new[:, np.asarray(kept, dtype=np.intp)]
+        eta = x_new @ self.coef
+        if self.model.offset_column is not None:
+            if self.model.offset_column not in newdata:
+                raise HgamValidationError(
+                    f"EngineGAMFit.predict: the model has offset column "
+                    f"{self.model.offset_column!r}; newdata must carry it."
+                )
+            eta = eta + np.asarray(newdata[self.model.offset_column], dtype=np.float64)
+        family = resolve_family(self.model.family, self.model.link)
+        fit_values = (
+            np.asarray(eta, dtype=np.float64)
+            if type == "link"
+            else np.asarray(family.link.linkinv(eta), dtype=np.float64)
+        )
+        if not se_fit:
+            return fit_values
+        cov = self._covariance(unconditional)
+        se = linear_predictor_se(x_new, cov.vc if unconditional else cov.vp)
+        if type == "response":
+            se = se * np.abs(np.asarray(family.link.mu_eta(eta), dtype=np.float64))
+        return fit_values, se
+
+
+def fit_engine_gam(
+    model: ModelSpec,
+    data: Mapping[str, np.ndarray],
+    y: np.ndarray,
+    *,
+    gamma: float = 1.0,
+    x0: np.ndarray | None = None,
+    bounds: tuple[float, float] | None = None,
+    gtol: float = 1.0e-8,
+    maxiter: int = 200,
+    strict: bool = False,
+    multistart: bool = False,
+    n_starts: int = 9,
+    analytic_gradient: bool = False,
+    max_gtol_restarts: int = 0,
+    step_halving: bool = False,
+    initial_sp_start: bool = False,
+    outer: Literal["lbfgsb", "newton"] = "newton",
+    warn_stacklevel: int = 2,
+) -> EngineGAMFit:
+    """Fit ``model`` to ``data``/``y``, selecting every smoothing parameter by
+    REML — by default the safeguarded Newton search
+    (:func:`~hgam.engine.gam_reml_newton.newton_select_lambdas`, one
+    ``initial.spg`` start; ADR-248), or with ``outer="lbfgsb"`` the continuous
+    search (:func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous`,
+    or :func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous_multistart`
+    when ``multistart=True``).
+
+    Args:
+        warn_stacklevel: ``warnings.warn`` stack level, relative to the caller of this
+            function (2 = the caller); a wrapper such as ``gam()`` passes 3 so the
+            rank-deficiency warning points at *its* caller (ADR-256).
+        model: family/link/terms/weights/offset (Anchor 5 — both may be set
+            at once, and neither is inferred from the other).
+        data: covariate arrays keyed by name, read by
+            :func:`assemble_model_design`, plus (if named on ``model``) the
+            weights and/or offset columns.
+        y: the response, ``(n,)`` — not part of ``ModelSpec`` (which
+            describes the model, not one particular fit's data), so it is a
+            required argument here rather than another ``data`` lookup by
+            convention.
+        gamma, x0, bounds, gtol, maxiter: ``gamma``, ``bounds`` and ``maxiter``
+            reach whichever search runs; ``x0`` and ``gtol`` are L-BFGS-B-only
+            (``outer="lbfgsb"``). For that search they are passed through to
+            :func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous`
+            unchanged, except ``bounds`` defaults (``None``) to
+            :data:`PRODUCTION_LOG10_BOUNDS` — or :data:`TP_LOG10_BOUNDS` when the model has a
+            ``tp`` term — rather than that module's own (narrower) default — see their
+            docstrings. ``x0`` applies only when
+            ``multistart=False`` (the default) —
+            :func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous_multistart`
+            has no ``x0`` parameter of its own (its first start is always
+            the bounds-centre, by design); supplying both raises rather than
+            silently dropping ``x0`` (PR #223 review [P2-1]).
+        strict: whether a selection at the UPPER bound also raises. Default
+            ``False`` — PLAN slice 7 (``select = TRUE``) is built around
+            penalising a term to nothing, and ``mgcv``'s own free-``sp``
+            selection routinely lands a term at very large `lambda` when it
+            carries no signal (PR #212 review [P1-new], `docs/DEV_SESSION_LOG_
+            2026-08-25_mgcv_parity_slice5b_polarisgam.md` "PR #212 review
+            response, round 2"); a hard raise there collided with that case
+            head-on rather than reporting it. Pass ``True`` for a caller that
+            wants a bound hit anywhere to fail loudly.
+            :func:`~hgam.engine.gam_model_conformance.fit_free_sp_case`
+            — the conformance/harness use this guard was originally written
+            for — deliberately stays non-strict (PR #222 review [P1-1]):
+            its own CI step does not guard the call in a ``try``/``except``,
+            so ``strict=True`` there would turn an occasional bound hit into
+            an uncaught crash that loses the whole diagnostic, rather than
+            the graceful degradation ``compare_free_sp_case`` already gives —
+            ``FreeSpCaseComparison.at_bound`` still surfaces the condition,
+            and its own ``max_abs_log10_sp_diff < 1e-2`` gate already fails
+            loudly on a clamped selection (a bound of 11 against `mgcv`'s own
+            ~9.87 misses by two orders of magnitude more than the tolerance).
+        multistart: when ``True``, selects lambda via
+            :func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous_multistart`
+            (best-of-``n_starts``, ADR-213) instead of the single
+            bounds-centre start
+            :func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous`
+            defaults to. Default ``False`` — every existing caller's
+            behaviour is unchanged. **Measured, not a general
+            recommendation** (PLAN slice 7b, ADR-218): on a
+            ``ModelSpec.select=True`` fit (7 blocks from a 3-term model),
+            single-start disagreed with ``mgcv``'s own free-``sp`` selection
+            by up to 5.1 decades on ``log10(sp)``; ``multistart=True``
+            (9 starts) brought that to 1.5 decades while closing ``eta``
+            agreement from 0.45 to 0.0027 and ``edf_total`` agreement from
+            2.42 to 0.11 — a warm-start diagnostic confirmed the residual is
+            optimiser convergence on a weakly-identified surface (`mgcv`'s
+            own point is reachable and scores better under our own
+            criterion), not a formula defect. Costs ``n_starts`` times a
+            single search's own function evaluations (ADR-213).
+        n_starts: passed through to
+            :func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous_multistart`
+            when ``multistart=True``; ignored otherwise.
+        analytic_gradient: passed through to whichever search runs (PLAN
+            slice 7d). Default ``False`` — every existing caller's behaviour
+            is unchanged. Measured on the N=4 fixture
+            (``tests/fixtures/gam_reml_optimize_near_flat_direction.json``):
+            a single-start search with ``analytic_gradient=True`` reaches a
+            REML score BETTER than the finite-difference default reaches
+            (``612.610032`` vs ``612.610092``) in 20 function evaluations
+            against 120 — see the slice 7d ADR for the full measurement,
+            including the ``select=True`` 7-block structure.
+        max_gtol_restarts: passed through to whichever search runs (PLAN
+            slice 7f, ADR-222). Default ``0`` — off, and the default path is
+            unchanged: at ``0`` the restart block is unreachable. **Requires
+            ``analytic_gradient=True`` and raises otherwise**, rather than
+            being a silent no-op. A measured PARTIAL mitigation, never a
+            closure: on slice 7f's own N=7 fixture it takes the KKT residual
+            from ``2.09`` to ``4.9e-01`` and stops there, because the
+            remaining obstruction is the inner IRLS's own non-convergent
+            neighbourhood rather than any stopping rule.
+        step_halving: passed through to whichever search runs (PLAN slice 7g
+            direction 1, ADR-222). Default ``False`` — every existing
+            caller's behaviour is unchanged. Directly targets the
+            non-convergent neighbourhood ``max_gtol_restarts`` above was
+            working around: on the same ``select=True`` N=7 fixture, closes
+            the restart plateau's own KKT residual ``0.049335 -> 0.001125``
+            (~44x) and removes the non-convergent neighbourhood entirely.
+
+        initial_sp_start: when ``True``, the single search starts from
+            ``mgcv``'s own data-based ``initial.spg`` smoothing parameters
+            (:func:`~hgam.engine.gam_initial_sp.initial_log10_lambda`)
+            instead of the bounds-centre (ladder slice 3d). Default ``False`` —
+            every existing caller's behaviour is unchanged. One start, one
+            search's cost (no ``n_starts`` multiple). Measured, not assumed: on
+            two overdispersed quasi-Poisson draws where the bounds-centre start
+            settles in a worse stationary point of the same criterion, this
+            start reaches ``mgcv``'s point (see ADR-239). Mutually exclusive
+            with ``x0`` and ``multistart``.
+
+        outer: which outer search selects the smoothing parameters.
+            ``"newton"`` (**the default since ADR-248**) is the safeguarded
+            Newton search of :mod:`~hgam.engine.gam_reml_newton`
+            (outer-solver epic, ADR-241..248): analytic gradient, exact
+            Hessian, step cap, step halving, and ``mgcv``'s own stopping test
+            (projected gradient <= ``conv.tol * (1 + |score|)``,
+            ``conv.tol = 1e-6`` — the tolerance ADR-248 ratified as the
+            convergence certificate's ``eps_rel``), started from ``mgcv``'s
+            ``initial.spg`` (its ONLY start). Deterministic: no random start,
+            no multistart. From that one start it meets ADR-221 against
+            ``mgcv`` on every gauntlet case (ADR-245/246) and is
+            BLAS-thread reproducible (ADR-247). Mutually exclusive with
+            ``x0``, ``multistart``, ``analytic_gradient``,
+            ``max_gtol_restarts`` and ``initial_sp_start``; ``gtol`` is not
+            used. ``"lbfgsb"`` is the previous SciPy search, kept as an opt-in
+            DIAGNOSTIC together with those options (and every recorded
+            L-BFGS-B conformance claim passes it explicitly) — it is not the
+            recommended path: from a single start it can stop on a plateau or
+            on a function-reduction test that is not a stationarity test
+            (ADR-241).
+
+    Raises:
+        HgamValidationError: propagated from :func:`assemble_model_design`
+            or :func:`resolve_family`; or raised here if both ``multistart``
+            and ``x0`` are supplied — ``select_lambdas_continuous_multistart``
+            has no ``x0`` of its own to receive it, so silently ignoring a
+            caller-supplied starting point would misreport what search
+            actually ran (PR #223 review [P2-1]).
+        HgamComputationError: propagated from
+            :func:`~hgam.engine.gam_reml_optimize.select_lambdas_continuous`
+            if every trial smoothing-parameter point is rejected; or raised
+            here if the search's own selection sits at the LOWER bound of
+            ``bounds`` (always — a term driven toward zero smoothing is a
+            conditioning defect, never a genuine `mgcv` optimum), or at the
+            UPPER bound with ``strict=True`` — a clamped smoothing parameter
+            is not necessarily the criterion's minimum, and returning it
+            silently as though it were would misreport `edf`/`eta`
+            downstream without any signal that the search domain, not the
+            criterion, was the limiting factor. Widen ``bounds`` and refit
+            rather than reading a lower-bound selection.
+    """
+    if multistart and x0 is not None:
+        raise HgamValidationError(
+            "fit_engine_gam: x0 was supplied together with multistart=True. "
+            "select_lambdas_continuous_multistart has no x0 parameter of its "
+            "own -- its first start is always the bounds-centre by design -- "
+            "so x0 would be silently dropped rather than used. Pass one or "
+            "the other."
+        )
+    if initial_sp_start and (x0 is not None or multistart):
+        raise HgamValidationError(
+            "fit_engine_gam: initial_sp_start=True is mutually exclusive with x0 and "
+            "multistart=True (it IS the single start)."
+        )
+    if outer not in ("lbfgsb", "newton"):
+        raise HgamValidationError(f"fit_engine_gam: outer must be 'lbfgsb' or 'newton', got {outer!r}.")
+    if outer == "newton" and (
+        x0 is not None or multistart or analytic_gradient or max_gtol_restarts or initial_sp_start
+    ):
+        raise HgamValidationError(
+            "fit_engine_gam: outer='newton' is mutually exclusive with x0, multistart, "
+            "analytic_gradient, max_gtol_restarts and initial_sp_start -- it always uses the "
+            "analytic gradient and its one start is mgcv's initial.spg."
+        )
+    if bounds is None:
+        bounds = (
+            TP_LOG10_BOUNDS if any(term.basis == "tp" for term in model.terms) else PRODUCTION_LOG10_BOUNDS
+        )
+    full_design = assemble_model_design(model, data)
+    design = pivot_design(full_design)
+    _warn_if_rank_deficient(full_design, design, stacklevel=warn_stacklevel + 1)
+    family = resolve_family(model.family, model.link)
+    weights = (
+        None if model.weights_column is None else np.asarray(data[model.weights_column], dtype=np.float64)
+    )
+    offset = None if model.offset_column is None else np.asarray(data[model.offset_column], dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    if initial_sp_start:
+        x0 = np.clip(
+            initial_log10_lambda(y, design["x"], family, design["penalty_blocks"], weights=weights),
+            bounds[0],
+            bounds[1],
+        )
+
+    n_function_evals: int
+    selection: ContinuousLambdaSelection | NewtonLambdaSelection
+    if outer == "newton":
+        selection = newton_select_lambdas(
+            y,
+            design["x"],
+            family,
+            design["penalty_blocks"],
+            x0=np.clip(
+                initial_log10_lambda(y, design["x"], family, design["penalty_blocks"], weights=weights),
+                bounds[0],
+                bounds[1],
+            ),
+            offset=offset,
+            weights=weights,
+            gamma=gamma,
+            bounds=bounds,
+            maxiter=maxiter,
+            step_halving=step_halving,
+        )
+        n_function_evals = selection.n_function_evals
+    elif multistart:
+        multi = select_lambdas_continuous_multistart(
+            y,
+            design["x"],
+            family,
+            design["penalty_blocks"],
+            offset=offset,
+            weights=weights,
+            gamma=gamma,
+            bounds=bounds,
+            gtol=gtol,
+            maxiter=maxiter,
+            n_starts=n_starts,
+            analytic_gradient=analytic_gradient,
+            max_gtol_restarts=max_gtol_restarts,
+            step_halving=step_halving,
+        )
+        selection = multi.best
+        n_function_evals = multi.total_function_evals
+    else:
+        selection = select_lambdas_continuous(
+            y,
+            design["x"],
+            family,
+            design["penalty_blocks"],
+            offset=offset,
+            weights=weights,
+            gamma=gamma,
+            x0=x0,
+            bounds=bounds,
+            gtol=gtol,
+            maxiter=maxiter,
+            analytic_gradient=analytic_gradient,
+            max_gtol_restarts=max_gtol_restarts,
+            step_halving=step_halving,
+        )
+        n_function_evals = selection.n_function_evals
+    if selection.at_bound:
+        # One log_lambda entry per penalty BLOCK; a term with more than one
+        # penalty (ti carries two, ADR-205) owns a run of consecutive entries.
+        block_labels = [tb["label"] for tb in design["term_blocks"] for _ in range(tb["n_penalties"])]
+        lo, hi = bounds
+        lower_bound_blocks = [
+            (label, float(log_lam))
+            for label, log_lam in zip(block_labels, selection.log_lambda, strict=True)
+            if np.isclose(log_lam, lo)
+        ]
+        upper_bound_blocks = [
+            (label, float(log_lam))
+            for label, log_lam in zip(block_labels, selection.log_lambda, strict=True)
+            if np.isclose(log_lam, hi) and not np.isclose(log_lam, lo)
+        ]
+        if lower_bound_blocks:
+            raise HgamComputationError(
+                f"fit_engine_gam: the smoothing-parameter search selected log10(lambda) "
+                f"at a bound (the LOWER bound) of {bounds} for {lower_bound_blocks} "
+                "-- this is the search domain's edge, not the REML criterion's minimum, "
+                "and unlike the upper bound (which mgcv's own select=TRUE routinely "
+                "reaches for a term with no signal), the lower bound is always a "
+                "conditioning defect, never a genuine optimum. Widen `bounds` and refit "
+                "rather than reading this selection."
+            )
+        if upper_bound_blocks and strict:
+            raise HgamComputationError(
+                f"fit_engine_gam: the smoothing-parameter search selected log10(lambda) "
+                f"at a bound (the UPPER bound) of {bounds} for {upper_bound_blocks} with "
+                "strict=True -- pass strict=False (the default) to accept a term smoothed "
+                "to its null space, which mgcv's own select=TRUE routinely selects for a "
+                "term with no signal, or widen `bounds` if this is not expected for this "
+                "model."
+            )
+    else:
+        upper_bound_blocks = []
+
+    eta = (np.zeros_like(y) if offset is None else offset) + design["x"] @ selection.coef
+    mu = family.link.linkinv(eta)
+    penalty = np.zeros_like(design["penalty_blocks"][0])
+    for log_lam, block in zip(selection.log_lambda, design["penalty_blocks"], strict=True):
+        penalty = penalty + (10.0**log_lam) * block
+    edf_per_term = _per_term_edf(design, family, eta, mu, penalty, weights)
+
+    return EngineGAMFit(
+        model=model,
+        design=design,
+        coef=selection.coef,
+        eta=eta,
+        log_lambda=selection.log_lambda,
+        lambda_=selection.lambda_,
+        edf_total=selection.edf_total,
+        edf_per_term=edf_per_term,
+        reml_score=selection.reml_score,
+        converged=selection.converged,
+        n_function_evals=n_function_evals,
+        n_rejected=selection.n_rejected,
+        at_bound=bool(upper_bound_blocks),
+        at_bound_blocks=tuple(label for label, _ in upper_bound_blocks),
+        dispersion=_dispersion_or_nan(y, mu, family, selection.edf_total, weights),
+        term_states=tuple(fit_term_state(term, data) for term in model.terms),
+        y=y,
+        prior_weights=weights,
+        offset=offset,
+        n_iterations=selection.n_iterations if isinstance(selection, NewtonLambdaSelection) else None,
+        max_abs_projected_gradient=(
+            selection.max_abs_projected_gradient if isinstance(selection, NewtonLambdaSelection) else None
+        ),
+        gradient_tolerance=(
+            selection.gradient_tolerance if isinstance(selection, NewtonLambdaSelection) else None
+        ),
+    )

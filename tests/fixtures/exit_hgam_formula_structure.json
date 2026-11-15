@@ -1,0 +1,1 @@
+{"meta":{"mgcv":"1.9.1","r":"R version 4.3.3 (2024-02-29)","tier":1,"oracle_digest":""},"n":4000,"n_coef":132,"n_smooth":8,"n_sp":21,"labels":["s(AttdAge)","s(PolYear)","ti(PolYear,AttdAge)","s(FaceSize,AttdAge)","s(Smoke,AttdAge)","s(FaceSize,PolYear)","s(Smoke,PolYear)","s(AttdAge):StudyYear_C"],"term_coef":[12,5,60,13,13,6,6,13],"edf_total":30.0303313167544}

@@ -6,6 +6,7 @@ Moved 28 engine and front-end modules (about 10,800 lines) from polaris-re into 
 Tests: 5 pass and 1 xfail before; 564 pass and 1 xfail after. `make lint` is clean.
 No key result was measured: this slice adds no fixture. 43 harness-bound tests stayed behind (`docs/DEFERRED.md`).
 The tier-3 fixture artifact could not be downloaded: the network policy blocks its host.
+After review: unported refusals raise `HgamNotImplementedError`; the six ports gained tier 1 fixtures (`tero`, `compress.df`, `initial.sp`, `Sl.fitChol`, `bgam.fitd` x2), all inside their gates (eta within 3e-9, edf within 3e-7). 583 pass.
 
 ## 2026-11-15: routines and handoff
 

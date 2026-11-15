@@ -16,10 +16,13 @@ Nothing imports `polaris_re`. The six mgcv-ported functions carry `mgcv counterp
 
 The front end takes a mapping of NumPy columns plus `hgam.frontend.Factor`. polars was dropped, not
 added as a dependency. The top-level `hgam.gam` / `hgam.bam` are still stubs, so the exit test stays a
-strict xfail. Tests: 566 pass, 1 strict xfail. What did not move is listed in `docs/DEFERRED.md`.
+strict xfail. Tests: 583 pass, 1 strict xfail. What did not move is listed in `docs/DEFERRED.md`.
 
-The engine has no hgam fixture tests yet: its moved tests are closed-form and self-consistency checks.
-Each M1 slice that re-ports a piece adds its fixture to `oracle/make_fixtures.R`.
+The six ported functions are held to mgcv fixtures (`oracle/make_fixtures.R` section 4,
+`tests/test_ported_functions.py`): `tero`, `compress.df`, `initial.sp`, `Sl.fitChol` and two `bgam.fitd` fits
+on bam's own design. Jonathan's ruling on PR #3: a moved port is not exempt from PR_REVIEW §B unless it
+brings its fixture tests. The rest of the engine was re-derived, not ported, and its moved tests are closed-form
+and self-consistency checks. Each M1 slice that re-ports a piece adds its fixture.
 
 ## Next slice: M1, first slice
 
@@ -38,9 +41,4 @@ against the gates. `gam_poisson_offset_reml.json` is already a REML fixture you 
 
 ## Open questions
 
-- **Is a pure move slice exempt from PR_REVIEW §B** (each ported function has an oracle fixture and a
-  test against it)? PR #3 moved the six ported functions with their counterpart lines but without
-  hgam fixtures, as `docs/PLAN.md` asked. Options: (a) exempt move slices, and say so in PR_REVIEW.md
-  or PLAN.md; (b) add fixtures for `tero` and `compress.df` to PR #3 now (deterministic and cheap);
-  (c) add them as the first M1 slice. Recommendation: (c), keeping the move PR a move. Only Jonathan
-  edits the routines, so (a) is his to write.
+None. (Answered on PR #3: ports need their fixture tests to count as moved; they now have them.)

@@ -4,7 +4,13 @@ These replace polaris-re's ``PolarisValidationError``, ``PolarisComputationError
 ``PolarisRankDeficiencyWarning``, which the engine used when it lived there.
 """
 
-__all__ = ["HgamComputationError", "HgamError", "HgamRankDeficiencyWarning", "HgamValidationError"]
+__all__ = [
+    "HgamComputationError",
+    "HgamError",
+    "HgamNotImplementedError",
+    "HgamRankDeficiencyWarning",
+    "HgamValidationError",
+]
 
 
 class HgamError(Exception):
@@ -13,6 +19,12 @@ class HgamError(Exception):
 
 class HgamValidationError(HgamError, ValueError):
     """An input or specification is invalid: bad arguments, inconsistent shapes, an impossible model."""
+
+
+class HgamNotImplementedError(HgamError, NotImplementedError):
+    """A term, family, option or combination that has not been ported (or not verified against mgcv).
+
+    The input may be valid mgcv; hgam refuses it by name rather than approximate it (CLAUDE.md)."""
 
 
 class HgamComputationError(HgamError, ArithmeticError):

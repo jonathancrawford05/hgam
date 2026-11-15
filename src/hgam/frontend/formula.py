@@ -24,7 +24,7 @@ covariate, ``k`` optional (default 10), with no ``by=``; ``ti()`` still needs ``
 import re
 from dataclasses import dataclass, field
 
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 __all__ = [
     "ParametricCall",
@@ -119,8 +119,8 @@ class ParsedFormula:
     source: str = field(default="", compare=False)
 
 
-def _refuse(construct: str, why: str) -> HgamValidationError:
-    return HgamValidationError(f"gam(): {construct} is not supported — {why}")
+def _refuse(construct: str, why: str) -> HgamNotImplementedError:
+    return HgamNotImplementedError(f"gam(): {construct} is not supported — {why}")
 
 
 def _split_top_level(text: str, sep: str) -> list[str]:
@@ -263,7 +263,7 @@ def _parse_smooth(text: str, positional: list[str], keyword: dict[str, str]) -> 
         return SmoothCall(variable=variable, basis="tp", k=k_tp)
     if basis == "re":
         if "k" in keyword:
-            raise HgamValidationError(
+            raise HgamNotImplementedError(
                 f"gam(): {text} with bs='re' takes no k (its width is the factor's level count)."
             )
         if by is not None:
@@ -330,6 +330,8 @@ def parse_formula(formula: str) -> ParsedFormula:
     if len(sides) != 2:
         raise HgamValidationError(f"gam(): formula {formula!r} needs exactly one '~' (response ~ terms).")
     response = sides[0].strip()
+    if not response:
+        raise HgamValidationError(f"gam(): formula {formula!r} has no response (response ~ terms).")
     if not _IDENT.match(response):
         raise _refuse(
             f"response {response!r}",

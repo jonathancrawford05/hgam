@@ -29,7 +29,7 @@ from hgam.engine.gam_model import (
 )
 from hgam.engine.gam_predict import fit_term_state
 from hgam.engine.gam_term_spec import ModelSpec
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError
 from hgam.frontend.bam_fitd import bam_fitd
 
 __all__ = ["fit_engine_bam"]
@@ -51,19 +51,19 @@ def fit_engine_bam(model: ModelSpec, data: Mapping[str, np.ndarray], y: np.ndarr
     """
     family = resolve_family(model.family, model.link)
     if not family.dispersion_fixed or family.name not in ("poisson", "binomial"):
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             f"gam(method='fREML', discrete=True): family {model.family!r} is not supported — "
             "only poisson and binomial (the fixed-scale branch of bgam.fitd). Free-scale, "
             "quasi and extended families are different builds (ADR-260 amendment 2)."
         )
     if any(term.basis == "tp" for term in model.terms):
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             "gam(method='fREML', discrete=True): tp terms (including a bare s(x)) are not "
             'supported — bam builds them on its compressed frame; write bs="cr" '
             "(ADR-261)."
         )
     if any(term.basis == "sz" for term in model.terms):
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             "gam(method='fREML', discrete=True): sz terms are not supported (ADR-260 amendment 2)."
         )
     with unique_row_constraint():

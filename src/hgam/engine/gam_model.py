@@ -118,6 +118,7 @@ from hgam.engine.gam_vcov import (
 )
 from hgam.errors import (
     HgamComputationError,
+    HgamNotImplementedError,
     HgamRankDeficiencyWarning,
     HgamValidationError,
 )
@@ -215,7 +216,7 @@ def resolve_family(family: str, link: str) -> Family:
     try:
         return _FAMILY_LINKS[(family, link)]()
     except KeyError:
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             f"resolve_family: no Family/Link constructor for family={family!r}, "
             f"link={link!r}. Supported combinations: "
             f"{sorted(_FAMILY_LINKS)}."
@@ -293,7 +294,7 @@ def _build_term_extract(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermE
     if term.basis == "parametric":
         groups = tuple(np.asarray(data[variable], dtype=np.int64) for variable in term.variables)
         return build_python_parametric_term(groups, term)
-    raise HgamValidationError(
+    raise HgamNotImplementedError(
         f"assemble_model_design: TermSpec {term.label!r} has basis={term.basis!r}, "
         "which the hgam engine does not build yet — only 'cr', 'ti', 'sz', 're' and "
         "'parametric' are wired. 'raw' supplies its own design/penalty directly "
@@ -622,7 +623,7 @@ class EngineGAMFit:
 
     def _covariance(self, unconditional: bool) -> CoefficientCovariance:
         if unconditional and self.fit_method != "REML":
-            raise HgamValidationError(
+            raise HgamNotImplementedError(
                 "EngineGAMFit.vcov: unconditional=True is refused for a "
                 f"{self.fit_method!r} fit. Vc is defined at a REML optimum by the exact REML "
                 "Hessian; a performance-iteration fit is not at one, and bam's own Vc comes "

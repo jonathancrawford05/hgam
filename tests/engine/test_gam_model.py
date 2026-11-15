@@ -19,7 +19,7 @@ from hgam.engine.gam_model import (
     resolve_family,
 )
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec
-from hgam.errors import HgamComputationError, HgamValidationError
+from hgam.errors import HgamComputationError, HgamNotImplementedError, HgamValidationError
 
 _AGE_KNOTS = (1.0, 2, 4, 7, 14, 18, 24, 35, 50, 70, 85, 90, 95)
 _YEAR_KNOTS = (1.0, 2, 3, 5, 10, 21)
@@ -107,7 +107,7 @@ def test_resolve_family_covers_every_slice_3_combination() -> None:
 
 
 def test_resolve_family_rejects_an_unbuilt_combination() -> None:
-    with pytest.raises(HgamValidationError, match="no Family/Link constructor"):
+    with pytest.raises(HgamNotImplementedError, match="no Family/Link constructor"):
         resolve_family("gamma", "log")
 
 
@@ -215,7 +215,7 @@ def test_assemble_model_design_rejects_an_unbuilt_basis() -> None:
     ``"cr"``/``"ti"``/``"sz"``, all three of which PLAN slice 6b now wires."""
     term = TermSpec(label="raw-term", variables=("AttdAge",), basis="raw")
     model = ModelSpec(family="binomial", link="cloglog", terms=(term,))
-    with pytest.raises(HgamValidationError, match="does not build yet"):
+    with pytest.raises(HgamNotImplementedError, match="does not build yet"):
         assemble_model_design(model, _data())
 
 

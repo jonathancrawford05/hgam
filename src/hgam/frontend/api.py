@@ -47,7 +47,7 @@ import numpy as np
 from hgam.engine.gam_model import EngineGAMFit, fit_engine_gam
 from hgam.engine.gam_rank_pivot import unidentified_directions
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec, factor_by_terms
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 from hgam.frontend.bam_fit import fit_engine_bam
 from hgam.frontend.formula import (
     ParametricCall,
@@ -85,7 +85,7 @@ def _collation_key(value: str, collation: str) -> tuple[object, ...]:
         return (value,)
     if collation == "en_US":
         if not all(ch.isascii() and (ch.isalnum() or ch == "_") for ch in value):
-            raise HgamValidationError(
+            raise HgamNotImplementedError(
                 f"gam(): level {value!r} has characters outside [A-Za-z0-9_]; its sort "
                 "position under en_US collation is not reproduced here. Use a Factor "
                 "column to state the level order explicitly."
@@ -175,7 +175,7 @@ class GamFit(EngineGAMFit):
         ``log10(sp)``, scale, REML score, deviance explained, ``n`` and the Newton
         search's convergence report. ``print(fit.summary())`` renders it."""
         if self.fit_method != "REML":
-            raise HgamValidationError(
+            raise HgamNotImplementedError(
                 f"GamFit.summary(): not implemented for a {self.fit_method!r} fit "
                 "(it reports the exact-REML score and the Newton search's convergence). "
                 "Read edf_total, edf_per_term, log_lambda, n_iterations and "
@@ -296,13 +296,13 @@ def _family(family: str) -> tuple[str, str]:
         if inner:
             key, _, value = inner.partition("=")
             if key.strip() != "link":
-                raise HgamValidationError(
+                raise HgamNotImplementedError(
                     f"gam(): family argument {inner!r} is not supported; "
                     "only link=... is (e.g. 'binomial(link=\"cloglog\")')."
                 )
             link = value.strip().strip("'\"")
     if text not in _DEFAULT_LINK:
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             f"gam(): family {text!r} is not supported — verified families are "
             f"{sorted(_DEFAULT_LINK)} ({_COVERAGE} §2.2; Gamma, nb, tw and the extended "
             "families are not verified)."
@@ -353,7 +353,7 @@ def _refuse_select_with_bare_and_factor_by(smooth: Sequence[TermSpec]) -> None:
     for var, keys in sorted(groups.items()):
         has_factor_by = any(k.startswith("by=") for k in keys)
         if has_factor_by and len(keys) > 1:
-            raise HgamValidationError(
+            raise HgamNotImplementedError(
                 f"gam(): select=True with a factor-by smooth of {var!r} and another smooth of "
                 f"{var!r} (a bare smooth, a second by-smooth or a ti term) "
                 "is not "
@@ -425,7 +425,7 @@ def _build_model(
     for pt in parametric_vars:
         for v in pt.variables:
             if not _is_factor(_column(df, v)):
-                raise HgamValidationError(
+                raise HgamNotImplementedError(
                     f"gam(): the bare term {pt.text!r} is a numeric column ({v!r}, dtype "
                     f"{_dtype_name(_column(df, v))}); parametric numeric terms are not in the verified "
                     f"subset — only factor main effects and a:b ({_COVERAGE} §2.1 parametric "
@@ -433,7 +433,7 @@ def _build_model(
                 )
         coding = [need_factor(v) for v in pt.variables]
         if len(pt.variables) == 2 and not set(pt.variables) <= mains:
-            raise HgamValidationError(
+            raise HgamNotImplementedError(
                 f"gam(): the interaction {pt.text} needs both main effects "
                 f"({pt.variables[0]} and {pt.variables[1]}) in the formula; R's default "
                 "coding of an interaction without them is not reproduced "
@@ -565,13 +565,13 @@ def gam(
         from the deterministic Newton REML search; there are no solver options.
     """
     if scale is not None:
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             "gam(): scale= (a fixed dispersion) is not supported — it is verified only in "
             f"the conformance module, not through fit_engine_gam ({_COVERAGE} §2.3, "
             "ADR-236/237; production wiring is ladder slice 7c)."
         )
     if (method, discrete) not in (("REML", False), ("fREML", True)):
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             f"gam(): method={method!r}, discrete={discrete!r} is not a supported pair. "
             "Supported: method='REML' with discrete=False (exact Laplace REML), or "
             "method='fREML' with discrete=True (bam's performance iteration, ADR-260)."

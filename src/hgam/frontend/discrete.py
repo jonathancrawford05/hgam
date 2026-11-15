@@ -78,6 +78,10 @@ def compress_covariates(
 
     Port of ``mgcv:::compress.df`` for one term's covariate columns.
 
+    One departure: mgcv shuffles the unique rows (``ii <- sample(1:nrow(xu))``) and remaps the
+    index; this port returns them in ``np.unique`` lexicographic order, so the cell partition
+    matches mgcv's but the cell labels do not. Reproducing R's random number stream is M3 work.
+
     Args:
         columns: name to 1-d float array (numeric) or integer codes (factor), equal length.
         factors: names in ``columns`` that are factors (never binned; they multiply the

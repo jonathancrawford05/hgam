@@ -8,7 +8,7 @@ import pytest
 
 from hgam.engine.gam_model import fit_engine_gam
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec
-from hgam.errors import HgamRankDeficiencyWarning, HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamRankDeficiencyWarning, HgamValidationError
 from hgam.frontend import Factor, GamFit, gam, r_factor_levels, structural_rank_deficiency
 from hgam.frontend import api as gam_api
 
@@ -138,7 +138,7 @@ def test_structural_rank_deficiency_closed_form() -> None:
     ],
 )
 def test_unverified_options_are_refused(frame: Frame, kwargs: dict, needle: str) -> None:
-    with pytest.raises(HgamValidationError, match=needle):
+    with pytest.raises(HgamNotImplementedError, match=needle):
         gam('y ~ s(x, bs="cr", k=6)', frame, "gaussian", **kwargs)
 
 
@@ -169,7 +169,7 @@ def test_select_with_a_bare_smooth_beside_a_factor_by_smooth_is_refused_by_name(
         'y ~ g + h + s(x, by=g, bs="cr", k=6) + s(x, by=h, bs="cr", k=6)',
         'y ~ g + s(x, by=g, bs="cr", k=6) + ti(x, z, bs="cr", k=c(5, 4))',
     ):
-        with pytest.raises(HgamValidationError, match="another smooth of 'x'"):
+        with pytest.raises(HgamNotImplementedError, match="another smooth of 'x'"):
             gam(formula, frame, "gaussian", select=True)
 
 
@@ -200,12 +200,12 @@ def test_the_bare_and_factor_by_refusal_is_narrow(frame: Frame) -> None:
     ["Gamma", "nb", "tweedie", "binomial(link='probit')", "poisson(link='sqrt')", "gaussian(x=1)"],
 )
 def test_unsupported_families_are_refused(frame: Frame, family: str) -> None:
-    with pytest.raises(HgamValidationError):
+    with pytest.raises(HgamNotImplementedError):
         gam('y ~ s(x, bs="cr", k=6)', frame, family)
 
 
 def test_dtype_and_null_guards(frame: Frame) -> None:
-    with pytest.raises(HgamValidationError, match="numeric column"):
+    with pytest.raises(HgamNotImplementedError, match="numeric column"):
         gam("y ~ x", frame, "gaussian")
     with pytest.raises(HgamValidationError, match="as a number"):
         gam('y ~ s(g, bs="cr", k=4)', frame, "gaussian")
@@ -221,7 +221,7 @@ def test_dtype_and_null_guards(frame: Frame) -> None:
         gam('y ~ s(nope, bs="cr", k=6)', frame, "gaussian")
     with pytest.raises(HgamValidationError, match="mapping from column name"):
         gam('y ~ s(x, bs="cr", k=6)', [1.0], "gaussian")  # type: ignore[arg-type]
-    with pytest.raises(HgamValidationError, match="main effects"):
+    with pytest.raises(HgamNotImplementedError, match="main effects"):
         gam('y ~ g:g2 + s(x, bs="cr", k=6)', _with(frame, g2=frame["g"]), "gaussian")
 
 
@@ -239,7 +239,7 @@ def test_factor_levels_follow_r_rules(frame: Frame) -> None:
         "Z",
     )  # tier-3 order
     assert r_factor_levels(mixed) == r_factor_levels(mixed, gam_api.ORACLE_COLLATION)
-    with pytest.raises(HgamValidationError, match="Factor"):
+    with pytest.raises(HgamNotImplementedError, match="Factor"):
         r_factor_levels(["é", "e"], "en_US")
     fit = gam(
         'y ~ g + s(x, bs="cr", k=6)',
@@ -249,7 +249,7 @@ def test_factor_levels_follow_r_rules(frame: Frame) -> None:
     assert fit.factor_levels["g"] == ("z", "a", "m")  # a declared Factor order is kept
     with pytest.raises(HgamValidationError, match="at least 2"):
         gam('y ~ g + s(x, bs="cr", k=6)', _with(frame, g=np.array(["only"] * len(frame["x"]))), "gaussian")
-    with pytest.raises(HgamValidationError, match="numeric column"):
+    with pytest.raises(HgamNotImplementedError, match="numeric column"):
         gam('y ~ g + s(x, bs="cr", k=6)', _with(frame, g=frame["x"] > 5), "gaussian")
 
 
@@ -318,7 +318,7 @@ def test_select_true_with_thin_plate_smooths_fits_and_shrinks_a_noise_smooth(
 
 def test_the_discrete_bam_path_refuses_a_thin_plate_smooth(frame: Frame) -> None:
     counts = _with(frame, c=np.round(np.abs(frame["y"]) * 3).astype(np.int64))
-    with pytest.raises(HgamValidationError, match=r"tp terms"):
+    with pytest.raises(HgamNotImplementedError, match=r"tp terms"):
         gam("c ~ s(x)", counts, "poisson", method="fREML", discrete=True)
 
 
@@ -335,7 +335,7 @@ def test_select_true_refuses_a_thin_plate_smooth_beside_a_factor_by_smooth(
         'y ~ s(x) + s(x, by=g, bs="cr", k=6)',
         'y ~ g + s(x) + s(x, by=g, bs="cr", k=6)',
     ):
-        with pytest.raises(HgamValidationError, match="thin-plate s"):
+        with pytest.raises(HgamNotImplementedError, match="thin-plate s"):
             gam(formula, frame, "gaussian", select=True)
     # a tp smooth of a DIFFERENT covariate is fine
     assert gam('y ~ s(z) + s(x, by=g, bs="cr", k=6)', frame, "gaussian", select=True).converged

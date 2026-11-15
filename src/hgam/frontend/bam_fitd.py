@@ -52,7 +52,7 @@ from scipy.linalg import cho_factor, cho_solve
 
 from hgam.engine.gam_family import Family
 from hgam.engine.gam_initial_sp import initial_log10_lambda_from_xx_diag
-from hgam.errors import HgamComputationError, HgamValidationError
+from hgam.errors import HgamComputationError, HgamNotImplementedError, HgamValidationError
 
 __all__ = [
     "BamFitdIteration",
@@ -173,7 +173,7 @@ def _initial_mu(family: Family, y: np.ndarray, weights: np.ndarray) -> np.ndarra
         return np.asarray(y + 0.1, dtype=np.float64)
     if family.name == "binomial":
         return np.asarray((weights * y + 0.5) / (weights + 1.0), dtype=np.float64)
-    raise HgamValidationError(
+    raise HgamNotImplementedError(
         f"bam_fitd: family {family.name!r} is not in the supported subset (poisson, binomial "
         "with fixed scale); gaussian with free scale, quasi and extended families are "
         "different builds (ADR-260 amendment 2)."
@@ -188,7 +188,7 @@ def _linkfun(family: Family, mu: np.ndarray) -> np.ndarray:
         return np.asarray(np.log(mu / (1.0 - mu)), dtype=np.float64)
     if name == "cloglog":
         return np.asarray(np.log(-np.log1p(-mu)), dtype=np.float64)
-    raise HgamValidationError(f"bam_fitd: no linkfun for link {name!r}.")
+    raise HgamNotImplementedError(f"bam_fitd: no linkfun for link {name!r}.")
 
 
 def _weighted_cross_products(
@@ -353,7 +353,7 @@ def bam_fitd(
     off = np.zeros(n) if offset is None else np.asarray(offset, dtype=np.float64)
     wt = np.ones(n) if prior_weights is None else np.asarray(prior_weights, dtype=np.float64)
     if not family.dispersion_fixed:
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             f"bam_fitd: family {family.name!r} estimates its scale; the scale <= 0 branch adds "
             "log(phi) to the sp vector and is a different build (ADR-260 amendment 2)."
         )

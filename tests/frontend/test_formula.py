@@ -5,7 +5,7 @@ construct (and, where the refusal is a coverage decision, the coverage row)."""
 
 import pytest
 
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 from hgam.frontend.formula import (
     ParametricCall,
     SmoothCall,
@@ -53,7 +53,7 @@ def test_a_bare_smooth_is_thin_plate_with_mgcvs_default_k() -> None:
 
 
 def test_a_thin_plate_smooth_takes_no_by() -> None:
-    with pytest.raises(HgamValidationError, match=r"by= on a thin-plate smooth"):
+    with pytest.raises(HgamNotImplementedError, match=r"by= on a thin-plate smooth"):
         parse_formula("y ~ s(x, by=g)")
 
 
@@ -94,7 +94,7 @@ def test_a_thin_plate_smooth_takes_no_by() -> None:
     ],
 )
 def test_every_refused_construct_is_refused_by_name(formula: str, needle: str) -> None:
-    with pytest.raises(HgamValidationError) as info:
+    with pytest.raises(HgamNotImplementedError) as info:
         parse_formula(formula)
     assert needle in str(info.value)
 
@@ -105,4 +105,11 @@ def test_every_refused_construct_is_refused_by_name(formula: str, needle: str) -
 )
 def test_malformed_formulas_raise(formula: str) -> None:
     with pytest.raises(HgamValidationError):
+        parse_formula(formula)
+
+
+@pytest.mark.parametrize("formula", ['y ~ s(x, bs="ps")', "y ~ te(x, x2)"])
+def test_an_unported_construct_raises_not_implemented(formula: str) -> None:
+    """CLAUDE.md: a term, family or option that is not ported raises NotImplementedError naming it."""
+    with pytest.raises(NotImplementedError):
         parse_formula(formula)

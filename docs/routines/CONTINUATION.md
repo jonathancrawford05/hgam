@@ -8,14 +8,15 @@ choosing work.
 M0 is done: the polaris-re GAM engine is in `src/hgam/engine/` (bases, families, fit, REML and its
 derivatives, smoothing-parameter search, covariance, prediction, `gam_term_build.py` with the term
 builders taken out of polaris-re's `gam_stage_a.py`) and `src/hgam/frontend/` (`api.py`, `formula.py`,
-`summary.py`, `bam_fit.py`, `bam_fitd.py`, `discrete.py` with `compress.df`). Errors are in `hgam.errors`.
+`summary.py`, `bam_fit.py`, `bam_fitd.py`, `discrete.py` with `compress.df`). Errors are in `hgam.errors`: `HgamNotImplementedError` (a
+`NotImplementedError`) for anything not ported, `HgamValidationError` for invalid input.
 Nothing imports `polaris_re`. The six mgcv-ported functions carry `mgcv counterpart:` lines naming mgcv
 1.9-1, the version they were read from: `bam_fitd`, `_fit_chol`, `initial_log10_lambda_from_xx_diag`,
 `compress_covariates`, `default_m`, `_tero`.
 
 The front end takes a mapping of NumPy columns plus `hgam.frontend.Factor`. polars was dropped, not
 added as a dependency. The top-level `hgam.gam` / `hgam.bam` are still stubs, so the exit test stays a
-strict xfail. Tests: 564 pass, 1 strict xfail. What did not move is listed in `docs/DEFERRED.md`.
+strict xfail. Tests: 566 pass, 1 strict xfail. What did not move is listed in `docs/DEFERRED.md`.
 
 The engine has no hgam fixture tests yet: its moved tests are closed-form and self-consistency checks.
 Each M1 slice that re-ports a piece adds its fixture to `oracle/make_fixtures.R`.
@@ -37,4 +38,9 @@ against the gates. `gam_poisson_offset_reml.json` is already a REML fixture you 
 
 ## Open questions
 
-None.
+- **Is a pure move slice exempt from PR_REVIEW §B** (each ported function has an oracle fixture and a
+  test against it)? PR #3 moved the six ported functions with their counterpart lines but without
+  hgam fixtures, as `docs/PLAN.md` asked. Options: (a) exempt move slices, and say so in PR_REVIEW.md
+  or PLAN.md; (b) add fixtures for `tero` and `compress.df` to PR #3 now (deterministic and cheap);
+  (c) add them as the first M1 slice. Recommendation: (c), keeping the move PR a move. Only Jonathan
+  edits the routines, so (a) is his to write.

@@ -14,7 +14,7 @@ import pytest
 from hgam.engine.gam_model import assemble_model_design
 from hgam.engine.gam_rank_pivot import unidentified_directions
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec, factor_by_terms
-from hgam.errors import HgamRankDeficiencyWarning, HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamRankDeficiencyWarning
 from hgam.frontend import gam
 
 N_LEVELS = 3
@@ -91,7 +91,7 @@ def test_the_accepted_forms_are_fitted_without_a_pivot_or_a_warning(
 
 
 def test_the_refusal_names_the_construct_and_the_alternative(frame: dict[str, np.ndarray]) -> None:
-    with pytest.raises(HgamValidationError) as err:
+    with pytest.raises(HgamNotImplementedError) as err:
         gam('y ~ s(x, bs="cr", k=6) + s(x, by=f, bs="cr", k=6)', frame, "gaussian", select=True)
     text = str(err.value)
     assert "another smooth of 'x'" in text and "ADR-258" in text and "by=f" in text

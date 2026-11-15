@@ -14,7 +14,7 @@ from hgam.engine.gam_initial_sp import (
     initial_log10_lambda,
     initial_log10_lambda_from_xx_diag,
 )
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 from hgam.frontend import gam
 from hgam.frontend.api import _tero
 from hgam.frontend.bam_fitd import (
@@ -168,7 +168,7 @@ class TestBamFitd:
     @pytest.mark.parametrize("family", [gaussian_identity(), quasipoisson_log()])
     def test_unsupported_families_are_refused_by_name(self, family) -> None:  # type: ignore[no-untyped-def]
         x, blocks, y = _two_term_cell()
-        with pytest.raises(HgamValidationError, match=r"scale|supported"):
+        with pytest.raises(HgamNotImplementedError, match=r"scale|supported"):
             bam_fitd(x, blocks, y, family)
 
     def test_no_penalty_is_refused(self) -> None:
@@ -219,21 +219,21 @@ class TestGamEntryPoint:
 
     @pytest.mark.parametrize(("method", "discrete"), [("fREML", False), ("REML", True), ("GCV", False)])
     def test_other_pairs_are_refused_by_name(self, method: str, discrete: bool) -> None:
-        with pytest.raises(HgamValidationError, match="not a supported pair"):
+        with pytest.raises(HgamNotImplementedError, match="not a supported pair"):
             gam(FORMULA, _frame(), "poisson", method=method, discrete=discrete)
 
     def test_unconditional_covariance_and_summary_are_refused(self) -> None:
         fit = gam(FORMULA, _frame(), "poisson", method="fREML", discrete=True)
-        with pytest.raises(HgamValidationError, match="unconditional"):
+        with pytest.raises(HgamNotImplementedError, match="unconditional"):
             fit.vcov(unconditional=True)
-        with pytest.raises(HgamValidationError, match="summary"):
+        with pytest.raises(HgamNotImplementedError, match="summary"):
             fit.summary()
         _, se = fit.predict(_frame(), se_fit=True)
         assert np.all(np.isfinite(se)) and np.all(se > 0)
 
     def test_gaussian_is_refused_by_name(self) -> None:
         df = {**_frame(), "y": _frame()["y"].astype(np.float64)}
-        with pytest.raises(HgamValidationError, match="not supported"):
+        with pytest.raises(HgamNotImplementedError, match="not supported"):
             gam('y ~ s(age, bs="cr", k=8)', df, "gaussian", method="fREML", discrete=True)
 
 

@@ -20,5 +20,5 @@ port it directly. Every ported function names its mgcv counterpart and the versi
 - Anyone distributing hgam, or a program that combines it, must do so under the GPL.
 - A permissively licensed project can depend on hgam as an optional package but cannot bundle it and
   stay permissive as a whole.
-- Open item for the maintainer: confirm this with the employer's open-source policy owner before the
-  repository is made public.
+- Ownership: this is the maintainer's personal project. He has confirmed the port is not owned by his
+  employer (2026-11-15), so no employer sign-off gates development or publication.

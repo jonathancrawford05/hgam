@@ -2,6 +2,7 @@ name: ci
 on:
   push: { branches: [main] }
   pull_request:
+  workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -9,6 +10,35 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --extra dev
-      - run: uv run ruff check src tests
-      - run: uv run ruff format --check src tests
+      - run: uv run ruff check src tests oracle
+      - run: uv run ruff format --check src tests oracle
       - run: uv run pytest -q
+
+  # Regenerate every fixture with mgcv inside the pinned image. This is the oracle: nothing in the pull
+  # request can change what it produces except oracle/make_fixtures.R itself.
+  oracle-fixtures:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/jonathancrawford05/r-gam-base@sha256:2c27ebf1893e1f3214bd89bbbfc2a88a92b6423795732f0e57d7d88f54c4ccab
+    env:
+      HGAM_ORACLE_DIGEST: "sha256:2c27ebf1893e1f3214bd89bbbfc2a88a92b6423795732f0e57d7d88f54c4ccab"
+    steps:
+      - uses: actions/checkout@v4
+      - run: Rscript oracle/make_fixtures.R oracle_out
+      - uses: actions/upload-artifact@v4
+        with: { name: fixtures-tier3, path: oracle_out, if-no-files-found: error }
+
+  # Run the whole suite against the oracle's fixtures, and check committed tier 3 fixtures reproduce.
+  oracle:
+    needs: oracle-fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: fixtures-tier3, path: oracle_out }
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev
+      - run: uv run python oracle/compare_fixtures.py tests/fixtures oracle_out
+      - run: uv run pytest -q
+        env:
+          HGAM_FIXTURE_DIR: oracle_out

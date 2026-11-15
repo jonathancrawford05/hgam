@@ -38,7 +38,7 @@ git fetch origin main
 uv sync --extra dev
 ```
 
-Read, in order: `CLAUDE.md`, `docs/routines/SETTINGS.md`, `docs/routines/CONTINUATION.md`, `docs/PLAN.md`,
+Read, in order: `CLAUDE.md`, `docs/PRIORITIES.md`, `docs/routines/SETTINGS.md`, `docs/routines/CONTINUATION.md`, `docs/PLAN.md`,
 `docs/SCOPE.md`, the newest entry of `docs/routines/DEV_SESSION_LOG.md`, and any ADR the next task touches.
 
 The mgcv source to port from: `git clone --depth 1 --branch <tag> https://github.com/cran/mgcv` into a scratch
@@ -62,9 +62,10 @@ Apply the first rule that matches:
    on the pull request's branch and nothing else. Account for every item once in "Review follow-up", tagged
    with the review's short SHA: **fixed** (commit), **declined** (reason and evidence), or **for Jonathan**.
    A finding that returns after being declined goes to Jonathan.
-2. **Ready, and `auto_merge: on`.** A routine review of the head says "Ready for a human to merge", CI is green,
-   there are no "Questions for Jonathan", and the slice touches nothing under "Always ask". Squash-merge it,
-   delete the branch, then continue with rule 4 in the same run.
+2. **Ready, and `auto_merge: on`.** Check each of the five conditions in `SETTINGS.md` yourself, from GitHub and
+   the diff, and list them with their evidence in a pull request comment before merging. If all hold,
+   squash-merge, delete the branch, and continue with rule 4 while `max_slices_per_run` allows. If any fails,
+   say which under "Questions for Jonathan" and stop.
 3. **Waiting.** No routine review of the head yet, or it is ready and `auto_merge` is off. Do not start new work.
    Stop and report "waiting for review/merge of <link>".
 4. **No open development pull request.** Start new work on `dev/<YYYY-MM-DD>-<short-slug>` from `origin/main`.
@@ -86,16 +87,17 @@ Record the counts. If `main` is red, this run's only job is the smallest correct
   into `CONTINUATION.md` first.
 - Shape every slice the same way: one mgcv function (or a small group that only make sense together), its
   fixture in `oracle/make_fixtures.R`, and the test that holds the port to the fixture.
-- Write the acceptance criteria before coding: which quantities agree with mgcv, to what tolerance, on which
-  fixture.
+- Write the acceptance criteria before coding: which key results meet which gate in `docs/PRIORITIES.md`, on
+  which fixture. Take the code path the exit test runs; leave other branches refusing.
+- Prefer the slice that unblocks the most of the exit test. Do not polish a piece that already meets its gates.
 
 **Always ask** (put the question, options and your recommendation under "Questions for Jonathan" and in
 `CONTINUATION.md`, then do only what does not depend on the answer):
 - anything that changes `docs/SCOPE.md`, the licence, or ADR 0001;
 - a new core dependency or optional extra;
 - changing the pinned oracle image or mgcv version;
-- a tolerance looser than 1e-6 relative on fitted values for an exact computation, or any tolerance on a
-  structural quantity (labels, coefficient counts, number of smoothing parameters);
+- any change to a gate in `docs/PRIORITIES.md`, or a test that uses a looser tolerance than its gate;
+- a key result that cannot meet its gate after one honest attempt at following mgcv's path;
 - anything touching real data, credentials or publishing a release.
 
 ## 5. Build
@@ -119,12 +121,13 @@ make lint
 ```
 
 Explain every change in test counts. Check every claim in the pull request body against output seen in this run.
-State each agreement with mgcv as a number: the quantity, the largest difference, the fixture and its tier.
+State each key result as a number against its gate: the quantity, the largest difference, the fixture and its
+tier. Anything outside the key results that differs gets one line in `docs/DEFERRED.md`, not more work.
 
 ## 7. Record
 
-- Append a `DEV_SESSION_LOG.md` entry, newest first: what changed and why, counts before and after, the parity
-  numbers measured, anything found and not fixed.
+- Append a `DEV_SESSION_LOG.md` entry, newest first, five lines at most: what was ported, counts before and
+  after, the key-result numbers, anything deferred.
 - Rewrite `CONTINUATION.md`: state, the next slice (concrete enough for a fresh session), open questions.
 - Tick the slice off in `docs/PLAN.md` if it finishes an item.
 

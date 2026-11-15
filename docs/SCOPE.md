@@ -16,11 +16,10 @@ of C with 21 smooth classes; this project does not target all of it.
 
 Location-scale and extended families, `gamm`, soap films, Markov random fields.
 
-## What parity means
+## What alignment means
 
-Identical term structure (labels, coefficient counts, number of smoothing parameters) and agreement
-within stated tolerances on the linear predictor, effective degrees of freedom and standard errors,
-across the committed fixtures. Not bit-identical output across BLAS builds.
+The key results and their gates are in `docs/PRIORITIES.md`. Effective replication of what a user reads off
+an mgcv fit, not bit-identical output.
 
 ## Exit test
 

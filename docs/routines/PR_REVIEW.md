@@ -22,7 +22,7 @@ make test
 make lint
 ```
 
-Read `CLAUDE.md`, `docs/SCOPE.md`, `docs/PLAN.md`, the pull request description and the full diff
+Read `CLAUDE.md`, `docs/PRIORITIES.md`, `docs/SCOPE.md`, `docs/PLAN.md`, the pull request description and the full diff
 (`git diff origin/main...HEAD`). Run the checks yourself and keep the output; do not trust the description or CI
 alone. Then run `make test` on `origin/main` so you can say what the pull request added, removed or skipped.
 
@@ -37,6 +37,9 @@ Each finding needs evidence: a file and line, a command and its output, or a con
 since the last reviewed commit. For a **declined** item, accept the reason or raise it once under "Questions" with
 both positions. Leave **for Jonathan** items alone.
 
+Review against `docs/PRIORITIES.md`: sections A and B decide the verdict. A difference inside its gate, or in
+a quantity that is not a key result, is never Blocking or Should fix; at most suggest a `docs/DEFERRED.md` line.
+
 **A. Fidelity to mgcv (blocking if violated)**
 - Open the named counterpart and read the port beside it. Check the order of steps, the constants, the
   convergence tests and the branches the port claims to cover. A silent departure from mgcv is blocking; a stated
@@ -49,8 +52,11 @@ both positions. Leave **for Jonathan** items alone.
   against itself, or against numbers typed into the test, is blocking.
 - `tests/fixtures/*.json` changes only together with `oracle/make_fixtures.R`. If R with mgcv is available,
   regenerate into a scratch directory and compare; a fixture that does not reproduce was edited by hand.
-- Tolerances: structural quantities are exact. Loosened tolerances, new `xfail` or `skip` markers and deleted
-  assertions need a stated reason.
+- Each key result the slice delivers is tested at its gate from `docs/PRIORITIES.md` or tighter. A looser
+  tolerance, a new `xfail` or `skip`, or a deleted assertion is blocking unless Jonathan approved it on the
+  pull request.
+- The `oracle` CI check ran on the head and passed. If it is missing, skipped or failed, the verdict cannot be
+  "Ready for a human to merge".
 - Rerun each parity claim in the description and report your own number next to it.
 
 **C. Numerical soundness**
@@ -63,8 +69,7 @@ both positions. Leave **for Jonathan** items alone.
 - `DEV_SESSION_LOG.md` has a new entry, `CONTINUATION.md` is rewritten, and `docs/PLAN.md` matches what was done.
 - The slice touches nothing under "Always ask" in `DAILY_DEV.md` without a "Questions for Jonathan" entry.
 
-**E. Code quality** (non-blocking unless it hides a bug): dead code, duplicated logic, unclear names, missing
-tests for new branches. Few and specific.
+**E. Code quality**: only what hides a bug or will slow the next slice. Do not ask for polish.
 
 ## 4. Severity
 
@@ -72,7 +77,7 @@ tests for new branches. Few and specific.
   checks, unexplained loosened tolerances or skipped tests.
 - **Should fix**: missing counterpart lines, missing log or plan updates, missing tests for new branches, wrong
   claims in the description.
-- **Nit**: at most five.
+- **Nit**: at most two.
 - **Questions**: only what needs Jonathan's decision, or what you could not confirm, with what you tried.
 
 ## 5. Post the review

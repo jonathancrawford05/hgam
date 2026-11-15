@@ -5,11 +5,14 @@ Guidance for Claude Code in this repository.
 ## What this is
 
 A Python port of the hierarchical-GAM core of R's mgcv, under GPL-2.0-or-later. The goal is that a
-hierarchical GAM written for `mgcv::gam` or `mgcv::bam` fits the same way here, within stated tolerances.
+hierarchical GAM written for `mgcv::gam` or `mgcv::bam` gives the same key results here, at least as fast.
+
+**Read `docs/PRIORITIES.md` first.** Alignment on key results comes first; build time and attention come
+second; everything else waits.
 
 ## Start every session here
 
-1. Read `docs/routines/CONTINUATION.md` (where the last session stopped) and `docs/PLAN.md` (milestones).
+1. Read `docs/PRIORITIES.md`, `docs/routines/CONTINUATION.md` (where the last session stopped) and `docs/PLAN.md` (milestones).
 2. Run `make test` and confirm the baseline before changing anything.
 3. At the end: append to `docs/routines/DEV_SESSION_LOG.md` and rewrite `CONTINUATION.md`.
 
@@ -21,7 +24,9 @@ hierarchical GAM written for `mgcv::gam` or `mgcv::bam` fits the same way here, 
 - **Every ported function names its counterpart.** The docstring's first lines give the mgcv function
   and file it ports (for example ``mgcv counterpart: bgam.fitd (bam.r)``) and the mgcv version read.
 - **Mirror mgcv's function boundaries** so each port can be tested against its counterpart alone.
-- **Parity is measured, never asserted.** A ported function ships with a fixture produced by
+- **Stop at the gate.** Meet the gates in `docs/PRIORITIES.md`, then move on. Differences in anything that is
+  not a key result go in `docs/DEFERRED.md` and do not block.
+- **Alignment is measured, never asserted.** A ported function ships with a fixture produced by
   `oracle/make_fixtures.R` and a test against it. Fixtures record the mgcv version and tier:
   tier 1 is a local R (provisional), tier 3 is the pinned oracle image in CI.
 - **Never edit `tests/fixtures/*.json` by hand.** Change `oracle/make_fixtures.R` and regenerate.

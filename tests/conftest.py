@@ -13,7 +13,7 @@ import pytest
 FIXTURES = Path(os.environ.get("HGAM_FIXTURE_DIR") or Path(__file__).parent / "fixtures")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def load_fixture():
     def _load(name: str) -> dict:
         with (FIXTURES / f"{name}.json").open() as fh:

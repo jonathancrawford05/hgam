@@ -1,0 +1,496 @@
+"""Term specifications for the ``mgcv``-parity GAM engine.
+
+Slice 1 of ``docs/PLAN_mgcv_parity_engine.md``, Anchor 3: **a term specification is
+data, not code.** The engine the epic builds takes a list of term objects (basis, ``k``,
+knots, ``by`` variable, factor, penalty order) plus a family / link / weights / offset
+spec, so moving between model configurations — which is the maintainer's actual
+workflow, per PLAN §1 — is editing data rather than writing a new module. New
+conformance cases are then fixtures, not new modules.
+
+Nothing here builds a design matrix. :class:`TermSpec` and :class:`ModelSpec` describe
+what to build; the R-side extractor and the (not yet written) Python basis layer read
+them. Keeping the description inert is what lets the same object serialise into the
+R-side exchange, appear in a test fixture, and describe a term nobody has implemented
+yet without any of the three needing to agree on how construction works.
+
+``@dataclass(frozen=True)``, not a Pydantic model, deliberately matching
+:mod:`polaris_re.analytics.experience_mgcv_conformance`'s ``DesignSpec`` /
+``ConformanceCell`` / ``MetricSpec`` next door — this module extends that one's exchange
+machinery to per-term granularity, and a caller reading both should see one convention,
+not two. CLAUDE.md's Pydantic-first rule is aimed at the domain's business objects
+(policy, treaty, assumptions); term specs are the conformance harness's own internal
+data, the same class of object those three already are.
+
+PLAN Anchor 4 — knots and ``k`` are inputs, never tuned: :attr:`TermSpec.knots` is
+``None`` only to mean "use mgcv's default placement", and the engine must never derive
+its own knots when they are supplied.
+"""
+
+from dataclasses import dataclass, field
+
+from hgam.errors import ValidationError
+
+__all__ = [
+    "SUPPORTED_BASES",
+    "ModelSpec",
+    "TermSpec",
+    "factor_by_terms",
+]
+
+SUPPORTED_BASES: tuple[str, ...] = ("cr", "tp", "ti", "sz", "re", "parametric", "raw")
+"""The basis kinds PLAN §3 puts in scope, plus ``"raw"``.
+
+``"cr"`` — Wood's cubic regression spline (slice 2). ``"tp"`` — Wood's thin-plate
+regression spline of one covariate, ``mgcv``'s default basis (Slice R4, ADR-261; see
+:mod:`hgam.engine.gam_basis_tp`). ``"ti"`` — tensor interaction with
+marginal main effects excluded (slice 5). ``"sz"`` — sum-to-zero factor-smooth
+interaction (slice 6). ``"re"`` — the random-effect / level-indicator basis
+(capability ladder rung L2, ``docs/PLAN_mgcv_capability_ladder.md`` slice 2): design is
+the factor's own level-indicator matrix, penalty is the identity — see
+:mod:`hgam.engine.gam_basis_re`. ``"parametric"`` — an unpenalized
+factor main effect or interaction (capability ladder rung L4,
+``docs/PLAN_mgcv_capability_ladder.md`` slice 5), e.g. the target formula's own
+``FaceSize + Smoke + FaceSize:Smoke``: design is mgcv's own ``contr.treatment``
+dummy coding (one main-effect variable) or the outer product of each named
+variable's own dummy columns, first-named variable fastest (two or more
+variables — an interaction); there is no penalty at all — see
+:mod:`hgam.engine.gam_basis_parametric`. ``"raw"`` is not one of ``mgcv``'s
+basis classes: it names a term whose design and penalty are supplied directly, the
+existing tensor MI surface's own route through ``paraPen`` (ADR-189 decision 1). A
+``"raw"`` term carries no ``k`` and no knots — the caller supplies the matrices, not a
+recipe for building them — which is why slice 1's harness can be proven against the
+already-verified tensor design without either side needing an ``mgcv`` smooth-class
+equivalent for it."""
+
+
+@dataclass(frozen=True)
+class TermSpec:
+    """One smooth or parametric term, described rather than built.
+
+    Args:
+        label: The term's name, matching ``mgcv``'s own labelling convention
+            (e.g. ``"s(AttdAge)"``, ``"ti(AttdAge,PolYear)"``) so a Stage-A comparison
+            can key its two sides by the same string.
+        variables: The term's covariate(s), in the order ``mgcv`` would take them —
+            one for ``s()``, two or more for ``ti()`` / ``te()``.
+        basis: One of :data:`SUPPORTED_BASES`.
+        k: Basis dimension per variable, in the same order as :attr:`variables`. A
+            single-margin term still carries a length-1 tuple, so every term's ``k``
+            has the same shape as its ``variables`` regardless of dimension.
+        knots: Supplied knot locations per variable, as ``((variable, locations), ...)``
+            pairs, or ``None`` to mean "let ``mgcv`` place them" (Anchor 4). A tuple of
+            pairs rather than a ``dict``, so a frozen :class:`TermSpec` is actually
+            immutable and hashable — a ``dict`` field defeats both (PR #196 review
+            [P2]). When present, every named variable must be one the term actually
+            has, and a variable may be omitted to mean "default for this margin only"
+            — matching ``mgcv``'s own ``knots=list(...)`` partial-supply behaviour. Use
+            :meth:`knots_by_variable` for dict-style lookup.
+        by: A numeric ``by`` variable scaling the basis (e.g. the MI term's
+            ``StudyYear_C``), or ``None``. Mutually exclusive with :attr:`factor`
+            being ``True`` — ``mgcv`` has both a numeric-``by`` smooth and a
+            factor-smooth (``bs="sz"``/``"fs"``), and they are different constructions.
+        factor: Does this term vary by an unpenalized factor level (the ``sz``/``fs``
+            family), as opposed to being scaled by a numeric ``by``?
+        by_factor: The grouping variable's name for a **factor**-``by`` smooth
+            (capability ladder rung L3, ``docs/PLAN_mgcv_capability_ladder.md``
+            slice 4), e.g. ``s(x, by=fac, bs="cr")``, or ``None``. `mgcv`'s own
+            rule (measured, not guessed — see
+            :func:`~hgam.engine.gam_basis_cr.by_factor_mask_design`'s
+            docstring): a factor ``by`` is a term **multiplier**, not a term
+            parameter — one level produces one separate smooth with its own
+            smoothing parameter, not one term that varies continuously. So a
+            :class:`TermSpec` never represents the whole factor-``by`` term —
+            it represents ONE level of it, and a caller builds ``n_levels`` of
+            these (one per level, each a distinct ``label``) to reproduce
+            ``mgcv``'s own ``s(x, by=fac)``. Set together with :attr:`by_level`,
+            never with :attr:`by` (numeric) or :attr:`factor`, and only for
+            ``basis="cr"`` — the only basis this construction is built for.
+        by_level: Which 0-indexed level of :attr:`by_factor` this instance
+            represents, required (and only meaningful) when :attr:`by_factor`
+            is set — an input, not derived (Anchor 4), so :attr:`n_levels` must
+            also be set and this must lie in ``[0, n_levels)``.
+        levels: One factor-level count per entry of :attr:`variables`, required
+            (and only meaningful) for ``basis="parametric"`` — an unpenalized
+            main effect (one variable) or interaction (two or more), e.g. the
+            target formula's own ``FaceSize + Smoke + FaceSize:Smoke``. An
+            input, never derived from a sample's own observed level codes
+            (Anchor 4), the same discipline :attr:`n_levels` already follows
+            for ``"sz"``/``"re"``/factor-``by``. Distinct from :attr:`n_levels`
+            (always a single count, for a term with exactly one factor) because
+            a ``"parametric"`` interaction term names two or more variables,
+            each with its own level count.
+        penalty_order: Derivative order per penalty, where the basis has more than one
+            (``cr`` has one; ``ti`` and ``sz`` can carry one per margin). ``None`` means
+            "``mgcv``'s default for this basis" rather than "no penalty" — every
+            basis in :data:`SUPPORTED_BASES` other than an unpenalized parametric
+            term is penalized.
+        n_levels: Number of factor levels for a ``basis="sz"`` or ``basis="re"`` term
+            (``mgcv``'s ``length(levels(fac))``) — an input, not derived from data, the
+            same Anchor-4 discipline ``k``/``knots`` already follow: a factor level
+            absent from one particular sample must not silently shrink the term.
+            Must be ``None`` for any other basis, and **required** (not optional) for
+            ``"re"`` — a ``"re"`` term's entire recipe is the factor and its level
+            count, so there is no narrower Stage-A harness for it to be optional
+            against the way ``"sz"``'s own harness (below) makes it optional there.
+            Optional even for ``"sz"``:
+            :func:`~hgam.engine.gam_term_build.build_python_sz_term`'s
+            narrower Stage-A harness takes ``n_levels`` as its own explicit
+            argument (the R-side recipe's ``"n_levels"`` field) rather than
+            reading it here; :func:`~hgam.engine.gam_model.assemble_model_design`
+            (the ``ModelSpec``-driven multi-term path, slice 6b) is what requires
+            it set on the spec, and raises if it is not.
+    """
+
+    label: str
+    variables: tuple[str, ...]
+    basis: str
+    k: tuple[int, ...] = field(default_factory=tuple)
+    knots: tuple[tuple[str, tuple[float, ...]], ...] | None = None
+    by: str | None = None
+    factor: bool = False
+    penalty_order: tuple[int, ...] | None = None
+    n_levels: int | None = None
+    by_factor: str | None = None
+    by_level: int | None = None
+    levels: tuple[int, ...] | None = None
+
+    def knots_by_variable(self) -> dict[str, tuple[float, ...]]:
+        """:attr:`knots` as a plain ``dict``, computed on demand.
+
+        Never stored: a stored ``dict`` is exactly what made a "frozen" spec mutable
+        and unhashable (PR #196 review [P2]) — this recomputes a fresh one every call
+        instead.
+        """
+        return {} if self.knots is None else dict(self.knots)
+
+    def __post_init__(self) -> None:
+        if not self.label:
+            raise ValidationError("A TermSpec needs a non-empty label.")
+        if not self.variables:
+            raise ValidationError(f"TermSpec {self.label!r} names no variables.")
+        if self.basis not in SUPPORTED_BASES:
+            raise ValidationError(
+                f"TermSpec {self.label!r} has basis {self.basis!r}; supported bases are {SUPPORTED_BASES}."
+            )
+        if self.basis == "raw":
+            if self.k:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='raw' (design and penalty "
+                    f"supplied directly) and must not carry k — there is no recipe "
+                    f"for mgcv to reproduce."
+                )
+            if self.knots is not None:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='raw' (design and penalty "
+                    f"supplied directly) and must not carry knots — there is no "
+                    f"recipe for mgcv to place them against."
+                )
+        elif self.basis == "tp":
+            # one covariate, one k, no knots (mgcv's tp places none), no by / factor:
+            # only the plain one-covariate thin-plate smooth is built (ADR-261).
+            if len(self.variables) != 1 or len(self.k) != 1:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='tp' with variables "
+                    f"{self.variables!r} and k={self.k!r}; only a single-covariate tp "
+                    "smooth with one k is built."
+                )
+            if self.knots is not None or self.by is not None or self.factor:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='tp' and must not carry knots, "
+                    "by or factor=True — a plain thin-plate smooth takes none of them."
+                )
+        elif self.basis == "ti" and len(self.variables) < 2:
+            raise ValidationError(
+                f"TermSpec {self.label!r} is basis='ti' with variables "
+                f"{self.variables}; a tensor interaction needs at least two margins."
+            )
+        elif self.basis == "sz":
+            # mgcv's own asymmetry: `s(FaceSize, AttdAge, bs="sz", k=13, xt=list(bs="cr"))`
+            # (PLAN §1) names a factor variable (FaceSize) and a smoothed margin
+            # (AttdAge), but k is a SINGLE scalar — the smoothed margin's basis
+            # dimension. The factor variable contributes levels, not a k of its own.
+            if len(self.variables) != 2:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='sz' with variables "
+                    f"{self.variables}; sz names exactly two (a factor and the "
+                    f"smoothed margin)."
+                )
+            if len(self.k) != 1:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='sz' with k={self.k!r}; sz "
+                    f"takes exactly one k — the smoothed margin's basis dimension, "
+                    f"not one per variable."
+                )
+            if self.n_levels is not None and self.n_levels < 2:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='sz' with n_levels="
+                    f"{self.n_levels!r}; sz needs at least 2 factor levels."
+                )
+        elif self.basis == "re":
+            # mgcv's own asymmetry the other way from sz: a "re" term names a
+            # single factor variable, carries no basis dimension of its own (its
+            # width IS n_levels — module gam_basis_re.py), and n_levels is
+            # REQUIRED rather than optional (there is no narrower harness for it
+            # to be optional against, unlike sz's build_python_sz_term).
+            if len(self.variables) != 1:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='re' with variables "
+                    f"{self.variables}; re names exactly one factor variable."
+                )
+            if self.k:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='re' and must not carry "
+                    f"k={self.k!r} — its width is n_levels (the factor's own "
+                    f"level count), not a smoothing k."
+                )
+            if self.n_levels is None or self.n_levels < 2:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='re' with n_levels="
+                    f"{self.n_levels!r}; re needs n_levels set, >= 2 (mgcv's "
+                    f"length(levels(fac)))."
+                )
+        elif self.basis == "parametric":
+            # An unpenalized main effect (one variable) or interaction (two or
+            # more) — mgcv's own contr.treatment dummy coding, built directly
+            # from the factor-level codes and counts (gam_basis_parametric.py).
+            # No basis dimension of its own (no k, no knots) and no single
+            # n_levels (an interaction names one count PER variable, via the
+            # dedicated `levels` field rather than the singular `n_levels`
+            # every other factor-carrying basis uses).
+            if self.k:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='parametric' and must "
+                    f"not carry k={self.k!r} — an unpenalized parametric block "
+                    f"has no basis dimension of its own; its width is "
+                    f"determined by its factor level count(s) via `levels`."
+                )
+            if self.knots is not None:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='parametric' and must "
+                    f"not carry knots — there is no recipe for mgcv to place "
+                    f"them against."
+                )
+            if self.by is not None:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='parametric' and must "
+                    f"not set by={self.by!r} — a numeric-by smooth is a "
+                    f"different mgcv construction from an unpenalized "
+                    f"parametric block."
+                )
+            if self.factor:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='parametric' and must "
+                    f"not set factor=True — factor=True marks the sz/fs "
+                    f"construction, a different one from an unpenalized "
+                    f"parametric block."
+                )
+            if self.levels is None or len(self.levels) != len(self.variables):
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='parametric' with "
+                    f"{len(self.variables)} variable(s) but levels="
+                    f"{self.levels!r} — exactly one level count per variable "
+                    f"is required (mgcv's length(levels(fac)) for each named "
+                    f"factor), an input never derived from data (Anchor 4)."
+                )
+            if any(n < 2 for n in self.levels):
+                raise ValidationError(
+                    f"TermSpec {self.label!r} is basis='parametric' with "
+                    f"levels={self.levels!r} — every named factor needs at "
+                    f"least 2 levels."
+                )
+        elif len(self.k) != len(self.variables):
+            raise ValidationError(
+                f"TermSpec {self.label!r} has {len(self.variables)} variable(s) but "
+                f"k={self.k!r} names {len(self.k)}; one k per variable is required."
+            )
+        if self.knots is not None:
+            knot_vars = [pair[0] for pair in self.knots]
+            duplicate_vars = sorted({v for v in knot_vars if knot_vars.count(v) > 1})
+            if duplicate_vars:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} supplies knots more than once for "
+                    f"{duplicate_vars} — each variable may appear at most once."
+                )
+            unknown = sorted(set(knot_vars) - set(self.variables))
+            if unknown:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} supplies knots for {unknown}, which "
+                    f"{'is' if len(unknown) == 1 else 'are'} not in its variables "
+                    f"{self.variables}."
+                )
+        if self.by is not None and self.factor:
+            raise ValidationError(
+                f"TermSpec {self.label!r} sets both by={self.by!r} and factor=True — "
+                f"a numeric-by smooth and a factor-smooth are different mgcv "
+                f"constructions; a term is one or the other."
+            )
+        if (self.by_factor is None) != (self.by_level is None):
+            raise ValidationError(
+                f"TermSpec {self.label!r} sets by_factor={self.by_factor!r} and "
+                f"by_level={self.by_level!r} — a factor-by term needs both or neither."
+            )
+        if self.by_factor is not None:
+            if self.basis != "cr":
+                raise ValidationError(
+                    f"TermSpec {self.label!r} sets by_factor={self.by_factor!r} with "
+                    f"basis={self.basis!r} — a factor-by smooth is only built for "
+                    f"basis='cr'."
+                )
+            if self.by is not None:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} sets both by={self.by!r} (numeric) and "
+                    f"by_factor={self.by_factor!r} — a numeric-by smooth and a "
+                    f"factor-by smooth are different mgcv constructions; a term is "
+                    f"one or the other."
+                )
+            if self.factor:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} sets both factor=True and "
+                    f"by_factor={self.by_factor!r} — factor=True marks the sz/fs "
+                    f"construction, a different one from a factor-by smooth."
+                )
+            if self.n_levels is None or self.n_levels < 2:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} sets by_factor={self.by_factor!r} but "
+                    f"n_levels={self.n_levels!r} — a factor-by term needs n_levels "
+                    f"set, >= 2 (mgcv's length(levels(fac))), an input never derived "
+                    f"from data (Anchor 4)."
+                )
+            assert self.by_level is not None  # narrows for mypy; guaranteed above
+            if not 0 <= self.by_level < self.n_levels:
+                raise ValidationError(
+                    f"TermSpec {self.label!r} has by_level={self.by_level!r}, which "
+                    f"must lie in [0, {self.n_levels})."
+                )
+        if (
+            self.basis not in ("sz", "re")
+            and not (self.basis == "cr" and self.by_factor is not None)
+            and self.n_levels is not None
+        ):
+            raise ValidationError(
+                f"TermSpec {self.label!r} has basis={self.basis!r} but sets "
+                f"n_levels={self.n_levels!r} — only a basis='sz'/'re' term, or a "
+                f"basis='cr' factor-by term, has a factor-level count."
+            )
+        if self.basis != "parametric" and self.levels is not None:
+            raise ValidationError(
+                f"TermSpec {self.label!r} has basis={self.basis!r} but sets "
+                f"levels={self.levels!r} — only a basis='parametric' term carries "
+                f"per-variable level counts."
+            )
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    """A family / link / weights / offset spec plus the terms it fits over.
+
+    PLAN Anchor 5: weights and offset are orthogonal controls, both supported, and
+    neither is inferred from the other — an ``offset`` makes a model relative and
+    ``weights`` says how much each row counts in the likelihood, and supplying both is
+    a caller decision this object records rather than resolves.
+
+    Args:
+        family: ``mgcv`` family name, e.g. ``"binomial"``, ``"poisson"``,
+            ``"quasipoisson"``.
+        link: Link function name, e.g. ``"cloglog"``, ``"logit"``, ``"log"``.
+        terms: Every term in the model, parametric and smooth alike.
+        weights_column: Name of the prior-weights column (e.g. exposure), or ``None``.
+        offset_column: Name of the offset column, or ``None``. See Anchor 5's table:
+            the target formula uses weights with no offset; the existing polaris engine
+            uses an offset. Both idioms are represented, never combined into one field.
+        select: ``mgcv``'s ``select = TRUE`` — Marra & Wood's null-space double
+            penalty (PLAN slice 7), which lets a term shrink to exactly zero under
+            REML rather than only becoming smoother. ``False`` (``mgcv``'s own
+            default) reproduces every earlier slice's behaviour unchanged;
+            :func:`~hgam.engine.gam_model.assemble_model_design` reads
+            this field to decide whether to append each term's own extra
+            null-space penalty block
+            (:func:`~hgam.engine.gam_select_penalty.null_space_penalty`).
+    """
+
+    family: str
+    link: str
+    terms: tuple[TermSpec, ...]
+    weights_column: str | None = None
+    offset_column: str | None = None
+    select: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.family:
+            raise ValidationError("A ModelSpec needs a non-empty family.")
+        if not self.link:
+            raise ValidationError("A ModelSpec needs a non-empty link.")
+        if not self.terms:
+            raise ValidationError("A ModelSpec needs at least one term.")
+        labels = [t.label for t in self.terms]
+        duplicates = sorted({label for label in labels if labels.count(label) > 1})
+        if duplicates:
+            raise ValidationError(
+                f"ModelSpec has duplicate term labels {duplicates} — each term must "
+                f"be addressable by a unique label for Stage A to key its comparison."
+            )
+
+
+def factor_by_terms(
+    *,
+    base_label: str,
+    variable: str,
+    k: int,
+    by_factor: str,
+    n_levels: int,
+    knots: tuple[float, ...] | None = None,
+    level_labels: tuple[str, ...] | None = None,
+) -> tuple[TermSpec, ...]:
+    """The ``n_levels`` separate :class:`TermSpec` objects a factor-``by`` smooth
+    (capability ladder rung L3, ``s(x, by=fac, bs="cr")``) expands into.
+
+    `mgcv`'s own rule (``docs/MGCV_NOTATION_PRIMER.md`` §4, measured): a factor
+    ``by`` is a term **multiplier** — one level produces one separate smooth, each
+    with its own smoothing parameter — never one :class:`TermSpec` with an internal
+    per-level branch. This factory is the one place that expansion happens, so a
+    caller building a factor-by term into a :class:`ModelSpec` does it the same way
+    every time rather than re-deriving the label convention and the shared
+    ``knots``/``k`` recipe per call site.
+
+    Args:
+        base_label: The shared label prefix — each generated term's own label is
+            ``f"{base_label}:{level_label}"``.
+        variable: The smoothed covariate's name (e.g. ``"AttdAge"``).
+        k: The shared basis dimension, one value for every level (`mgcv`'s own
+            convention — a factor-by term names one ``k``, not one per level).
+        by_factor: The grouping variable's name (0-indexed level codes in the
+            data ``assemble_model_design`` reads).
+        n_levels: Number of factor levels — an input, never derived (Anchor 4).
+        knots: Supplied knot locations for ``variable``, shared by every level
+            (module docstring of :mod:`~hgam.engine.gam_basis_cr`: all
+            levels use the SAME knots, computed on the whole covariate column),
+            or ``None`` to mean "let `mgcv`'s default placement decide" — same
+            Anchor-4 convention as :attr:`TermSpec.knots`.
+        level_labels: One label per level for the generated terms' own suffix, or
+            ``None`` to use the level's own index as a string (``"0"``, ``"1"``,
+            ...). Must have length ``n_levels`` when supplied.
+
+    Returns:
+        ``n_levels`` :class:`TermSpec` objects, ``by_level`` running ``0`` to
+        ``n_levels - 1`` in order.
+    """
+    labels = level_labels if level_labels is not None else tuple(str(i) for i in range(n_levels))
+    if len(labels) != n_levels:
+        raise ValidationError(
+            f"factor_by_terms: {len(labels)} level_labels supplied but n_levels="
+            f"{n_levels} — one label per level is required."
+        )
+    knots_arg = None if knots is None else ((variable, knots),)
+    return tuple(
+        TermSpec(
+            label=f"{base_label}:{labels[level]}",
+            variables=(variable,),
+            basis="cr",
+            k=(k,),
+            knots=knots_arg,
+            by_factor=by_factor,
+            by_level=level,
+            n_levels=n_levels,
+        )
+        for level in range(n_levels)
+    )

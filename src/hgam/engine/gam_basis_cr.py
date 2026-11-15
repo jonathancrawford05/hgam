@@ -1,0 +1,740 @@
+"""Wood's cubic regression spline basis (mgcv-parity engine, slice 2).
+
+``docs/PLAN_mgcv_parity_engine.md`` slice 2, the epic's first Stage-A **parity**
+slice (ADR-193): a Python ``cr`` basis built from a knot vector and Wood's basis /
+penalty definition, independent of any ``mgcv`` output — the referent
+:func:`~hgam.engine.gam_stage_a.extract_smooth_terms` (slice 1b) packages
+is ``mgcv``'s ``smoothCon(..., absorb.cons=TRUE)``.
+
+**Parity claim (per ``docs/VERIFICATION_STANDARD.md``, written before the code):**
+``polaris_re``'s new ``cr`` basis computes ``design_X`` and ``penalty_S`` from the
+knot vector and Wood's basis/penalty definition; ``mgcv`` computes them via
+``smoothCon(s(x, bs="cr", k=k), absorb.cons=TRUE)``; compared on ``design_X``,
+``penalty_S``, ``rank`` and (for default-placed knots) ``knots`` itself.
+
+Every formula below was pinned by reading ``mgcv``'s own R source
+(``mgcv:::smooth.construct.cr.smooth.spec``, ``mgcv::smoothCon``) rather than
+guessed, and then verified numerically against local (tier-1) R output before
+being written here — CLAUDE.md's "do not guess at a penalty derivation."
+
+Construction, in order
+-----------------------
+1. **Knots.** Supplied verbatim when given (Anchor 4 — never derived when
+   supplied). When not supplied, ``mgcv``'s own default:
+   ``quantile(unique(x), seq(0, 1, length = k))`` — R's type-7 quantile (linear
+   interpolation of order statistics) over the *unique* data values, reproduced
+   here with ``numpy.quantile(..., method="linear")``. Read directly out of
+   ``smooth.construct.cr.smooth.spec``, not inferred from behaviour.
+
+2. **The unconstrained natural cubic spline basis and penalty** (Wood, *Generalized
+   Additive Models*, 2nd ed., §5.3.1). Given knots ``x*_1 < ... < x*_k`` with gaps
+   ``h_j = x*_{j+1} - x*_j``, the natural cubic spline through knot values ``f`` has
+   second derivatives at the interior knots ``δ = F f`` where ``F = B⁻¹D``: ``D`` is
+   ``(k-2, k)`` and ``B`` is ``(k-2, k-2)`` tridiagonal,
+
+   ``D[i,i] = 1/h_i``, ``D[i,i+1] = -1/h_i - 1/h_{i+1}``, ``D[i,i+2] = 1/h_{i+1}``
+
+   ``B[i,i] = (h_i + h_{i+1})/3``, ``B[i,i+1] = B[i+1,i] = h_{i+1}/6``
+
+   for interior index ``i``. The natural boundary condition sets ``δ_1 = δ_k = 0``,
+   so ``F`` is padded with zero rows at the two ends to act on the full
+   ``k``-vector. A basis row at ``x`` in interval ``[x*_j, x*_{j+1}]`` is
+   ``a_j(x)·e_j + a_{j+1}(x)·e_{j+1} + c_j(x)·F*_j + c_{j+1}(x)·F*_{j+1}`` (the
+   standard cubic-Hermite-with-curvature form; see :func:`_hermite_weights`), and
+   the penalty on the full ``k``-vector is ``S = Fᵀ D`` (symmetric because
+   ``BF = D``, so ``FᵀBF = FᵀD``).
+
+3. **Penalty rescaling.** ``smoothCon``'s *own* ``scale.penalty`` argument
+   (default ``TRUE``) — a different setting from this repo's existing
+   ``gam.control(scalePenalty=...)`` used on the ``raw``/``paraPen`` path
+   (``experience_mgcv_conformance.py``); the two are unrelated despite the
+   similar name. Measured directly against ``smoothCon()`` output: without it the
+   penalty is a constant multiple too large (ratio pinned per case, not a
+   tolerance-bending "close enough"). The rescaling divides ``S`` by
+   ``norm_1(S) / norm_inf(X)²`` — R's ``norm(S)`` (one-norm, i.e. the largest
+   absolute column sum) over R's ``norm(X, type="I")²`` (infinity-norm, i.e. the
+   largest absolute row sum, squared). :func:`_r_norm_one` / :func:`_r_norm_inf`
+   name the convention because NumPy has no built-in for either.
+
+4. **Identifiability constraint.** ``mgcv``'s default for an unconstrained smooth
+   with no ``by`` variable and no factor structure (read out of ``smoothCon``,
+   not guessed): the constraint row is ``C = colMeans(X)`` (a mean, not the sum —
+   confirmed against source), absorbed via the null space of ``C`` computed
+   through a **full QR decomposition of ``Cᵀ``**: ``Z`` is every column of ``Q``
+   after the first. Measured to confirm ``numpy.linalg.qr(..., mode="complete")``
+   reproduces R's ``qr()``/``qr.Q()`` bit-for-bit on a single-column input (both
+   use the same cancellation-avoiding Householder sign convention), which is what
+   makes ``Z`` — and therefore the constrained ``X`` and ``S`` — comparable
+   element-wise rather than only up to an arbitrary rotation of the null space.
+
+The ``ti`` tensor interaction, two ``cr`` margins (slice 5, ``ti(AttdAge, PolYear)``)
+-------------------------------------------------------------------------------------
+:func:`ti_basis` builds a two-margin ``ti(x1, x2, k=(k1,k2), bs="cr")`` term:
+tensor interaction with the marginal main effects excluded, so it can sit beside
+``s(x1)`` and ``s(x2)`` main-effect terms in one model without confounding them.
+Every step below was *measured*, not read off documentation — instrumenting
+``mgcv:::smooth.construct.tensor.smooth.spec`` directly (assigning its internal
+locals to the global environment mid-execution) and comparing each intermediate
+against a hand-replica, the same discipline the ``cr`` construction above used,
+because ``ti()``'s own R source (``mgcv::ti`` → ``mgcv::te`` →
+``smooth.construct.tensor.smooth.spec``) does not itself state the exact
+normalization order in a form that can be transcribed without running it.
+
+1. **Each margin is its own constrained ``cr`` smooth**, independently: knots per
+   Anchor 4 (supplied verbatim, or :func:`cr_default_knots` on that margin's own
+   covariate), :func:`cr_basis` for the unconstrained design/penalty, then
+   :func:`sum_to_zero_null_space` / :func:`absorb_sum_to_zero_constraint` — the
+   *same* per-margin construction :func:`~hgam.engine.gam_term_build.build_python_cr_term`
+   already uses for a standalone ``s(x)`` term, because ``ti()``'s ``mc[i]`` flag
+   defaults ``TRUE`` for every margin (``mgcv::ti`` sets ``inter=TRUE``, and
+   ``smooth.construct.tensor.smooth.spec`` reads ``object$mc <- rep(TRUE, m)``
+   whenever ``inter`` and no explicit ``mc=`` override — the target formula
+   supplies none).
+
+2. **No further reparameterization runs for ``cr`` margins.** ``mgcv::ti``'s
+   ``np=TRUE`` default would ordinarily re-express each 1-D margin via an
+   SVD-based change of basis (evaluating the constrained margin at
+   ``ncol(margin$X)`` equally spaced points and inverting), but
+   ``smooth.construct.cr.smooth.spec`` sets ``object$noterp <- TRUE`` on every
+   ``cr`` margin, and the tensor constructor's own reparam loop is gated on
+   ``is.null(object$margin[[i]]$noterp)`` — false for ``cr``, so the branch
+   assigns ``XP[[i]] <- NULL`` (a no-op on an empty list) and the per-margin
+   design/penalty from step 1 passes through unchanged. **This does not
+   generalize to other basis classes** — a future ``ti()`` over a basis that
+   does *not* set ``noterp`` (this project has none yet) would need that
+   reparameterization implemented; :func:`ti_basis` has no code for it and
+   would silently build the wrong thing if handed one, which is why this
+   function validates nothing about the marginal basis beyond taking ``cr``
+   inputs by construction.
+
+3. **Each margin's penalty is rescaled by its own leading eigenvalue**,
+   ``Sm_i ← Sm_i / λ_max(Sm_i)`` — a step ``smooth.construct.tensor.smooth.spec``
+   always runs, independent of whether step 2 changed anything.
+
+4. **The tensor design is the row-wise Kronecker product** of the (in this case,
+   untouched) marginal designs, margin 1 varying *slower* than margin 2 in the
+   column ordering — confirmed against ``mgcv::tensor.prod.model.matrix`` on a
+   tiny hand-built example before being written here, not assumed from the name
+   alone. **The tensor penalties** are ``S_1 = Sm_1 ⊗ I_{d2}``,
+   ``S_2 = I_{d1} ⊗ Sm_2`` (``mgcv::tensor.prod.penalties``), where ``d_i`` is
+   margin ``i``'s own (constrained) width.
+
+5. **A second, *tensor-level* rescaling** — ``smoothCon()``'s own
+   ``scale.penalty`` step (the same one :func:`cr_basis` applies for a
+   standalone ``cr`` term, read from the same source lines), but now over the
+   **full tensor** ``X``/``S_i``, not the margin's: ``S_i ← S_i /
+   (norm_one(S_i) / norm_inf(X)²)``, using the tensor ``X`` from step 4. This is a
+   *second* application of the same formula the margin's own :func:`cr_basis`
+   call already ran once at step 1 — ``smoothCon()`` rescales every smooth it
+   returns, and a tensor-product smooth is itself a ``smoothCon()`` return
+   value, so the rescaling fires twice, once at each level. Skipping this step
+   reproduces ``mgcv``'s design exactly but its penalty by a constant factor per
+   block (measured: the two mismatched, before this step was added, at a
+   *different* ratio per block — 8.06x on one case's ``S_1`` — which is why
+   catching this needed instrumenting the source rather than trusting the
+   margin-level rescaling to be the only one).
+
+Verified against ``smoothCon(ti(x1, x2, k=(k1,k2), bs="cr"), absorb.cons=TRUE)``
+to float round-trip precision (~1e-15) on both a synthetic case and the target
+formula's own ``ti(AttdAge, PolYear, k=c(13,6))`` knot vectors, tier 1, before
+this function was written (module tests carry the tier-1 reading; the
+CI-dispatched tier-3 reading is in ``docs/CONFORMANCE_LEDGER.md``).
+
+``bs = "sz"``, one factor (slice 6, e.g. ``s(FaceSize, AttdAge, bs="sz", xt=list(bs="cr"))``)
+-----------------------------------------------------------------------------------------------
+:func:`sz_basis` builds a **single-factor** sum-to-zero factor-smooth interaction: a
+separate smooth deviation from a reference ``cr`` smooth for every level of one
+factor, constrained so a meaningful "main effect plus per-level deviation"
+decomposition is identifiable. This is a **derivation from mgcv's documented
+behaviour and measured output**, not a transcription of ``mgcv:::smooth.construct.sz.smooth.spec``
+or ``mgcv:::XZKr`` — CLAUDE.md / Anchor 8's "implement from the paper, not from
+mgcv's source" (mgcv is GPL (>= 2), this project is MIT), the same footing ADR-196
+and ADR-202 already used for other formulas. What follows was *measured* by
+instrumenting mgcv's constructor and confirming an independently-derived closed
+form against its output (Anchor 8), the same discipline :func:`ti_basis` used.
+
+1. **The per-level block is the RAW, un-rescaled ``cr`` basis** — :func:`_cr_basis_raw`,
+   *not* :func:`cr_basis`. Measured directly (not assumed): the ``sz`` constructor calls
+   the bare ``smooth.construct`` generic on its base class, never a ``smoothCon()``
+   wrapper, so no ``scale.penalty`` step has run yet at this point.
+
+2. **The pre-constraint design is a per-row selection**, not a genuine tensor
+   product: row ``i`` of the block for level ``l`` is the base row when
+   ``group[i] == l`` and zero otherwise (factor level varies *slower*, the base
+   column *faster*, mirroring :func:`ti_basis`'s own margin-order convention) — the
+   result of tensoring the base design against a one-hot factor-level indicator.
+   The pre-constraint penalty for level ``l`` is the raw base ``S`` placed in that
+   level's own diagonal block and zero elsewhere — one penalty (and eventually one
+   smoothing parameter) per level.
+
+3. **``scale.penalty`` fires once**, on the assembled (pre-constraint) design and
+   *each* penalty block independently: ``S_l ← S_l / (norm_one(S_l) / norm_inf(X_full)²)``.
+   Because every ``S_l`` is the same raw base block merely relocated, ``norm_one(S_l)``
+   does not depend on ``l`` (padding with zero rows/columns cannot change a matrix's
+   largest absolute column sum), so this reduces to one shared scalar.
+
+4. **The identifiability constraint compares each of the first ``n_levels - 1``
+   levels against the last one.** Measured (not the documentation's "sum to zero"
+   wording taken literally): the transform mgcv applies is linear-algebraically
+   equivalent to right-multiplying the assembled (design or penalty) matrix by
+   ``M = D ⊗ I_{k}``, where ``D`` is ``(n_levels, n_levels - 1)`` with ``D[l,l] = 1``
+   for ``l < n_levels - 1`` and ``D[n_levels - 1, l] = -1`` for every ``l``, and
+   penalty blocks are conjugated (``M^T S_l M``). Confirmed against
+   ``smoothCon(bs="sz", absorb.cons=TRUE)`` to float round-trip precision (~1e-14) on
+   ``design_X``, every ``penalty_S`` block and ``rank``, across factor counts of 2 and
+   3 and several ``(n, k)`` combinations, before this function was written.
+
+**Scope: one factor only.** ``mgcv``'s own ``sz.interaction`` generalizes to several
+factors crossed together and to a shared ``id`` (one smoothing parameter for every
+level rather than one each); the target formula's own four ``sz`` terms
+(``s(FaceSize, AttdAge, ...)``, ``s(Smoke, AttdAge, ...)``, ``s(FaceSize, PolYear, ...)``,
+``s(Smoke, PolYear, ...)``) each name exactly one two-level factor and no ``id``, so
+:func:`sz_basis` handles only that case — the same "does not generalize beyond what
+was measured" discipline :func:`ti_basis` already documents for a non-``cr`` margin.
+
+Factor ``by`` (capability ladder rung L3, ``s(x, by=fac, bs="cr")``)
+---------------------------------------------------------------------
+:func:`by_factor_mask_design` implements a **factor**-``by`` smooth — a
+different construction from the numeric-``by`` one above despite the shared
+argument name. `mgcv`'s own rule, stated in ``docs/MGCV_NOTATION_PRIMER.md``
+§4: a factor ``by`` is a term **multiplier**, not a term parameter — one
+level produces one completely separate, independently-penalized smooth, not
+one term that varies continuously.
+
+**Mechanism, measured directly against ``smoothCon(s(x, by=fac, bs="cr", k),
+absorb.cons=TRUE)`` before this was written (Anchor 8), not read off
+documentation:**
+
+1. **Knots, the constrained design and the penalty are computed EXACTLY as if
+   ``by`` were absent** — the *same* :func:`cr_basis` +
+   :func:`absorb_sum_to_zero_constraint` construction :func:`build_python_cr_term`
+   already uses for a bare ``s(x)``, evaluated on the **whole** covariate column
+   (every row, every level), never a per-level subset. This one shared
+   ``(design, S)`` is **identical across every level** — measured: `mgcv`'s own
+   identifiability constraint ``C`` for a factor-by term equals
+   ``colMeans()`` of the whole-data (non-split) basis, the SAME ``C`` a bare
+   ``s(x)`` on that data would use, not the per-level subset's own ``colMeans``
+   (which was the first, refuted hypothesis — it disagreed at the 1e-1 level).
+2. **Each level's own design is that shared constrained design with every row
+   outside ``group == level`` zeroed** — :func:`by_factor_mask_design`, applied
+   *after* the constraint is absorbed (not before — masking then constraining
+   would need a different, level-restricted ``C`` and was refuted first).
+3. **The penalty is NOT rescaled per level.** Every level gets the identical
+   shared ``S`` from step 1 — `mgcv` assigns each level its own smoothing
+   *parameter* (a separate ``lambda``), but every level starts from the same
+   penalty matrix. This is the opposite of :func:`sz_basis`'s own convention,
+   where masking happens **before** the shared identifiability constraint
+   (contrast-vs-last-level) and each level's raw block is placed in a disjoint
+   sub-block of one combined design; here every level's design uses the SAME
+   ``k-1`` columns (not a disjoint sub-block), so a factor-by term's `n_levels`
+   generated smooths must be assembled as `n_levels` **separate model terms**,
+   each contributing its own `k-1`-wide column span — matching `mgcv`'s own
+   bookkeeping (``m$smooth`` has one entry per level, each with its own
+   ``first.para``/``last.para``), not `sz`'s one-term-many-penalty-blocks shape.
+
+Confirmed against ``smoothCon(s(x, by=fac, bs="cr", k=6), absorb.cons=TRUE)``
+to exact bit-for-bit agreement (max abs diff **0.0**, not merely float
+round-trip) on ``design_X`` and ``penalty_S``, every level, on a synthetic
+3-level case, tier 1, before this function was written.
+
+Not handled yet
+----------------
+**Extrapolation beyond the knot range.** All five of slice 2's cases place ``x``
+strictly inside ``[knots[0], knots[-1]]`` (default knots are quantiles of ``x``
+itself; the supplied-knot cases, including the target formula's own
+``AttdAge``/``PolYear`` knot vectors, draw ``x`` from the same range the knots
+span), so this was never exercised and is not verified. The natural boundary condition
+(``δ`` at the two end knots is zero) makes extrapolation locally linear only in
+the immediate neighbourhood of a boundary knot with zero curvature there — the
+per-interval Hermite formula used for interior evaluation does not by itself
+reduce to that outside the range, and nothing here has measured what ``mgcv``
+actually does at ``x`` outside ``[knots[0], knots[-1]]``. A future slice needing
+knots that do not span the data range (e.g. the target formula's own hand-chosen
+``AttdAge``/``PolYear`` knots against real data) must verify this before relying
+on it — CLAUDE.md: mark the uncertainty rather than guess the derivation.
+"""
+
+import contextlib
+import contextvars
+from collections.abc import Iterator
+
+import numpy as np
+
+from hgam.errors import ComputationError, ValidationError
+
+__all__ = [
+    "absorb_sum_to_zero_constraint",
+    "by_factor_mask_design",
+    "by_scale_design",
+    "cr_basis",
+    "cr_default_knots",
+    "sum_to_zero_null_space",
+    "sz_basis",
+    "ti_basis",
+    "unique_row_constraint",
+]
+
+_MIN_K = 3
+"""mgcv's own floor (`smooth.construct.cr.smooth.spec`): `bs.dim < 3` is bumped to
+3 with a warning. Below 3, `k - 2 < 1` and the interior tridiagonal system this
+basis solves is empty or ill-formed."""
+
+
+def cr_default_knots(x: np.ndarray, k: int) -> np.ndarray:
+    """``mgcv``'s default ``cr`` knot placement: quantiles of the *unique* data.
+
+    Read directly from ``mgcv:::smooth.construct.cr.smooth.spec``:
+    ``quantile(unique(x), seq(0, 1, length = k))``. R's ``quantile()`` default is
+    type 7 (linear interpolation between order statistics), which is also
+    ``numpy.quantile``'s default ``method``, made explicit below rather than left
+    to NumPy's own default in case that default ever changes.
+    """
+    if k < _MIN_K:
+        raise ValidationError(f"cr_default_knots needs k >= {_MIN_K}; got k={k}.")
+    xu = np.unique(np.asarray(x, dtype=np.float64))
+    if xu.shape[0] < k:
+        raise ValidationError(
+            f"cr_default_knots: only {xu.shape[0]} unique x value(s) but k={k} "
+            "knots were requested — mgcv refuses this too ('insufficient unique "
+            "values to support k knots')."
+        )
+    probs = np.linspace(0.0, 1.0, k, dtype=np.float64)
+    return np.quantile(xu, probs, method="linear")
+
+
+def _r_norm_one(matrix: np.ndarray) -> float:
+    """R's ``norm(A)`` default (``type="O"``, the one-norm): the largest absolute
+    column sum. NumPy's ``ord=1`` on ``np.linalg.norm`` matches this exactly, but
+    named here so the convention is not left to a bare ``ord=1`` at the call site."""
+    return float(np.max(np.sum(np.abs(matrix), axis=0)))
+
+
+def _r_norm_inf(matrix: np.ndarray) -> float:
+    """R's ``norm(A, type="I")`` — the infinity-norm: the largest absolute row sum."""
+    return float(np.max(np.sum(np.abs(matrix), axis=1)))
+
+
+def _hermite_weights(x: np.ndarray, knots: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per-point bracket index and the four cubic-Hermite-with-curvature weights.
+
+    Returns ``(j, a, c)`` where ``j`` is the 0-indexed left knot of each point's
+    bracketing interval, ``a`` is ``(n, 2)`` — the linear weights on
+    ``f_j, f_{j+1}`` — and ``c`` is ``(n, 2)`` — the cubic weights on the interval's
+    two curvature terms, following Wood §5.3.1's
+    ``a_j(x) = (x*_{j+1}-x)/h_j``, ``c_j(x) = [(x*_{j+1}-x)³/h_j - h_j(x*_{j+1}-x)]/6``
+    (and the mirrored pair at ``j+1``).
+    """
+    k = knots.shape[0]
+    j = np.clip(np.searchsorted(knots, x, side="right") - 1, 0, k - 2)
+    h_j = knots[j + 1] - knots[j]
+    left = knots[j + 1] - x
+    right = x - knots[j]
+    a = np.stack([left / h_j, right / h_j], axis=1)
+    c = np.stack(
+        [
+            (left**3 / h_j - h_j * left) / 6.0,
+            (right**3 / h_j - h_j * right) / 6.0,
+        ],
+        axis=1,
+    )
+    return j, a, c
+
+
+def _cr_basis_raw(x: np.ndarray, knots: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Wood's natural-cubic-spline design and penalty, **before** ``smoothCon``'s
+    ``scale.penalty`` rescaling — i.e. ``mgcv:::smooth.construct.cr.smooth.spec``'s
+    own return, not ``smoothCon()``'s.
+
+    Split out of :func:`cr_basis` for :func:`sz_basis` (slice 6): the ``sz.interaction``
+    constructor calls the bare ``smooth.construct`` generic on its base class directly —
+    never wrapped in a ``smoothCon()`` call — so the per-level block it tensors with the
+    factor-level indicators is this **unscaled** basis, confirmed by instrumenting
+    ``mgcv:::smooth.construct.sz.smooth.spec`` directly (Anchor 8): the dumped
+    ``object$base$S`` matches this function's ``s_full`` exactly (max abs diff 0),
+    where ``smoothCon(bs="cr", absorb.cons=FALSE)$S[[1]]`` would already carry one
+    rescaling and would not.
+    """
+    knots = np.asarray(knots, dtype=np.float64)
+    x = np.asarray(x, dtype=np.float64)
+    k = knots.shape[0]
+    if k < _MIN_K:
+        raise ValidationError(f"cr_basis needs at least {_MIN_K} knots; got {k}.")
+    if np.any(np.diff(knots) <= 0):
+        raise ValidationError("cr_basis: knots must be strictly increasing.")
+
+    h = np.diff(knots)
+    n_interior = k - 2
+
+    d_op = np.zeros((n_interior, k), dtype=np.float64)
+    b_op = np.zeros((n_interior, n_interior), dtype=np.float64)
+    for i in range(n_interior):
+        d_op[i, i] = 1.0 / h[i]
+        d_op[i, i + 1] = -1.0 / h[i] - 1.0 / h[i + 1]
+        d_op[i, i + 2] = 1.0 / h[i + 1]
+        b_op[i, i] = (h[i] + h[i + 1]) / 3.0
+    for i in range(n_interior - 1):
+        b_op[i, i + 1] = h[i + 1] / 6.0
+        b_op[i + 1, i] = h[i + 1] / 6.0
+
+    try:
+        f_inner = np.linalg.solve(b_op, d_op)
+    except np.linalg.LinAlgError as exc:
+        raise ComputationError(
+            f"cr_basis: the interior curvature system is singular for knots {knots!r}."
+        ) from exc
+
+    s_full = f_inner.T @ d_op
+    s_full = (s_full + s_full.T) / 2.0
+
+    f_star = np.zeros((k, k), dtype=np.float64)
+    f_star[1:-1, :] = f_inner  # natural boundary condition: rows 0 and k-1 stay zero
+
+    n = x.shape[0]
+    j, a, c = _hermite_weights(x, knots)
+    design = np.zeros((n, k), dtype=np.float64)
+    rows = np.arange(n)
+    np.add.at(design, (rows, j), a[:, 0])
+    np.add.at(design, (rows, j + 1), a[:, 1])
+    design += c[:, [0]] * f_star[j, :]
+    design += c[:, [1]] * f_star[j + 1, :]
+
+    # Beyond the end knots mgcv's crspl extrapolates LINEARLY along the end
+    # slope of the natural spline (measured, tier 1: second differences of the
+    # design columns are zero outside the knot range, both when the rows are
+    # training rows and when they come through predict.gam). The Hermite
+    # weights above would continue the end interval's cubic instead. Rows
+    # inside [knots[0], knots[-1]] are untouched, so every in-range design is
+    # bit-identical to what this function returned before.
+    below = x < knots[0]
+    above = x > knots[-1]
+    if below.any():
+        slope = -f_star[1, :] * (h[0] / 6.0)
+        slope[0] -= 1.0 / h[0]
+        slope[1] += 1.0 / h[0]
+        design[below, :] = (x[below] - knots[0])[:, None] * slope[None, :]
+        design[below, 0] += 1.0
+    if above.any():
+        slope = f_star[k - 2, :] * (h[-1] / 6.0)
+        slope[k - 1] += 1.0 / h[-1]
+        slope[k - 2] -= 1.0 / h[-1]
+        design[above, :] = (x[above] - knots[-1])[:, None] * slope[None, :]
+        design[above, k - 1] += 1.0
+    return design, s_full
+
+
+def cr_basis(x: np.ndarray, knots: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The **unconstrained** ``cr`` design and (rescaled) penalty, rank ``k``.
+
+    One column per knot — this is Wood's natural-cubic-spline basis in terms of
+    the knot *values* ``f``, before ``mgcv``'s identifiability constraint is
+    absorbed (:func:`absorb_sum_to_zero_constraint` does that). Matches
+    ``smoothCon(..., absorb.cons=FALSE)$X`` / ``$S[[1]]`` to float round-trip
+    precision (module docstring).
+
+    Args:
+        x: Covariate values, ``(n,)``.
+        knots: Strictly increasing knot locations, ``(k,)``, ``k >= 3``.
+    """
+    design, s_full = _cr_basis_raw(x, knots)
+    max_x_inf_norm_sq = _r_norm_inf(design) ** 2
+    if max_x_inf_norm_sq == 0.0:
+        raise ComputationError("cr_basis: the design matrix is identically zero.")
+    scale = _r_norm_one(s_full) / max_x_inf_norm_sq
+    if scale == 0.0:
+        raise ComputationError("cr_basis: the unscaled penalty is identically zero.")
+    return design, s_full / scale
+
+
+def by_scale_design(design: np.ndarray, by: np.ndarray) -> np.ndarray:
+    """Apply ``mgcv``'s numeric-``by`` construction to an **unconstrained** basis.
+
+    Slice 5 (``docs/PLAN_mgcv_parity_engine.md``, the MI term
+    ``s(AttdAge, by=StudyYear_C)``). Read directly off ``mgcv``'s own behaviour
+    (measured against ``smoothCon(s(x, by=z, bs="cr", k), absorb.cons=TRUE)`` before
+    being written here, CLAUDE.md's "do not guess at a derivation" — not merely
+    read from documentation): a numeric-``by`` smooth's identifiability constraint
+    matrix ``C`` has **zero rows** — ``mgcv`` does not absorb a sum-to-zero
+    constraint on it at all, because (``?s``'s own stated reason) ``by * constant``
+    need not be collinear with anything else in the model the way a bare smooth's
+    constant term is with the intercept. So the by-term's design is the
+    **unconstrained** ``k``-column :func:`cr_basis` output with each row scaled by
+    the by-variable value at that row, and its penalty is that same unconstrained
+    ``S`` — untouched by the scaling, and not put through
+    :func:`absorb_sum_to_zero_constraint`.
+
+    Args:
+        design: The **unconstrained** ``(n, k)`` design from :func:`cr_basis` — not
+            the constrained output of :func:`absorb_sum_to_zero_constraint`, which
+            a numeric-``by`` term never applies.
+        by: The by-variable value at each row, ``(n,)``.
+
+    Returns:
+        ``(n, k)`` — same shape as ``design``, each row ``i`` multiplied by
+        ``by[i]``. The penalty ``S`` is unchanged by this operation and is not
+        returned here; callers reuse :func:`cr_basis`'s own ``S``.
+    """
+    by = np.asarray(by, dtype=np.float64)
+    if by.shape != (design.shape[0],):
+        raise ValidationError(
+            f"by_scale_design: design has {design.shape[0]} row(s) but by has shape "
+            f"{by.shape} — one by-value per row is required."
+        )
+    # np.asarray, not a bare product: mypy infers Any from the ndarray operator
+    # and this function declares a concrete return type (PR #206 review [P1]).
+    return np.asarray(design * by[:, np.newaxis], dtype=np.float64)
+
+
+def by_factor_mask_design(design: np.ndarray, group: np.ndarray, level: int) -> np.ndarray:
+    """Zero every row outside one level, for a **factor**-``by`` smooth
+    (capability ladder rung L3, module docstring's numbered construction).
+
+    Args:
+        design: The **constrained** ``(n, k-1)`` design — i.e. the output of
+            :func:`absorb_sum_to_zero_constraint` on the whole (unsplit)
+            covariate column, never the unconstrained :func:`cr_basis` output
+            (measured: masking runs *after* the shared constraint is
+            absorbed, module docstring point 2).
+        group: 0-indexed factor-level code per row, ``(n,)`` — the same
+            convention :func:`sz_basis` and
+            :mod:`~hgam.engine.gam_basis_re` already use.
+        level: Which 0-indexed level to keep; every other row is zeroed.
+
+    Returns:
+        ``(n, k-1)`` — same shape as ``design``, every row where
+        ``group != level`` set to zero.
+    """
+    group = np.asarray(group, dtype=np.int64)
+    if group.shape != (design.shape[0],):
+        raise ValidationError(
+            f"by_factor_mask_design: design has {design.shape[0]} row(s) but group "
+            f"has shape {group.shape} — one factor-level code per row is required."
+        )
+    mask = (group == level).astype(np.float64)
+    return np.asarray(design * mask[:, np.newaxis], dtype=np.float64)
+
+
+def _distinct_rows(design: np.ndarray) -> np.ndarray:
+    """One row per distinct row of ``design``. ``np.unique(axis=0)`` sorts structured rows and
+    takes seconds at 4e5 rows, so the rows are first keyed by a fixed 1-D projection; the result is
+    VERIFIED exact (every row must equal its representative) and falls back to the full row
+    ``unique`` if two distinct rows ever shared a key."""
+    key = design @ np.linspace(1.0, 2.0, design.shape[1])
+    _, first, inverse = np.unique(key, return_index=True, return_inverse=True)
+    reps = design[first]
+    if np.array_equal(reps[inverse.reshape(-1)], design):
+        return reps
+    return np.unique(design, axis=0)
+
+
+_UNIQUE_ROW_CONSTRAINT: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "polaris_unique_row_constraint", default=False
+)
+
+
+@contextlib.contextmanager
+def unique_row_constraint() -> Iterator[None]:
+    """Compute every sum-to-zero constraint from ONE row per distinct covariate value.
+
+    ``bam(discrete=TRUE)`` builds its smooths on ``discrete.mf``'s compressed frame (each
+    variable's unique values, padded to equal length), so ``C = colMeans(X)`` there weights each
+    distinct value about equally, not by how many data rows carry it. The default (data rows)
+    is what ``gam()`` does and is unchanged. The padding's random multiplicities (a seeded
+    ``sample()``) are NOT reproduced; this is the deterministic part only. ADR-260 amendment 9.
+    """
+    token = _UNIQUE_ROW_CONSTRAINT.set(True)
+    try:
+        yield
+    finally:
+        _UNIQUE_ROW_CONSTRAINT.reset(token)
+
+
+def sum_to_zero_null_space(design: np.ndarray) -> np.ndarray:
+    """``mgcv``'s constraint null-space basis ``Z`` for ``colMeans(X) · β = 0``.
+
+    Split out of :func:`absorb_sum_to_zero_constraint` (slice 5's ``ti()`` work,
+    ``docs/PLAN_mgcv_parity_engine.md`` slice 5) because the tensor-interaction
+    construction needs the SAME ``Z`` applied to a margin's training-row design
+    reused to build that margin's own penalty — sharing this helper is what keeps
+    the two call sites from ever computing two different null spaces for the same
+    margin.
+
+    Args:
+        design: The unconstrained ``(n, k)`` design from :func:`cr_basis`.
+
+    Returns:
+        ``(k, k-1)`` — every column of ``Q`` after the first, from the full QR of
+        ``colMeans(X)ᵀ`` (module docstring §4).
+    """
+    rows = _distinct_rows(design) if _UNIQUE_ROW_CONSTRAINT.get() else design
+    constraint = rows.mean(axis=0).reshape(-1, 1)
+    if np.allclose(constraint, 0.0):
+        raise ComputationError(
+            "sum_to_zero_null_space: colMeans(X) is (numerically) zero — the "
+            "constraint row carries no information to build a null space from."
+        )
+    q, _ = np.linalg.qr(constraint, mode="complete")
+    return np.asarray(q[:, 1:], dtype=np.float64)
+
+
+def absorb_sum_to_zero_constraint(design: np.ndarray, s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Apply ``mgcv``'s default identifiability constraint: ``colMeans(X) · β = 0``.
+
+    Args:
+        design: The unconstrained ``(n, k)`` design from :func:`cr_basis`.
+        s: The unconstrained ``(k, k)`` penalty from :func:`cr_basis`.
+
+    Returns:
+        ``(design_constrained, s_constrained)``, ``(n, k-1)`` and ``(k-1, k-1)``.
+    """
+    k = design.shape[1]
+    if s.shape != (k, k):
+        raise ValidationError(f"absorb_sum_to_zero_constraint: design has {k} column(s) but s is {s.shape}.")
+    z = sum_to_zero_null_space(design)
+    design_c = design @ z
+    s_c = z.T @ s @ z
+    return design_c, (s_c + s_c.T) / 2.0
+
+
+def _leading_eigenvalue(matrix: np.ndarray) -> float:
+    """Largest eigenvalue of a symmetric matrix — ``eigen(S, symmetric=TRUE,
+    only.values=TRUE)$values[1]`` in R, which orders eigenvalues descending."""
+    return float(np.max(np.linalg.eigvalsh(matrix)))
+
+
+def ti_basis(
+    x1: np.ndarray,
+    x2: np.ndarray,
+    knots1: np.ndarray,
+    knots2: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The two-margin ``ti(x1, x2, bs="cr")`` tensor-interaction design and
+    penalties (slice 5's ``ti(AttdAge, PolYear)``, module docstring's numbered
+    construction).
+
+    Every step is derived from ``mgcv``'s own source, not guessed (module
+    docstring), and both margins are ``cr`` — the only basis this function
+    handles, since the reparameterization ``cr`` margins skip (step 2) does not
+    generalize to a basis that does not set ``noterp``.
+
+    Args:
+        x1: Margin-1 covariate values, ``(n,)``.
+        x2: Margin-2 covariate values, ``(n,)``.
+        knots1: Margin-1 knot vector, ``(k1,)``, ``k1 >= 3``.
+        knots2: Margin-2 knot vector, ``(k2,)``, ``k2 >= 3``.
+
+    Returns:
+        ``(design, s1, s2)``: ``design`` is ``(n, (k1-1)*(k2-1))``, column order
+        margin 1 slower / margin 2 faster (module docstring step 4); ``s1`` and
+        ``s2`` are each ``((k1-1)*(k2-1), (k1-1)*(k2-1))``, the two penalty
+        blocks ``mgcv`` assigns independent smoothing parameters to.
+    """
+    x1 = np.asarray(x1, dtype=np.float64)
+    x2 = np.asarray(x2, dtype=np.float64)
+    if x1.shape != x2.shape:
+        raise ValidationError(
+            f"ti_basis: x1 has shape {x1.shape} but x2 has shape {x2.shape} — one "
+            "value per row is required for both margins."
+        )
+
+    design1_unc, s1_unc = cr_basis(x1, knots1)
+    design2_unc, s2_unc = cr_basis(x2, knots2)
+    design1, s1_marg = absorb_sum_to_zero_constraint(design1_unc, s1_unc)
+    design2, s2_marg = absorb_sum_to_zero_constraint(design2_unc, s2_unc)
+    # Step 2 (no-op for cr margins — module docstring): mgcv's np=TRUE
+    # reparameterization is skipped whenever every margin sets `noterp`, which
+    # smooth.construct.cr.smooth.spec always does. Nothing to apply here.
+
+    s1_norm = s1_marg / _leading_eigenvalue(s1_marg)
+    s2_norm = s2_marg / _leading_eigenvalue(s2_marg)
+
+    d1 = design1.shape[1]
+    d2 = design2.shape[1]
+    design = np.einsum("ij,ik->ijk", design1, design2).reshape(design1.shape[0], d1 * d2)
+
+    eye1 = np.eye(d1, dtype=np.float64)
+    eye2 = np.eye(d2, dtype=np.float64)
+    s1_full = np.kron(s1_norm, eye2)
+    s2_full = np.kron(eye1, s2_norm)
+
+    max_x_inf_norm_sq = _r_norm_inf(design) ** 2
+    if max_x_inf_norm_sq == 0.0:
+        raise ComputationError("ti_basis: the tensor design matrix is identically zero.")
+    s1_scale = _r_norm_one(s1_full) / max_x_inf_norm_sq
+    s2_scale = _r_norm_one(s2_full) / max_x_inf_norm_sq
+    if s1_scale == 0.0 or s2_scale == 0.0:
+        raise ComputationError("ti_basis: an unscaled tensor penalty is identically zero.")
+
+    return design, s1_full / s1_scale, s2_full / s2_scale
+
+
+def sz_basis(
+    x: np.ndarray, group: np.ndarray, n_levels: int, knots: np.ndarray
+) -> tuple[np.ndarray, tuple[np.ndarray, ...]]:
+    """The single-factor ``s(<factor>, x, bs="sz", xt=list(bs="cr"))`` design and its
+    ``n_levels`` penalty blocks (slice 6, module docstring's numbered construction).
+
+    Args:
+        x: The smoothed margin's covariate values, ``(n,)``.
+        group: 0-indexed factor-level code per row, ``(n,)`` integers in
+            ``[0, n_levels)`` — the same convention as a 0-indexed R factor
+            (``as.integer(fac) - 1``).
+        n_levels: Number of factor levels (``mgcv``'s ``length(levels(fac))``).
+        knots: The smoothed margin's knot vector, ``(k,)``, ``k >= 3``.
+
+    Returns:
+        ``(design, s_blocks)``: ``design`` is ``(n, k * (n_levels - 1))``;
+        ``s_blocks`` has one entry per factor level (``mgcv``'s own bookkeeping,
+        module docstring point 4 — the rank ``mgcv`` reports is the *pre-constraint*
+        per-level rank, unchanged by the constraint transform, which is why
+        :func:`~hgam.engine.gam_term_build.build_python_sz_term` computes
+        ``rank`` from these blocks directly rather than assuming it equals the
+        base rank), each ``(k * (n_levels - 1), k * (n_levels - 1))``.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    group = np.asarray(group, dtype=np.int64)
+    if group.shape != x.shape:
+        raise ValidationError(
+            f"sz_basis: x has shape {x.shape} but group has shape {group.shape} — "
+            "one factor-level code per row is required."
+        )
+    if n_levels < 2:
+        raise ValidationError(f"sz_basis needs at least 2 factor levels; got {n_levels}.")
+    if group.min(initial=0) < 0 or group.max(initial=0) >= n_levels:
+        raise ValidationError(
+            f"sz_basis: group codes must lie in [0, {n_levels}); got range [{group.min()}, {group.max()}]."
+        )
+
+    design_base, s_base = _cr_basis_raw(x, knots)
+    n, p0 = design_base.shape
+
+    design_full = np.zeros((n, p0 * n_levels), dtype=np.float64)
+    for level in range(n_levels):
+        mask = group == level
+        design_full[mask, level * p0 : (level + 1) * p0] = design_base[mask, :]
+
+    # The constraint matrix (module docstring point 4): D compares each of the
+    # first (n_levels - 1) levels against the last one; M = D ⊗ I_p0 applies that
+    # per-level contrast to every base column independently.
+    contrast = np.zeros((n_levels, n_levels - 1), dtype=np.float64)
+    contrast[: n_levels - 1, :] = np.eye(n_levels - 1, dtype=np.float64)
+    contrast[n_levels - 1, :] = -1.0
+    m = np.kron(contrast, np.eye(p0, dtype=np.float64))
+
+    design = design_full @ m
+
+    max_x_inf_norm_sq = _r_norm_inf(design_full) ** 2
+    if max_x_inf_norm_sq == 0.0:
+        raise ComputationError("sz_basis: the pre-constraint design is identically zero.")
+    scale = _r_norm_one(s_base) / max_x_inf_norm_sq
+    if scale == 0.0:
+        raise ComputationError("sz_basis: the unscaled penalty is identically zero.")
+    s_base_scaled = s_base / scale
+
+    s_blocks = []
+    for level in range(n_levels):
+        s_full = np.zeros((p0 * n_levels, p0 * n_levels), dtype=np.float64)
+        s_full[level * p0 : (level + 1) * p0, level * p0 : (level + 1) * p0] = s_base_scaled
+        s_final = m.T @ s_full @ m
+        s_blocks.append((s_final + s_final.T) / 2.0)
+
+    return design, tuple(s_blocks)

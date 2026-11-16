@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's tenth slice (the exit formula on bam(discrete=TRUE, select=TRUE), section 14). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's eleventh slice (hgam.bam / hgam.gam wired; the exit test passes). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -52,22 +52,24 @@ response column p = DthCnt / ExposCnt, weights ExposCnt) meets every gate throug
 `hgam.frontend.gam(..., method="fREML", discrete=True, select=True)`: eta 1.1e-4, se 2.6e-4 relative, per-term edf
 2.2e-3 including FaceSize, Smoke and FaceSize:Smoke, full rank (132 of 132) in mgcv and hgam. Structure exact.
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 628 pass,
-1 strict xfail. What differs is in `docs/DEFERRED.md`.
+The public entry points are wired: `hgam.gam` (REML) and `hgam.bam` (`method="fREML", discrete=True` only; bam's
+default `discrete=FALSE` is refused by name) forward to `hgam.frontend.api.gam`, with `family=` as mgcv writes it or
+`family="binomial", link="cloglog"`. A response `a / b` is evaluated as R's `model.frame` does (other left-hand
+expressions are refused; a zero denominator is refused). **The exit test passes**: `tests/test_exit.py` fits
+`hgam_formula` as written on section 14's data and knots through `hgam.bam` and meets every gate. Tests: 639 pass,
+no xfail. What differs is in `docs/DEFERRED.md`.
 
-## Next slice: wire `hgam.bam` / `hgam.gam` to the front end and lift the exit test's strict xfail
+## Next slice: time the exit model against mgcv (M3's one benchmark)
 
-1. `hgam.bam(formula, data, family=, link=, weights=, discrete=, select=, knots=)` in `src/hgam/api.py` calls
-   `hgam.frontend.api.gam(..., method="fREML")`; `hgam.gam` calls it with `method="REML"`. Keep the stubs' mgcv
-   counterpart lines. Refuse by name any keyword not forwarded (never accept and ignore).
-2. The exit formula's left side is `DthCnt / ExposCnt`: either port the response arithmetic for a ratio of two columns
-   (as `model.frame` evaluates it) or refuse it by name and have the test pass the ratio column. Porting the ratio is
-   small and is what the exit test writes; prefer it.
-3. `tests/test_exit.py` passes `data=None`: give it section 14's data (`load_fixture("bam_discrete_exit_formula")`,
-   which carries DthCnt and ExposCnt), pass `knots` from that fixture, and hold the fit to section 14's gates (or
-   reuse the section 14 test's checks). Remove the strict xfail only when it passes; the PR says so.
-
-After that, M3/M4 per `docs/PLAN.md` (predict on new data re-binning, summary).
+`docs/PRIORITIES.md`: "From M3, time the exit-test model against mgcv once per milestone and record it. Tune only
+after the exit test passes, unless a slice is more than ten times slower than mgcv." The exit test now passes.
+1. Time `hgam.bam(hgam_formula, ...)` on section 14's data (n = 4000) and `mgcv::bam(..., discrete = TRUE,
+   select = TRUE)` on section 3's frame in the session's R, each as the median of several runs after a warm-up, on
+   the same machine. Record both and the ratio in one place (`docs/findings/`, one short note) and one log line; no
+   new dependency (use `time.perf_counter` and R's `system.time`). Add no timing assertion to the test suite.
+2. If hgam is more than ten times slower, profile once and write the hot spot into this file as the slice after;
+   otherwise the slice after is M4 per `docs/PLAN.md` (`predict` on new data re-binning as `predict.bam` does,
+   `docs/DEFERRED.md`; then `summary`).
 
 ## Open items for Jonathan
 

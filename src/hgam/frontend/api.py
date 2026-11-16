@@ -706,6 +706,13 @@ def gam(
         knots=knots,
     )
     y = _numeric(data, parsed.response)
+    if parsed.response_denominator is not None:
+        denominator = _numeric(data, parsed.response_denominator)
+        if np.any(denominator == 0):
+            raise HgamValidationError(
+                f"gam(): the response divides by column {parsed.response_denominator!r}, which has zeros."
+            )
+        y = y / denominator
     if discrete:
         fit = fit_engine_bam(model, arrays, y)
     else:
@@ -730,7 +737,8 @@ def gam(
     return GamFit(
         **{f: getattr(fit, f) for f in EngineGAMFit.__dataclass_fields__},
         formula=formula,
-        response=parsed.response,
+        response=parsed.response
+        + ("" if parsed.response_denominator is None else f" / {parsed.response_denominator}"),
         factor_levels={name: c.levels for name, c in codings.items()},
         numeric_columns=numeric_columns,
         smooth_labels=tuple(label for label, _ in smooth_meta),

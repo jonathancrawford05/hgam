@@ -43,8 +43,15 @@ The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a str
 
 ## Next slice
 
-If Jonathan has answered the 10b question on the open pull request, apply the answer there first (rule 1 of
-`DAILY_DEV.md`). Otherwise the pull request waits.
+First, on the open pull request (PR #12): apply Jonathan's decision on section 10b, option B (below). It answers the
+review's Blocking 1.
+1. `oracle/make_fixtures.R`, section 10b: besides the default fit, record mgcv refitted with
+   `control = gam.control(newton = list(conv.tol = 1e-12))`: its eta, se, edf, sp and REML score (`gcv.ubre`), and
+   the default fit's REML score. No hgam output goes into the R script.
+2. `tests/test_cr_by_numeric.py`: gate eta at the estimated sp at 1e-3 against the tight fit, and assert the
+   fixture's own justification (mgcv's tight REML score is not higher than its default score). Keep the existing
+   assertions against the default fit.
+3. Regenerate the fixture, update the DEFERRED line and PLAN, and say in the pull request what was measured.
 
 After it merges: `select=TRUE` on the rank-deficient factor + sz shape. Fixture section 11: section 8a's model
 `p ~ f + s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))` with `select=TRUE`, held at the gates in
@@ -54,13 +61,13 @@ decision on PR #8).
 
 ## Open items for Jonathan
 
-- **How to gate eta on section 10b** (`gam_binomial_cloglog_by_numeric_reml`), where mgcv's default Newton search
-  stops short of its own REML optimum on a flat ridge (mgcv's score is lower at hgam's sp; mgcv at conv.tol 1e-12 moves
-  1.4e-3 from its default and lands 1.9e-4 from hgam). Options: (A) port mgcv's `newton` (gam.fit3.r) so hgam stops
-  where mgcv stops: several slices, and the exit model may need it anyway; (B) gate eta at estimated sp against
-  mgcv refitted at a tight `conv.tol` whenever mgcv's own score is lower at hgam's point (fixture records both fits);
-  (C) leave 10b's eta ungated, as now, and rely on 10c and the exit test. Recommendation: B, it holds hgam to mgcv's
-  own optimum at the existing gate and costs one fixture line; switch to A only if the exit model misses on the search.
+None.
+
+Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a fitted quantity at
+estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at the unchanged gate.
+The fixture records both mgcv fits and their REML scores, and the tight fit is the reference only where mgcv's own
+tight score is not higher than its default score. mgcv's `newton` is not ported for this (option A not taken); the
+moved Newton search stays. The rule is in `docs/PRIORITIES.md`.
 
 (PR #10's question on SETTINGS condition 5 is decided: option (a). A refusal test may be retired when a
 fixture-backed acceptance test of the same input replaces it; the wording is in `docs/routines/SETTINGS.md`.)

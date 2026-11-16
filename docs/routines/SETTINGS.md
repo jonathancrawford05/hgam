@@ -13,6 +13,9 @@ Read by `DAILY_DEV.md` and `PR_REVIEW.md`. Only Jonathan edits this file.
      `docs/PRIORITIES.md`, `oracle/compare_fixtures.py`, or anything in `docs/routines/` other than
      `CONTINUATION.md` and `DEV_SESSION_LOG.md`, which every run must update.
   5. No test was removed, skipped or newly marked xfail, and no gate in `docs/PRIORITIES.md` was loosened.
+     One exception: a test whose only assertion is that an input is refused (`NotImplementedError`) may be removed
+     when the same slice ports that input and adds a test holding it to an mgcv fixture at its gates. The pull
+     request names the removed test and its replacement, and the "Ready" review confirms the replacement.
   6. The "Ready" review ends with a `claude.ai/code/session_...` link, and that link differs from the session
      link at the foot of the pull request body. A review with no session link does not count.
   If any one fails, the pull request waits for Jonathan.

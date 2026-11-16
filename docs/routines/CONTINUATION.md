@@ -1,37 +1,44 @@
 # Continuation
 
-Last updated: 2026-11-15, by the setup session. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-15, by the development run that moved the engine. Read `docs/PRIORITIES.md` before
+choosing work.
 
 ## State
 
-Scaffold only. `hgam.gam` and `hgam.bam` raise `NotImplementedError`. Tests: 5 pass, 1 strict xfail
-(the exit test). Fixtures are tier 1 (local R 4.3.3, mgcv 1.9-1): provisional.
+M0 is done: the polaris-re GAM engine is in `src/hgam/engine/` (bases, families, fit, REML and its
+derivatives, smoothing-parameter search, covariance, prediction, `gam_term_build.py` with the term
+builders taken out of polaris-re's `gam_stage_a.py`) and `src/hgam/frontend/` (`api.py`, `formula.py`,
+`summary.py`, `bam_fit.py`, `bam_fitd.py`, `discrete.py` with `compress.df`). Errors are in `hgam.errors`: `HgamNotImplementedError` (a
+`NotImplementedError`) for anything not ported, `HgamValidationError` for invalid input.
+Nothing imports `polaris_re`. The six mgcv-ported functions carry `mgcv counterpart:` lines naming mgcv
+1.9-1, the version they were read from: `bam_fitd`, `_fit_chol`, `initial_log10_lambda_from_xx_diag`,
+`compress_covariates`, `default_m`, `_tero`.
 
-## Next slice: M0, move the engine
+The front end takes a mapping of NumPy columns plus `hgam.frontend.Factor`. polars was dropped, not
+added as a dependency. The top-level `hgam.gam` / `hgam.bam` are still stubs, so the exit test stays a
+strict xfail. Tests: 583 pass, 1 strict xfail. What did not move is listed in `docs/DEFERRED.md`.
 
-See `docs/PLAN.md`, "M0, second slice". Take it in steps of one pull request each:
+The six ported functions are held to mgcv fixtures (`oracle/make_fixtures.R` section 4,
+`tests/test_ported_functions.py`): `tero`, `compress.df`, `initial.sp`, `Sl.fitChol` and two `bgam.fitd` fits
+on bam's own design. Jonathan's ruling on PR #3: a moved port is not exempt from PR_REVIEW §B unless it
+brings its fixture tests. The rest of the engine was re-derived, not ported, and its moved tests are closed-form
+and self-consistency checks. Each M1 slice that re-ports a piece adds its fixture.
 
-1. Bases and families: `gam_basis_cr`, `gam_basis_tp`, `gam_basis_re`, `gam_basis_parametric`, `gam_family`,
-   `gam_term_spec`, with their tests. No import from `polaris_re`.
-2. Fitting core: `gam_fit`, `gam_reml*`, `gam_derivatives`, `gam_initial_sp`, `gam_dispersion`, `gam_model`.
-3. Inference and front end: `gam_predict`, `gam_vcov`, `gam_uncertainty`, `gam_select_penalty`,
-   `gam_rank_pivot`, and `gam/api.py`, `formula.py`, `summary.py`, `bam_fit.py`, `bam_fitd.py`.
+## Next slice: M1, first slice
 
-polaris-re is public: clone it read-only into a scratch directory. Replace its `PolarisValidationError` and
-`PolarisComputationError` with `hgam.errors` equivalents; drop the `core.verification` claim objects. The six
-functions ported from mgcv source gain their counterpart lines. Each step is done when the moved tests pass here.
-
-## Routines
-
-- Daily development: `docs/routines/DAILY_DEV.md`. Review: `docs/routines/PR_REVIEW.md`. Merging:
-  `docs/routines/SETTINGS.md` (`auto_merge` is on, behind five conditions).
-- Both run as Claude Code scheduled tasks bound to sessions with this repository attached.
+Start "After the move" in `docs/PLAN.md`: the outer smoothing-parameter search. Port mgcv's `newton`
+(gam.fit3.r, at the pinned version 1.9-4) in place of `hgam.engine.gam_reml_newton.newton_select_lambdas`,
+keeping its function boundary. Add a `gam(..., method="REML")` fixture to `oracle/make_fixtures.R` for a
+small cr + ti binomial-cloglog model with `sp` and `edf` per term, then test the linear predictor and edf
+against the gates. `gam_poisson_offset_reml.json` is already a REML fixture you can reuse.
 
 ## Open items for Jonathan
 
-None. The first development run should download the `fixtures-tier3` artifact from the latest CI run on `main`
-and commit it over the tier 1 fixtures, as part of its first pull request.
+- The `fixtures-tier3` artifact (CI run 43727740202 on `main`) could not be downloaded here: the
+  network policy blocks the artifact host (`productionresultssa32.blob.core.windows.net`). The
+  committed fixtures are still tier 1. Either allow that host in the environment, or commit the
+  artifact by hand.
 
 ## Open questions
 
-None.
+None. (Answered on PR #3: ports need their fixture tests to count as moved; they now have them.)

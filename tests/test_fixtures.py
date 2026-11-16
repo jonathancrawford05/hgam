@@ -3,7 +3,17 @@
 import numpy as np
 import pytest
 
-NAMES = ["smoothcon_cr_k6_knots", "gam_poisson_offset_reml", "exit_hgam_formula_structure"]
+NAMES = [
+    "smoothcon_cr_k6_knots",
+    "gam_poisson_offset_reml",
+    "exit_hgam_formula_structure",
+    "tero_margin_order",
+    "compress_df_cases",
+    "initial_sp_xx",
+    "sl_fitchol",
+    "bgam_fitd_poisson",
+    "bgam_fitd_binomial_cloglog",
+]
 
 
 @pytest.mark.parametrize("name", NAMES)

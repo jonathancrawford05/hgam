@@ -22,7 +22,12 @@ not in those files, the repository or GitHub, it does not exist.
 
 - Follow `CLAUDE.md` exactly. This is a port: read the mgcv source at the pinned version and follow it; every
   ported function names its mgcv counterpart; parity is measured against fixtures; refuse what is not ported.
-- **One open development pull request at a time.**
+- **One open development pull request at a time.** Step 2 comes before any other work, whatever message started
+  this session: list open pull requests first. If one is open, this run is about that pull request only.
+- **Never review your own work.** The development session does not run `PR_REVIEW.md` or post a review, even to
+  unblock a merge. If a review is missing, report "waiting for review" and stop.
+- **Keep slices small.** If the next task would exceed about 600 changed lines outside fixtures, do its first
+  step only, even if the message that started the session asked for more.
 - Never push to `main`, never force-push a branch with an open pull request, never approve your own pull
   request. Merge only as `SETTINGS.md` allows.
 - Never skip, xfail or loosen a test to get green. A strict xfail for a later milestone is allowed only when the
@@ -62,7 +67,7 @@ Apply the first rule that matches:
    on the pull request's branch and nothing else. Account for every item once in "Review follow-up", tagged
    with the review's short SHA: **fixed** (commit), **declined** (reason and evidence), or **for Jonathan**.
    A finding that returns after being declined goes to Jonathan.
-2. **Ready, and `auto_merge: on`.** Check each of the five conditions in `SETTINGS.md` yourself, from GitHub and
+2. **Ready, and `auto_merge: on`.** Check each of the six conditions in `SETTINGS.md` yourself, from GitHub and
    the diff, and list them with their evidence in a pull request comment before merging. If all hold,
    squash-merge, delete the branch, and continue with rule 4 while `max_slices_per_run` allows. If any fails,
    say which under "Questions for Jonathan" and stop.
@@ -106,9 +111,10 @@ Record the counts. If `main` is red, this run's only job is the smallest correct
   order. Where NumPy or LAPACK replaces mgcv's C, say so in the docstring.
 - Each ported function's docstring starts with its counterpart, for example
   ``mgcv counterpart: bgam.fitd (bam.r), mgcv 1.9-4``.
-- Fixtures: add the case to `oracle/make_fixtures.R`. If R with mgcv is available in the session, run
-  `make fixtures` (tier 1). Otherwise commit the generator change and say in the pull request that the fixture
-  must come from the `oracle-fixtures` workflow. Fixtures from that workflow (tier 3) replace tier 1 ones.
+- Fixtures: add the case to `oracle/make_fixtures.R` and commit what `make fixtures` writes (tier 1, from the
+  session's own R). That is enough: CI's `oracle` job regenerates every fixture in the pinned image and runs the
+  suite against those, so tier 1 copies in the repository never decide a merge. Do not try to download CI
+  artifacts; the session's network policy blocks them.
 - Unsupported input raises `NotImplementedError` naming what is missing. Nothing is accepted and ignored.
 - If an approach fails three times, stop. Write up what you tried in the log and open the pull request with
   what is solid, or none.

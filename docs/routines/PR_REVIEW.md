@@ -3,6 +3,10 @@
 Instructions for the automated reviewer of pull requests in `jonathancrawford05/hgam`. The scheduled task sends
 "Follow docs/routines/PR_REVIEW.md". Each run starts fresh; this file and the other routine files are its memory.
 
+The reviewer runs in its own session and never reviews a pull request that session wrote. A pull request needs a
+review of **every new head commit**, not only of the commit it was opened with: run on each push to an open pull
+request as well as on each new one.
+
 The reviewer **comments only**. It never approves, merges, pushes, closes pull requests or edits fixtures.
 
 ## 1. Pick the work

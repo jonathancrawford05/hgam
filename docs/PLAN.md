@@ -27,3 +27,7 @@ counterpart line: `bam_fitd`, `_fit_chol`, `initial_log10_lambda_from_xx_diag`,
 
 Replace re-derived pieces with direct ports where they differ from mgcv's own path, starting with
 the outer smoothing-parameter search, where the old engine recorded disagreements on flat criteria.
+
+- Outer smoothing-parameter search (done 2026-11-16): the moved Newton search meets the gates on
+  `gam_binomial_cloglog_ti_reml` and `gam_poisson_offset_reml` (`tests/test_gam_reml_fixtures.py`), so
+  mgcv's `newton` is not ported. Re-port it only if a later fixture fails a gate on the search.

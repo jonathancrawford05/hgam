@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16: M1, outer REML search held to mgcv
+
+Measured the moved Newton REML search against two `gam(method="REML")` fixtures (new: cr + ti binomial-cloglog with weights, section 5; existing: Poisson offset, section 2) instead of porting `newton`: it meets every gate, so it stays ("reuse before porting").
+Tests: 583 pass and 1 xfail before; 586 pass and 1 xfail after. `make lint` is clean.
+Largest differences (tier 1, mgcv 1.9-1): eta 5.7e-10 / 9.6e-7, edf 1.1e-8 / 2.9e-5, se 8.6e-4 / 5.9e-6 relative; sp agree to 1e-7.
+Deferred: the REML score's normalising constant (not a key result) and the 8.6e-4 se difference (inside its gate).
+
 ## 2026-11-15: M0, move the engine
 
 Moved 28 engine and front-end modules (about 10,800 lines) from polaris-re into `hgam.engine` and `hgam.frontend`, with no `polaris_re` imports left; dropped polars for NumPy columns; added mgcv counterpart lines to the six ported functions.

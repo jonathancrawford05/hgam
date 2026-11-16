@@ -24,6 +24,7 @@ d$deaths <- rpois(n, d$expo * exp(-6 + 0.07 * (d$age - 40) - 0.4 * exp(-d$dur / 
 m <- gam(deaths ~ s(age, bs = "cr", k = 8) + s(dur, bs = "cr", k = 5) + offset(log(expo)),
          family = poisson, data = d, method = "REML")
 put("gam_poisson_offset_reml", list(data = d, formula = "deaths ~ s(age, bs='cr', k=8) + s(dur, bs='cr', k=5) + offset(log(expo))",
+    labels = sapply(m$smooth, function(s) s$label),
     family = "poisson", method = "REML", sp = unname(m$sp), edf = unname(summary(m)$edf), edf_total = sum(m$edf),
     n_coef = length(coef(m)), coef = unname(coef(m)), eta = as.numeric(predict(m, type = "link")),
     reml = as.numeric(m$gcv.ubre), se = as.numeric(predict(m, se.fit = TRUE)$se.fit)))
@@ -142,5 +143,16 @@ d7$p <- rbinom(n, d7$n, 1 - exp(-exp(-4.5 + 0.05 * (d7$age - 40) - 0.4 * exp(-d7
 f7 <- "p ~ s(age, bs='cr', k=8) + s(dur, bs='cr', k=5) + ti(age, dur, bs='cr', k=c(5, 4))"
 m7 <- gam(as.formula(f7), family = binomial(link = "cloglog"), weights = n, data = d7, method = "REML")
 put("gam_binomial_cloglog_ti_reml", gam_case(m7, d7, f7, "binomial(link='cloglog')"))
+
+# 6. user-supplied knots (smooth.construct.cr.smooth.spec, smooth.r), as the exit test passes them: one knot
+# vector per covariate, shared by its s() term and its ti() margin, so the ti margin k equals the s() k.
+set.seed(8); n <- 1500
+d8 <- data.frame(age = runif(n, 20, 90), dur = runif(n, 1, 21), n = sample(20:200, n, TRUE))
+d8$p <- rbinom(n, d8$n, 1 - exp(-exp(-4.5 + 0.05 * (d8$age - 40) - 0.4 * exp(-d8$dur / 4) +
+                                     0.15 * sin(d8$age / 10) * cos(d8$dur / 5)))) / d8$n
+k8 <- list(age = c(20, 25, 30, 40, 50, 65, 80, 90), dur = c(1, 2, 4, 9, 21))
+f8 <- "p ~ s(age, bs='cr', k=8) + s(dur, bs='cr', k=5) + ti(age, dur, bs='cr', k=c(8, 5))"
+m8 <- gam(as.formula(f8), family = binomial(link = "cloglog"), weights = n, data = d8, knots = k8, method = "REML")
+put("gam_binomial_cloglog_knots_reml", c(gam_case(m8, d8, f8, "binomial(link='cloglog')"), list(knots = k8)))
 
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

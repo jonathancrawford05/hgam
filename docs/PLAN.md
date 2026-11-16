@@ -52,3 +52,6 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   first `discrete.mf` step of M3): `tests/test_bam_discrete_fixtures.py`, section 12. Covariates are binned per
   variable by `compress.df` before the fit (`discretise_frame`); without it hgam matched mgcv's `discrete = FALSE` bam
   (8e-9) and missed its discrete bam (eta 4.0e-3).
+- `bam(discrete=TRUE, select=TRUE)` on a factor beside its sz smooth and on a numeric `by` (done 2026-11-16):
+  `tests/test_bam_discrete_fixtures.py`, section 13. Full rank with select in mgcv and hgam; every term, the factor
+  included, meets the per-term edf gate.

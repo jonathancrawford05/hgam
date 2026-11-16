@@ -14,6 +14,7 @@ NAMES = [
     "bgam_fitd_poisson",
     "bgam_fitd_binomial_cloglog",
     "gam_binomial_cloglog_ti_reml",
+    "gam_binomial_cloglog_knots_reml",
 ]
 
 

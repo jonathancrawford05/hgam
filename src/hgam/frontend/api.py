@@ -388,6 +388,21 @@ def _tero(call: TensorCall) -> TensorCall:
     return TensorCall(variables=tuple(call.variables[i] for i in order), k=tuple(ks[i] for i in order))
 
 
+def _supplied_knots(knots: Mapping[str, Sequence[float]] | None) -> dict[str, tuple[float, ...]]:
+    """``knots=`` as ``{variable: locations}``, mgcv's ``knots = list(x = c(...))``."""
+    if knots is None:
+        return {}
+    if not isinstance(knots, Mapping):
+        raise HgamValidationError("gam(): knots= must be a mapping from variable name to knot locations.")
+    out: dict[str, tuple[float, ...]] = {}
+    for name, locations in knots.items():
+        values = np.asarray(locations, dtype=np.float64)
+        if values.ndim != 1 or not np.all(np.isfinite(values)):
+            raise HgamValidationError(f"gam(): knots[{name!r}] must be a 1-D sequence of finite numbers.")
+        out[str(name)] = tuple(float(v) for v in values)
+    return out
+
+
 def _build_model(
     parsed: ParsedFormula,
     df: Mapping[str, object],
@@ -398,8 +413,32 @@ def _build_model(
     select: bool,
     allow_unverified_select: bool = False,
     tero: bool = False,
+    knots: Mapping[str, Sequence[float]] | None = None,
 ) -> tuple[ModelSpec, dict[str, np.ndarray], dict[str, _FactorCoding], list[tuple[str, int]]]:
     data: dict[str, np.ndarray] = {}
+    supplied = _supplied_knots(knots)
+    used_knots: set[str] = set()
+
+    def cr_knots(variable: str, k: int, where: str) -> tuple[tuple[str, tuple[float, ...]], ...] | None:
+        """mgcv's ``smooth.construct.cr.smooth.spec`` reads ``knots[[term]]`` and stops when its
+        length is not ``k``."""
+        if variable not in supplied:
+            return None
+        used_knots.add(variable)
+        if len(supplied[variable]) != k:
+            raise HgamValidationError(
+                f"gam(): {where}: number of supplied knots for {variable!r} "
+                f"({len(supplied[variable])}) != k ({k}) for a cr smooth (mgcv stops here too)."
+            )
+        return ((variable, supplied[variable]),)
+
+    def refuse_knots(variable: str, where: str) -> None:
+        if variable in supplied:
+            raise HgamNotImplementedError(
+                f"gam(): knots= for {variable!r} reaches {where}; supplied knots are ported for "
+                'bs="cr" smooths and ti(bs="cr") margins only.'
+            )
+
     codings: dict[str, _FactorCoding] = {}
 
     def need_numeric(name: str, where: str) -> None:
@@ -455,9 +494,23 @@ def _build_model(
             for v in call.variables:
                 need_numeric(v, call.text)
             call = _tero(call) if tero else call
-            smooth.append(TermSpec(label=call.text, variables=call.variables, basis="ti", k=call.k))
+            margin_knots = tuple(
+                pair
+                for v, k in zip(call.variables, call.k, strict=True)
+                for pair in (cr_knots(v, k, call.text) or ())
+            )
+            smooth.append(
+                TermSpec(
+                    label=call.text,
+                    variables=call.variables,
+                    basis="ti",
+                    k=call.k,
+                    knots=margin_knots or None,
+                )
+            )
             smooth_meta.append((call.text, int(np.prod(call.k))))
         elif call.basis == "re":
+            refuse_knots(call.variable, call.text)
             levels = need_factor(call.variable).levels
             smooth.append(
                 TermSpec(label=call.text, variables=(call.variable,), basis="re", n_levels=len(levels))
@@ -467,10 +520,19 @@ def _build_model(
             assert call.k is not None
             need_numeric(call.variable, call.text)
             if call.basis == "tp":
+                refuse_knots(call.variable, call.text)
                 smooth.append(TermSpec(label=call.text, variables=(call.variable,), basis="tp", k=(call.k,)))
                 smooth_meta.append((call.text, call.k))
             elif call.by is None:
-                smooth.append(TermSpec(label=call.text, variables=(call.variable,), basis="cr", k=(call.k,)))
+                smooth.append(
+                    TermSpec(
+                        label=call.text,
+                        variables=(call.variable,),
+                        basis="cr",
+                        k=(call.k,),
+                        knots=cr_knots(call.variable, call.k, call.text),
+                    )
+                )
                 smooth_meta.append((call.text, call.k))
             elif _is_factor(_column(df, call.by)):
                 levels = need_factor(call.by).levels
@@ -480,6 +542,7 @@ def _build_model(
                     k=call.k,
                     by_factor=call.by,
                     n_levels=len(levels),
+                    knots=dict(cr_knots(call.variable, call.k, call.text) or ()).get(call.variable),
                     level_labels=tuple(f"{call.by}{lv}" for lv in levels),
                 ):
                     smooth.append(spec)
@@ -493,11 +556,18 @@ def _build_model(
                         variables=(call.variable,),
                         basis="cr",
                         k=(call.k,),
+                        knots=cr_knots(call.variable, call.k, call.text),
                         by=call.by,
                     )
                 )
                 smooth_meta.append((label, call.k))
 
+    unused = sorted(set(supplied) - used_knots)
+    if unused:
+        raise HgamValidationError(
+            f"gam(): knots= names {unused}, which no cr smooth or ti margin in the formula uses. "
+            "mgcv ignores such entries; hgam refuses rather than ignore an argument."
+        )
     if select and not allow_unverified_select:
         _refuse_select_with_bare_and_factor_by(smooth)
     if weights is not None:
@@ -527,6 +597,7 @@ def gam(
     allow_unverified_select: bool = False,
     method: str = "REML",
     discrete: bool = False,
+    knots: Mapping[str, Sequence[float]] | None = None,
 ) -> GamFit:
     """Fit an ``mgcv`` GAM formula from the verified subset by REML (or fREML, ``discrete=True``).
 
@@ -558,6 +629,11 @@ def gam(
             for poisson and binomial only; the smoothing parameters are the iteration's end
             state, so they differ from ``method="REML"``'s by design. The pair is accepted
             only together; every other combination is refused by name.
+        knots: ``mgcv``'s ``knots = list(x = c(...))``: knot locations per variable, used as given by
+            every ``bs="cr"`` smooth of that variable and every ``ti`` margin on it (mgcv counterpart:
+            ``smooth.construct.cr.smooth.spec``, smooth.r, mgcv 1.9-4, which stops when the count is
+            not ``k``). Knots for a variable reached only by a ``tp`` or ``re`` term are refused, and
+            so are names no smooth uses (mgcv ignores those).
 
     Returns:
         a :class:`GamFit` (a :class:`~hgam.engine.gam_model.EngineGAMFit`
@@ -592,6 +668,7 @@ def gam(
         select,
         allow_unverified_select,
         tero=discrete,
+        knots=knots,
     )
     y = _numeric(data, parsed.response)
     if discrete:

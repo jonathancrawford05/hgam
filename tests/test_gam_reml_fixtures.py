@@ -1,4 +1,4 @@
-"""``gam(method="REML")`` fits held to ``mgcv::gam`` fixtures (``oracle/make_fixtures.R`` sections 2 and 5).
+"""``gam(method="REML")`` fits held to ``mgcv::gam`` fixtures (``make_fixtures.R`` sections 2, 5 and 6).
 
 The outer smoothing-parameter search here is the moved engine's safeguarded Newton
 (``hgam.engine.gam_reml_newton``), which re-derives rather than ports mgcv's ``newton`` (gam.fit3.r).
@@ -36,6 +36,13 @@ CASES = {
         weights="n",
         derived={},
     ),
+    # section 6: the same model shape with user-supplied knots shared by s() and the ti() margins.
+    "gam_binomial_cloglog_knots_reml": dict(
+        formula='p ~ s(age, bs="cr", k=8) + s(dur, bs="cr", k=5) + ti(age, dur, bs="cr", k=c(8, 5))',
+        family='binomial(link="cloglog")',
+        weights="n",
+        derived={},
+    ),
 }
 
 
@@ -46,11 +53,13 @@ def test_gam_reml_meets_the_gates(load_fixture, name: str) -> None:
     data = _columns(fx)
     for col, make in case["derived"].items():
         data[col] = make(data)
-    fit = gam(case["formula"], data, case["family"], weights=case["weights"], method="REML")
+    fit = gam(
+        case["formula"], data, case["family"], weights=case["weights"], method="REML", knots=fx.get("knots")
+    )
 
     assert fit.converged
     # Structure: exact.
-    labels = fx.get("labels", ["s(age)", "s(dur)"])
+    labels = fx["labels"]
     assert list(fit.smooth_labels) == labels
     assert fit.coef.size == fx["n_coef"]
     assert fit.log_lambda.size == len(fx["sp"])

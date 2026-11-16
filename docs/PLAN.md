@@ -31,3 +31,5 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - Outer smoothing-parameter search (done 2026-11-16): the moved Newton search meets the gates on
   `gam_binomial_cloglog_ti_reml` and `gam_poisson_offset_reml` (`tests/test_gam_reml_fixtures.py`), so
   mgcv's `newton` is not ported. Re-port it only if a later fixture fails a gate on the search.
+- User-supplied knots for cr smooths and ti margins (done 2026-11-16, an M2 item the exit test needs):
+  `tests/test_cr_knots.py`, `gam_binomial_cloglog_knots_reml`.

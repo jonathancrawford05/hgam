@@ -268,4 +268,49 @@ m11b <- gam(as.formula(f8b), family = binomial(link = "cloglog"), weights = n, d
 put("gam_binomial_cloglog_two_sz_select_reml", c(rank_case(m11b, d11, f8b, list(x = sz_knots, z = sz_knots)),
                                                  list(select = TRUE)))
 
+# 12. bam(method = "fREML", discrete = TRUE) (bgam.fitd and discrete.mf, bam.r), the exit test's fitter, on section 5's
+# cr + ti model (12a) and section 7's sz model (12b, knots shared). discrete.mf bins each smooth's (or ti margin's)
+# covariates with compress.df, so mgcv's discrete fit sits ~1e-3 from its own exact fit; bam at discrete = FALSE is
+# recorded beside it ("exact") so a difference can be placed on the binning or on the iteration.
+bam_disc_case <- function(b, d, formula, family, extra = list()) {
+  c(list(data = d, formula = formula, family = family, method = "fREML", discrete = TRUE, sp = unname(b$sp),
+         sp_labels = names(b$sp), labels = sapply(b$smooth, function(s) s$label),
+         edf = sapply(b$smooth, function(sm) sum(b$edf[sm$first.para:sm$last.para])), edf_total = sum(b$edf),
+         n_coef = length(coef(b)), eta = as.numeric(b$linear.predictors),
+         se = as.numeric(predict(b, se.fit = TRUE)$se.fit), iter = b$iter), extra)
+}
+bam_exact <- function(b) list(sp = unname(b$sp), edf = sapply(b$smooth, function(sm) sum(b$edf[sm$first.para:sm$last.para])),
+                              eta = as.numeric(b$linear.predictors), se = as.numeric(predict(b, se.fit = TRUE)$se.fit))
+b12a <- bam(as.formula(f7), family = binomial(link = "cloglog"), weights = n, data = d7, method = "fREML", discrete = TRUE)
+b12ae <- bam(as.formula(f7), family = binomial(link = "cloglog"), weights = n, data = d7, method = "fREML")
+put("bam_discrete_binomial_cloglog_ti", bam_disc_case(b12a, d7, f7, "binomial(link='cloglog')",
+                                                       list(exact = bam_exact(b12ae))))
+b12b <- bam(as.formula(f10), family = binomial(link = "cloglog"), weights = n, data = d10, knots = list(x = sz_knots),
+            method = "fREML", discrete = TRUE)
+b12be <- bam(as.formula(f10), family = binomial(link = "cloglog"), weights = n, data = d10, knots = list(x = sz_knots),
+             method = "fREML")
+put("bam_discrete_binomial_cloglog_sz", bam_disc_case(b12b, d10, f10, "binomial(link='cloglog')",
+                                                       list(knots = list(x = sz_knots), exact = bam_exact(b12be))))
+
+# 12c, 12d: 12a and 12b with select = TRUE, as the exit test fits.
+b12c <- bam(as.formula(f7), family = binomial(link = "cloglog"), weights = n, data = d7, method = "fREML", discrete = TRUE,
+            select = TRUE)
+b12ce <- bam(as.formula(f7), family = binomial(link = "cloglog"), weights = n, data = d7, method = "fREML", select = TRUE)
+put("bam_discrete_binomial_cloglog_ti_select", bam_disc_case(b12c, d7, f7, "binomial(link='cloglog')",
+                                                              list(select = TRUE, exact = bam_exact(b12ce))))
+b12d <- bam(as.formula(f10), family = binomial(link = "cloglog"), weights = n, data = d10, knots = list(x = sz_knots),
+            method = "fREML", discrete = TRUE, select = TRUE)
+b12de <- bam(as.formula(f10), family = binomial(link = "cloglog"), weights = n, data = d10, knots = list(x = sz_knots),
+             method = "fREML", select = TRUE)
+put("bam_discrete_binomial_cloglog_sz_select", bam_disc_case(b12d, d10, f10, "binomial(link='cloglog')",
+                                                              list(knots = list(x = sz_knots), select = TRUE,
+                                                                   exact = bam_exact(b12de))))
+# 12e: section 10's numeric-by model (f14 on d14, knots shared): discrete.mf compresses the by variable on its own,
+# before the margin.
+b12e <- bam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, data = d14, knots = list(x = sz_knots),
+            method = "fREML", discrete = TRUE)
+b12ee <- bam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, data = d14, knots = list(x = sz_knots),
+             method = "fREML")
+put("bam_discrete_binomial_cloglog_by_numeric", bam_disc_case(b12e, d14, f14, "binomial(link='cloglog')",
+                                                               list(knots = list(x = sz_knots), exact = bam_exact(b12ee))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

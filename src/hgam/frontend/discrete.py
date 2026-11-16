@@ -2,8 +2,8 @@
 
 Moved from polaris-re's ``gam/bam_binning_conformance.py``; the comparison harness and its
 claim objects stayed behind. Ported from the mgcv 1.9-1 source; polaris-re checked the pinned
-1.9-4 by behaviour only. Nothing calls this yet: ``discrete.mf`` and the padded frame that
-``bam`` builds its smooths on arrive in M3.
+1.9-4 by behaviour only. :func:`discretise_frame` is the subset of ``discrete.mf`` the
+supported terms reach; ``fit_engine_bam`` fits on the frame it returns.
 
 What the source says: for one covariate ``m = 1000``; two jointly ``m = 100``; more, ``25``.
 If the covariate(s) have no more than ``m ** n_numeric * prod(n_factor_levels)`` unique rows,
@@ -11,13 +11,15 @@ nothing is binned and the cells are the unique rows. Only above that are numeric
 to ``m`` evenly spaced points over their range.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import numpy as np
 
-from hgam.errors import HgamValidationError
+from hgam.engine.gam_term_spec import ModelSpec, TermSpec
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 
-__all__ = ["CompressedTerm", "compress_covariates", "default_m"]
+__all__ = ["CompressedTerm", "compress_covariates", "default_m", "discretise_frame"]
 
 _M_ONE_D = 1000
 _M_TWO_D = 100
@@ -141,3 +143,45 @@ def compress_covariates(
         index=inverse,
         binned=binned,
     )
+
+
+def _numeric_margins(term: TermSpec) -> tuple[str, ...]:
+    """The numeric covariates ``discrete.mf`` compresses for one term, in its order: a numeric
+    ``by`` first, then each margin. Every supported margin is one covariate: ``ti`` margins are
+    marginal smooths, and ``bam(discrete=TRUE)`` gives ``sz`` (``tensor.possible``) one margin per
+    variable (bam.r), of which the first is the factor and is not binned."""
+    if term.basis in ("parametric", "re"):
+        return ()
+    if term.basis in ("cr", "ti"):
+        margins: tuple[str, ...] = term.variables
+    elif term.basis == "sz":
+        margins = term.variables[1:]
+    else:
+        raise HgamNotImplementedError(
+            f"discretise_frame: {term.basis!r} terms are not discretised (only cr, ti, sz, re and factors)."
+        )
+    return ((term.by,) if term.by is not None else ()) + margins
+
+
+def discretise_frame(model: ModelSpec, data: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """mgcv counterpart: ``discrete.mf`` (bam.r), mgcv 1.9-4, for one-covariate margins only.
+
+    Each numeric covariate a smooth reaches is compressed once, on its own, by
+    :func:`compress_covariates` at ``m = NULL`` (``check.term`` reuses an earlier
+    discretisation of the same covariate); factors are never binned. The returned frame has
+    every such column replaced by its discretised value per data row, so a design built on it
+    equals mgcv's ``Xd[[j]][k[, j], ]`` row for row. mgcv builds its bases on the padded frame
+    of unique values instead; basis placement (``place.knots`` takes unique values) is the same,
+    the sum-to-zero constraint is taken over the data rows here rather than over mgcv's padded
+    frame (``docs/DEFERRED.md``).
+    """
+    out = dict(data)
+    done: set[str] = set()
+    for term in model.terms:
+        for name in _numeric_margins(term):
+            if name not in done:
+                out[name] = compress_covariates({name: np.asarray(data[name], dtype=np.float64)}).row_values(
+                    name
+                )
+                done.add(name)
+    return out

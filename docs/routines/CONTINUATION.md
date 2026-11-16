@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's seventh slice (select=TRUE on the factor + sz shapes). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's eighth slice (bam(discrete=TRUE) on cr + ti and on sz). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -39,22 +39,25 @@ refused. 10c (with `select=TRUE`) meets every gate. 10b meets structure, edf and
 at the estimated sp against mgcv refitted at `newton` `conv.tol = 1e-12` (1.9e-4; option B, Jonathan's decision on
 PR #12): mgcv's default stops short of its own REML optimum there.
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 619 pass,
+`bam(method="fREML", discrete=TRUE)` (section 12, `tests/test_bam_discrete_fixtures.py`): `gam(..., method="fREML",
+discrete=True)` bins every numeric covariate a smooth reaches with `compress.df`, one covariate at a time, as
+`discrete.mf` does for one-covariate margins (`hgam.frontend.discrete.discretise_frame`), then runs `bam_fitd`. sz is
+accepted there. On section 5's cr + ti model and section 7's sz model, with and without `select=TRUE`, every key result
+meets its gate (eta at most 3.7e-4); so does section 10's numeric-by model (12e, eta 1e-13). Without binning hgam matched mgcv's `discrete = FALSE` bam instead (8e-9).
+
+The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 625 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
-## Next slice: `bam(discrete=TRUE)` on cr + ti and on sz, held to mgcv
+## Next slice: the exit formula's remaining shapes on `bam(discrete=TRUE, select=TRUE)`
 
-The exit model is fitted with `bam(..., discrete = TRUE, select = TRUE)`. The front end runs it as
-`gam(..., method="fREML", discrete=True)` (`fit_engine_bam`, `tero` margin order). Today only `bgam_fitd_*` (section 3,
-cr only, fixed design) holds that path.
-1. Fixture section 12: `bam(method = "fREML", discrete = TRUE)` on section 5's cr + ti model (`d7`) and on section 7's
-   sz model (`d10`, knots shared), recorded with `gam_case`. Add `select = TRUE` variants if the slice stays small.
-2. Hold `gam(..., method="fREML", discrete=True)` to them at the gates in a new `tests/test_bam_discrete_fixtures.py`.
-   If one misses, compare against mgcv's own `bam` at `discrete = FALSE` before porting anything (the 1e-3 gate already
-   allows for mgcv's own discrete-vs-exact spread, `docs/PRIORITIES.md`).
+Section 12 covers cr, ti, sz and a numeric `by` (12e, without `select`) on the discrete path. The exit formula also
+has factor main effects beside their sz smooths (rank deficient without `select`).
+1. Fixture section 13: `bam(method = "fREML", discrete = TRUE, select = TRUE)` on section 11a's model (`f8a` on `d10`)
+   and on section 10's numeric-by model (`f14` on `d14`), recorded with `bam_disc_case` (exact bam beside it).
+2. Hold them in `tests/test_bam_discrete_fixtures.py` at the gates. If one misses, compare against the recorded
+   `exact` fit first: a match there means the binning, a miss means the iteration.
 
-After that the exit test needs the full formula on discrete with `select = TRUE` (section 3's frame), then wiring
-`hgam.gam` / `hgam.bam`.
+After that: the full exit formula on section 3's frame on the discrete path, then wiring `hgam.gam` / `hgam.bam`.
 
 ## Open items for Jonathan
 
@@ -72,3 +75,6 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 ## Open questions
 
 None.
+
+PR #15 review nit (not done, predates it): an sz term's factor is assumed to be `variables[0]`; `s(x, f, bs="sz")`
+would fail with a bare `ValueError`, not a named refusal. Add the refusal when the sz parser is next touched.

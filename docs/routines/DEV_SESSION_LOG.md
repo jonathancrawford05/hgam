@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16 (ninth slice): bam(discrete=TRUE, select=TRUE) on f + sz and on a numeric by
+
+New fixture section 13 (13a: section 11a's `f + s(x) + s(f, x, sz)`, 13b: section 10's numeric by, both `bam(discrete = TRUE, select = TRUE)`, exact bam beside them) held in `tests/test_bam_discrete_fixtures.py`; no engine change.
+Tests: 625 pass and 1 xfail before; 627 pass and 1 xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: 13a eta 1.0e-9, se 1.6e-7, edf (factor included) 3.1e-8, rank 20 of 20; 13b eta 4.7e-14, se 1.3e-13, edf 3.2e-7. Structure exact.
+Deferred: mgcv's discrete = FALSE reference fits for 12d and 13a warn "algorithm did not converge" (informational only).
+
 ## 2026-11-16 (eighth slice): bam(discrete=TRUE) on cr + ti and on sz
 
 Ported the one-covariate-margin subset of `discrete.mf` (bam.r) as `discretise_frame`; `fit_engine_bam` now fits on binned covariates and accepts sz. New fixture section 12 (12a cr + ti, 12b sz, 12c/12d with select=TRUE, 12e numeric by (review), each with mgcv's discrete = FALSE bam beside it), `tests/test_bam_discrete_fixtures.py`.

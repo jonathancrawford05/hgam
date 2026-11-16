@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's eighth slice (bam(discrete=TRUE) on cr + ti and on sz). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's ninth slice (bam(discrete=TRUE, select=TRUE) on f + sz and a numeric by). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -43,21 +43,25 @@ PR #12): mgcv's default stops short of its own REML optimum there.
 discrete=True)` bins every numeric covariate a smooth reaches with `compress.df`, one covariate at a time, as
 `discrete.mf` does for one-covariate margins (`hgam.frontend.discrete.discretise_frame`), then runs `bam_fitd`. sz is
 accepted there. On section 5's cr + ti model and section 7's sz model, with and without `select=TRUE`, every key result
-meets its gate (eta at most 3.7e-4); so does section 10's numeric-by model (12e, eta 1e-13). Without binning hgam matched mgcv's `discrete = FALSE` bam instead (8e-9).
+meets its gate (eta at most 3.7e-4); so does section 10's numeric-by model (12e, eta 1e-13). Section 13 adds
+`select=TRUE` on a factor beside its sz smooth (13a, full rank, factor edf gated) and on the numeric by (13b): eta 1e-9
+and 5e-14. Without binning hgam matched mgcv's `discrete = FALSE` bam instead (8e-9).
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 625 pass,
+The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 627 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
-## Next slice: the exit formula's remaining shapes on `bam(discrete=TRUE, select=TRUE)`
+## Next slice: the full exit formula on `bam(discrete=TRUE, select=TRUE)`, held to mgcv
 
-Section 12 covers cr, ti, sz and a numeric `by` (12e, without `select`) on the discrete path. The exit formula also
-has factor main effects beside their sz smooths (rank deficient without `select`).
-1. Fixture section 13: `bam(method = "fREML", discrete = TRUE, select = TRUE)` on section 11a's model (`f8a` on `d10`)
-   and on section 10's numeric-by model (`f14` on `d14`), recorded with `bam_disc_case` (exact bam beside it).
-2. Hold them in `tests/test_bam_discrete_fixtures.py` at the gates. If one misses, compare against the recorded
-   `exact` fit first: a match there means the binning, a miss means the iteration.
+Every term shape of the exit formula now meets its gates on the discrete path (sections 12 and 13). Section 3 records
+only the exit formula's structure on its synthetic frame `f` (n = 4000).
+1. Fixture section 14: record section 3's `b` (already `bam(discrete = TRUE, select = TRUE)` with `my_knots`) with
+   `bam_disc_case` plus `bam_rank` (eta, se, per-term edf, sp, rank, factor edf), as `bam_discrete_exit_formula`.
+   The response is `DthCnt / ExposCnt` with weights `ExposCnt`: write the ratio as a column in the exported data.
+2. Hold `gam(..., method="fREML", discrete=True, select=True)` to it in `tests/test_bam_discrete_fixtures.py`. Two
+   factors with sz smooths and a two-way factor interaction are new together; if a gate misses, compare per term
+   against the recorded exact bam and against sections 8/11 before porting anything.
 
-After that: the full exit formula on section 3's frame on the discrete path, then wiring `hgam.gam` / `hgam.bam`.
+After that: wire `hgam.gam` / `hgam.bam` (the exit test's entry points) to the front end and lift the strict xfail.
 
 ## Open items for Jonathan
 

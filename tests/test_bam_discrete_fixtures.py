@@ -1,6 +1,7 @@
 """``gam(method="fREML", discrete=True)`` held to ``mgcv::bam(method="fREML", discrete=TRUE)`` fixtures
 (``make_fixtures.R`` section 12: 12a cr + ti, 12b cr + sz, 12c and 12d the same with ``select=TRUE``,
-12e a numeric ``by``).
+12e a numeric ``by``; section 13: 13a a factor beside its sz smooth and 13b the numeric ``by``, both with
+``select=TRUE``).
 
 The fit is ``bgam.fitd``'s performance iteration (``hgam.frontend.bam_fitd``) on covariates discretised
 as ``discrete.mf`` does (``hgam.frontend.discrete.discretise_frame``). Gates (``docs/PRIORITIES.md``):
@@ -23,6 +24,7 @@ SE_RTOL = 1e-2
 TI = 'p ~ s(age, bs="cr", k=8) + s(dur, bs="cr", k=5) + ti(age, dur, bs="cr", k=c(5, 4))'
 SZ = 'p ~ s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))'
 BY = 'p ~ s(x, bs="cr", k=6) + s(x, by=z, bs="cr", k=6)'
+F_SZ = 'p ~ f + s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))'
 
 
 def _columns(fx: dict) -> dict[str, np.ndarray]:
@@ -42,6 +44,10 @@ CASES = {
     "bam_discrete_binomial_cloglog_sz_select": (SZ, True),
     # 12e: a numeric by, binned on its own before the margin (discrete.mf).
     "bam_discrete_binomial_cloglog_by_numeric": (BY, False),
+    # 13a: a factor main effect beside its sz smooth (the exit formula's shape), full rank with select=TRUE.
+    "bam_discrete_binomial_cloglog_f_sz_select": (F_SZ, True),
+    # 13b: the numeric by with select=TRUE.
+    "bam_discrete_binomial_cloglog_by_numeric_select": (BY, True),
 }
 
 
@@ -78,9 +84,24 @@ def test_bam_discrete_meets_the_gates(load_fixture, name: str) -> None:
     assert np.max(np.abs(fit.eta - np.asarray(fx["eta"]))) < ETA_ATOL
 
     # Per-term edf: 0.05 absolute or 1%, whichever is larger.
-    ref_edf = np.asarray(fx["edf"], dtype=np.float64)
-    got_edf = np.array([fit.edf_per_term[label] for label in labels])
-    assert np.all(np.abs(got_edf - ref_edf) <= np.maximum(0.05, 0.01 * ref_edf)), (got_edf, ref_edf)
+    # 13a's factor is a term too: select=TRUE makes mgcv's fit full rank, so its edf is identified.
+    ref = dict(zip(labels, fx["edf"], strict=True))
+    if "rank" in fx:
+        assert fx["rank"] == fx["n_coef"]
+        assert len(fit.pivoted_columns) == 0
+        ref.update(
+            zip(
+                np.atleast_1d(fx["param_labels"]).tolist(),
+                np.atleast_1d(fx["edf_param"]).tolist(),
+                strict=True,
+            )
+        )
+    for label, value in ref.items():
+        assert abs(fit.edf_per_term[label] - value) <= max(0.05, 0.01 * value), (
+            label,
+            fit.edf_per_term[label],
+            value,
+        )
 
     # Standard errors of the linear predictor, at the discretised covariates as mgcv's predict.bam
     # computes them (it re-runs discrete.mf on the model frame): 1% relative.

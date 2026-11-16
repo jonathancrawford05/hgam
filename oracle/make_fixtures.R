@@ -313,4 +313,25 @@ b12ee <- bam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, 
              method = "fREML")
 put("bam_discrete_binomial_cloglog_by_numeric", bam_disc_case(b12e, d14, f14, "binomial(link='cloglog')",
                                                                list(knots = list(x = sz_knots), exact = bam_exact(b12ee))))
+# 13. bam(method = "fREML", discrete = TRUE, select = TRUE) on the exit formula's remaining shapes: 13a section 11a's
+# factor main effect beside its sz smooth (f8a on d10), 13b section 10's numeric by (f14 on d14). mgcv's rank and the
+# parametric edf are exported as in section 8, so a rank-deficient fit would show.
+bam_rank <- function(b) {
+  list(rank = b$rank, coef_names = names(coef(b)), param_labels = attr(b$pterms, "term.labels"),
+       edf_param = unname(sapply(split(b$edf[seq_len(b$nsdf)], b$assign), sum)[-1]))
+}
+b13a <- bam(as.formula(f8a), family = binomial(link = "cloglog"), weights = n, data = d10, knots = list(x = sz_knots),
+            method = "fREML", discrete = TRUE, select = TRUE)
+b13ae <- bam(as.formula(f8a), family = binomial(link = "cloglog"), weights = n, data = d10, knots = list(x = sz_knots),
+             method = "fREML", select = TRUE)
+put("bam_discrete_binomial_cloglog_f_sz_select", bam_disc_case(b13a, d10, f8a, "binomial(link='cloglog')",
+                                                                c(list(knots = list(x = sz_knots), select = TRUE,
+                                                                       exact = bam_exact(b13ae)), bam_rank(b13a))))
+b13b <- bam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, data = d14, knots = list(x = sz_knots),
+            method = "fREML", discrete = TRUE, select = TRUE)
+b13be <- bam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, data = d14, knots = list(x = sz_knots),
+             method = "fREML", select = TRUE)
+put("bam_discrete_binomial_cloglog_by_numeric_select", bam_disc_case(b13b, d14, f14, "binomial(link='cloglog')",
+                                                                      list(knots = list(x = sz_knots), select = TRUE,
+                                                                           exact = bam_exact(b13be))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

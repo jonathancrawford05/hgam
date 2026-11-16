@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16 (fifth slice): select=TRUE with sz smooths
+
+Accepted `select=TRUE` with sz (smoothCon's `null.space.penalty` need.full branch, smooth.r); the engine's `null_space_penalty` already built it, so only the front-end refusal went. New fixture section 9 (9a smoothCon S with null.space.penalty, 9b section 7's fit with select=TRUE).
+Tests: 610 pass and 1 xfail before; 613 pass and 1 xfail after (the refusal test is replaced by an acceptance test). `make lint` is clean.
+Tier 1, mgcv 1.9-1: sz null-space penalty 1.1e-14 / 5.7e-14 relative, ranks exact; fit: 6 sp and 18 coef exact, eta 9.2e-5, edf 1.5e-3, se 3.8e-4 relative.
+Deferred: the near-linear s(x) penalty's sp (log10 7.29 vs 8.16, flat ridge).
+
 ## 2026-11-16 (fourth slice): a factor main effect beside sz smooths
 
 New fixture section 8 (8a: `f + s(x) + s(f, x, sz)`; 8b: `f` with two sz smooths of a two-level factor) and `tests/test_rank_deficient_sz.py`; no engine change.

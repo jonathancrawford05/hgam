@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's fourth slice (rank-deficient sz fixtures). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's fifth slice (select=TRUE with sz). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -27,23 +27,32 @@ decided on PR #8 (option A): those terms are gated on their summed edf, at the p
 whichever is larger); the split is reported as not identified and is not gated. `gdiPK`'s rank decision is not
 ported for this and the exit formula stays as it is. The matching `docs/PRIORITIES.md` line is Jonathan's change.
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 610 pass,
+`select=TRUE` with sz smooths is accepted (section 9, `tests/test_sz_basis.py` and the section 9 case in
+`tests/test_gam_reml_fixtures.py`): the null-space penalty agrees with `smoothCon(..., null.space.penalty=TRUE)` to
+6e-14, and section 7's model with `select=TRUE` meets every gate. Not yet measured: `select=TRUE` together with a
+factor main effect beside its sz smooths (section 8's rank-deficient shape).
+
+The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 613 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
-## Next slice: `select=TRUE` with sz terms
+## Next slice: numeric `by` on a cr smooth, held to mgcv
 
-The exit formula uses `select=TRUE`; sz with `select=TRUE` is refused today (`test_sz_with_select_is_refused_until_measured`).
-1. Read how mgcv adds the null-space penalty for sz (`smoothCon` with `null.space.penalty`, smooth.r; the sz constructor
-   sets its own null space per level).
-2. Fixture (section 9): section 7's model with `select=TRUE`, plus `smoothCon(..., null.space.penalty=TRUE)` S for sz.
-3. Accept `select=TRUE` with sz, hold the penalties to 1e-8 and the fit to the gates.
+The exit formula has `s(AttdAge, by = StudyYear_C, k = 13, bs = "cr")`. The front end accepts a numeric `by` on cr
+(`api.py`, label `s(x):z`), but no oracle fixture in this repository holds it.
+1. Read how mgcv applies a numeric `by` in `smoothCon` (smooth.r: the by multiplies X; with a numeric by the sum-to-zero
+   constraint is not applied, so the term keeps k coefficients) and check the label and coefficient count.
+2. Fixture (section 10): `p ~ s(x, bs="cr", k=6) + s(x, by=z, bs="cr", k=6)` binomial cloglog with weights, REML,
+   shared knots; also with `select=TRUE` if the slice stays small.
+3. Add the case to `tests/test_gam_reml_fixtures.py` and meet every gate.
 
-After that the exit test still needs: numeric `by` and `bam(discrete=TRUE)` on `ti` and sz. Where the exit test
-compares per-term edf, it compares the summed edf of the terms that share a redundant direction (decision above).
+After that the exit test still needs: `select=TRUE` on the rank-deficient factor + sz shape (section 8 with select), and
+`bam(discrete=TRUE)` on `ti` and sz. Where the exit test compares per-term edf, it compares the summed edf of the terms
+that share a redundant direction (Jonathan's decision on PR #8).
 
 ## Open items for Jonathan
 
-None.
+None. (PR #10's question on SETTINGS condition 5 is decided: option (a). A refusal test may be retired when a
+fixture-backed acceptance test of the same input replaces it; the wording is in `docs/routines/SETTINGS.md`.)
 
 ## Open questions
 

@@ -526,11 +526,8 @@ def _build_model(
                 )
             need_numeric(smoothed, call.text)
             levels = need_factor(factor_name).levels
-            if select:
-                raise HgamNotImplementedError(
-                    f"gam(): select=True with the sz smooth {call.text} is not yet measured against mgcv; "
-                    "fit without select=True."
-                )
+            # select=True: smoothCon's null.space.penalty need.full branch (smooth.r, mgcv 1.9-4) appends U U'
+            # for the null space of the summed per-level penalties; the engine's null_space_penalty builds it.
             smooth.append(
                 TermSpec(
                     label=call.text,
@@ -651,7 +648,8 @@ def gam(
         offset: name of an offset column (alternative to ``offset(col)`` in the
             formula; not both).
         select: ``mgcv``'s ``select=TRUE``. Refused only when a bare smooth of the same covariate
-            sits beside a factor-``by`` smooth (ADR-258).
+            sits beside a factor-``by`` smooth (ADR-258). Accepted with ``sz`` smooths (one null-space
+            penalty per sz term, ``make_fixtures.R`` section 9).
         allow_unverified_select: a DIAGNOSTIC switch. Skips the ADR-258 refusal of ``select=True``
             with a factor-``by`` smooth beside another smooth of its covariate, so the fit runs
             although ~1 draw in 7 disagrees with ``mgcv`` (outer-search plateau). For measuring

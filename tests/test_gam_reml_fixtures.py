@@ -1,4 +1,4 @@
-"""``gam(method="REML")`` fits held to ``mgcv::gam`` fixtures (``make_fixtures.R`` sections 2, 5, 6 and 7).
+"""``gam(method="REML")`` fits held to ``mgcv::gam`` fixtures (``make_fixtures.R`` sections 2, 5, 6, 7 and 9).
 
 The outer smoothing-parameter search here is the moved engine's safeguarded Newton
 (``hgam.engine.gam_reml_newton``), which re-derives rather than ports mgcv's ``newton`` (gam.fit3.r).
@@ -56,6 +56,15 @@ CASES = {
         weights="n",
         derived={},
     ),
+    # section 9: section 7's model with select=TRUE: a null-space penalty for the cr smooth and one for
+    # the sz term.
+    "gam_binomial_cloglog_sz_select_reml": dict(
+        formula='p ~ s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))',
+        family='binomial(link="cloglog")',
+        weights="n",
+        derived={},
+        select=True,
+    ),
 }
 
 
@@ -67,7 +76,13 @@ def test_gam_reml_meets_the_gates(load_fixture, name: str) -> None:
     for col, make in case["derived"].items():
         data[col] = make(data)
     fit = gam(
-        case["formula"], data, case["family"], weights=case["weights"], method="REML", knots=fx.get("knots")
+        case["formula"],
+        data,
+        case["family"],
+        weights=case["weights"],
+        method="REML",
+        knots=fx.get("knots"),
+        select=case.get("select", False),
     )
 
     assert fit.converged

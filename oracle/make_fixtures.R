@@ -207,4 +207,21 @@ m8b <- gam(as.formula(f8b), family = binomial(link = "cloglog"), weights = n, da
            knots = list(x = sz_knots, z = sz_knots), method = "REML")
 put("gam_binomial_cloglog_two_sz_reml", rank_case(m8b, d11, f8b, list(x = sz_knots, z = sz_knots)))
 
+# 9. select = TRUE with an sz term (smoothCon's null.space.penalty, smooth.r): sz has one penalty per level, so
+# smoothCon takes the need.full branch and appends U U' for the null space of the summed penalties. 9a: smoothCon's
+# S list with null.space.penalty = TRUE for a 2- and a 3-level factor; 9b: section 7's model fitted with select = TRUE.
+set.seed(12); n <- 300
+sz_select_case <- function(levels) {
+  ds <- data.frame(x = runif(n, 1, 21), f = factor(sample(levels, n, TRUE), levels = levels))
+  sm <- smoothCon(s(f, x, bs = "sz", k = 6, xt = list(bs = "cr")), ds, knots = list(x = sz_knots),
+                  absorb.cons = TRUE, null.space.penalty = TRUE)[[1]]
+  list(x = ds$x, group = as.integer(ds$f) - 1L, n_levels = length(levels), knots = sz_knots, S = sm$S, rank = sm$rank)
+}
+put("smoothcon_sz_cr_select", list(cases = list(two_levels = sz_select_case(c("a", "b")),
+                                                three_levels = sz_select_case(c("a", "b", "c")))))
+m10s <- gam(as.formula(f10), family = binomial(link = "cloglog"), weights = n, data = d10,
+            knots = list(x = sz_knots), method = "REML", select = TRUE)
+put("gam_binomial_cloglog_sz_select_reml", c(gam_case(m10s, d10, f10, "binomial(link='cloglog')"),
+                                             list(knots = list(x = sz_knots), select = TRUE)))
+
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

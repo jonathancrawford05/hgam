@@ -62,7 +62,7 @@ def main(committed_dir: str, oracle_dir: str) -> int:
         else:
             print(
                 f"note {name}: committed tier {tier} fixture differs from the oracle in {len(diffs)} places; "
-                "the oracle copy is used for the tests. Commit the oracle copy to clear this note."
+                "the oracle copy is used for the tests."
             )
     return 1 if failed else 0
 

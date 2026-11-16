@@ -34,10 +34,7 @@ against the gates. `gam_poisson_offset_reml.json` is already a REML fixture you 
 
 ## Open items for Jonathan
 
-- The `fixtures-tier3` artifact (CI run 43727740202 on `main`) could not be downloaded here: the
-  network policy blocks the artifact host (`productionresultssa32.blob.core.windows.net`). The
-  committed fixtures are still tier 1. Either allow that host in the environment, or commit the
-  artifact by hand.
+None. Committed fixtures stay tier 1; CI's `oracle` job holds every pull request to the pinned image.
 
 ## Open questions
 

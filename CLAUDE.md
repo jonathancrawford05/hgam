@@ -28,7 +28,8 @@ second; everything else waits.
   not a key result go in `docs/DEFERRED.md` and do not block.
 - **Alignment is measured, never asserted.** A ported function ships with a fixture produced by
   `oracle/make_fixtures.R` and a test against it. Fixtures record the mgcv version and tier:
-  tier 1 is a local R (provisional), tier 3 is the pinned oracle image in CI.
+  tier 1 is a local R, committed for local runs; tier 3 is the pinned oracle image, which CI regenerates
+  and tests against on every pull request and which decides a merge.
 - **Never edit `tests/fixtures/*.json` by hand.** Change `oracle/make_fixtures.R` and regenerate.
 - **Refuse rather than approximate.** A term, family or option that is not ported raises
   `NotImplementedError` naming it. Never accept and ignore an argument.

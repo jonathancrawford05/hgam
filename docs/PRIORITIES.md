@@ -22,11 +22,18 @@ These are the quantities that gate a merge. Differences are against mgcv from th
 | Deterministic pieces: basis and penalty matrices, constraints, a fit at fixed smoothing parameters | 1e-8 relative |
 | Linear predictor of a fitted model, smoothing parameters estimated | 1e-3 absolute, largest difference |
 | Effective degrees of freedom, per term | 0.05 absolute or 1%, whichever is larger |
+| Effective degrees of freedom, summed over the terms an unidentified direction runs through | 0.05 absolute |
 | Standard errors of the linear predictor | 1% relative |
 
 The 1e-3 gate reflects mgcv itself: on the same model its own `gam`, `bam` and `bam(discrete = TRUE)` differ by
 1e-3 to 4e-2 on the linear predictor (`docs/findings/0001-mgcv-rust-check.md`). Tighter agreement than mgcv has
 with itself is not a goal. Changing a gate is an "Always ask" item.
+
+Where a model is rank deficient and a redundant direction runs through several terms (a factor main effect
+beside its `sz` smooths, or two `sz` smooths of one factor), those terms are gated on their summed edf, at 0.05
+absolute with no 1% arm, and every other term keeps the per-term gate. The split of that sum between the terms is
+not identified: mgcv's own split follows LAPACK's eigenvector basis inside a degenerate eigenspace. It is reported
+as not identified, recorded in `docs/DEFERRED.md`, and not gated.
 
 ## What this means in practice
 

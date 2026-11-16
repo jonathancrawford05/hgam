@@ -52,11 +52,11 @@ response column p = DthCnt / ExposCnt, weights ExposCnt) meets every gate throug
 `hgam.frontend.gam(..., method="fREML", discrete=True, select=True)`: eta 1.1e-4, se 2.6e-4 relative, per-term edf
 2.2e-3 including FaceSize, Smoke and FaceSize:Smoke, full rank (132 of 132) in mgcv and hgam. Structure exact.
 
-The public entry points are wired: `hgam.gam` (REML) and `hgam.bam` (`method="fREML", discrete=True` only; bam's
+The public entry points are wired: `hgam.gam` (`method="REML"` written out; mgcv's default `"GCV.Cp"` is refused) and `hgam.bam` (`method="fREML", discrete=True` only; bam's
 default `discrete=FALSE` is refused by name) forward to `hgam.frontend.api.gam`, with `family=` as mgcv writes it or
 `family="binomial", link="cloglog"`. A response `a / b` is evaluated as R's `model.frame` does (other left-hand
 expressions are refused; a zero denominator is refused). **The exit test passes**: `tests/test_exit.py` fits
-`hgam_formula` as written on section 14's data and knots through `hgam.bam` and meets every gate. Tests: 639 pass,
+`hgam_formula` as written on section 14's data and knots through `hgam.bam` and meets every gate. Tests: 640 pass,
 no xfail. What differs is in `docs/DEFERRED.md`.
 
 ## Next slice: time the exit model against mgcv (M3's one benchmark)

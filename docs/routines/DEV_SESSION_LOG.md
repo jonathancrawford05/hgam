@@ -3,7 +3,7 @@
 ## 2026-11-16 (eleventh slice): hgam.bam / hgam.gam wired; the exit test passes
 
 `hgam.gam` (mgcv.r) and `hgam.bam` (bam.r) forward to the front end (`family=` + `link=`, unported methods refused); the response `a / b` (R's `model.frame`) is parsed and evaluated. `tests/test_exit.py` fits `hgam_formula` as written on section 14's data and knots, held to every gate; strict xfail lifted. New `tests/test_entry_points.py`.
-Tests: 628 pass and 1 xfail before; 639 pass and 0 xfail after. `make lint` is clean.
+Tests: 628 pass and 1 xfail before; 640 pass and 0 xfail after (review fix: hgam.gam defaults to mgcv's method="GCV.Cp" and refuses it). `make lint` is clean.
 Tier 1, mgcv 1.9-1: the exit fit equals section 14's (eta 1.1e-4, se 2.6e-4 relative, edf 2.2e-3, structure exact vs sections 3 and 14). Also fixed PR #17's review nit (sp attribution in DEFERRED and the log).
 Deferred: nothing new.
 

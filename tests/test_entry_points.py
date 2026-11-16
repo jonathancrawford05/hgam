@@ -26,7 +26,7 @@ def test_a_zero_denominator_is_refused() -> None:
     rng = np.random.default_rng(0)
     data = {"x": rng.uniform(size=50), "y": rng.uniform(size=50), "n": np.r_[0.0, np.ones(49)]}
     with pytest.raises(HgamValidationError, match="zeros"):
-        hgam.gam("y / n ~ s(x, bs='cr', k=5)", data)
+        hgam.gam("y / n ~ s(x, bs='cr', k=5)", data, method="REML")
 
 
 def test_unported_methods_are_refused() -> None:
@@ -37,10 +37,20 @@ def test_unported_methods_are_refused() -> None:
         hgam.gam("y ~ s(x, bs='cr', k=5)", data, method="fREML")
 
 
+def test_gams_default_method_is_refused() -> None:
+    """mgcv's gam defaults to method="GCV.Cp", which is not ported: the default call refuses rather than
+    fitting by REML."""
+    data = {"x": np.linspace(0, 1, 20), "y": np.zeros(20)}
+    with pytest.raises(HgamNotImplementedError, match="GCV.Cp"):
+        hgam.gam("y ~ s(x, bs='cr', k=5)", data)
+
+
 def test_link_beside_a_family_with_arguments_is_refused() -> None:
     data = {"x": np.linspace(0, 1, 20), "y": np.zeros(20)}
     with pytest.raises(HgamValidationError, match="use one"):
-        hgam.gam("y ~ s(x, bs='cr', k=5)", data, family='binomial(link="logit")', link="cloglog")
+        hgam.gam(
+            "y ~ s(x, bs='cr', k=5)", data, family='binomial(link="logit")', link="cloglog", method="REML"
+        )
 
 
 def test_gam_matches_the_front_end() -> None:
@@ -49,6 +59,6 @@ def test_gam_matches_the_front_end() -> None:
     data = {"x": x, "y": np.sin(6 * x) + rng.normal(scale=0.3, size=200)}
     from hgam.frontend.api import gam as frontend_gam
 
-    a = hgam.gam("y ~ s(x, bs='cr', k=8)", data)
+    a = hgam.gam("y ~ s(x, bs='cr', k=8)", data, method="REML")
     b = frontend_gam("y ~ s(x, bs='cr', k=8)", data, "gaussian")
     np.testing.assert_allclose(a.eta, b.eta, rtol=0, atol=0)

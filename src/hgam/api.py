@@ -36,17 +36,19 @@ def gam(
     offset: str | None = None,
     select: bool = False,
     knots: Mapping[str, Sequence[float]] | None = None,
-    method: str = "REML",
+    method: str = "GCV.Cp",
 ) -> GamFit:
     """Fit a GAM by REML. mgcv counterpart: ``gam`` (mgcv.r), mgcv 1.9-4.
 
     Arguments are mgcv's where they exist (``family`` as a string such as ``'binomial(link="cloglog")'``,
     or ``family="binomial", link="cloglog"``; ``weights`` and ``offset`` name columns of ``data``). Only
-    ``method="REML"`` is ported for ``gam``.
+    ``method="REML"`` is ported for ``gam``, so it must be written out: mgcv's default, ``method="GCV.Cp"``,
+    is refused by name rather than fitted by REML.
     """
     if method != "REML":
         raise HgamNotImplementedError(
-            f"hgam.gam(): method={method!r} is not ported; only method='REML' is (use hgam.bam for fREML)."
+            f"hgam.gam(): method={method!r} is not ported; only method='REML' is, and it must be given "
+            "explicitly (mgcv's default is method='GCV.Cp'). Use hgam.bam for fREML."
         )
     return _frontend_gam(
         formula,

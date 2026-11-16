@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16 (twelfth slice): the M3 benchmark of the exit model
+
+Timed the exit model, `hgam.bam` vs `mgcv::bam(discrete = TRUE, select = TRUE)`, median of 15 after a warm-up (`docs/findings/0002-exit-benchmark.md`, scripts in `docs/findings/exit_benchmark/`). No engine change.
+Tests: 640 pass before and after. `make lint` is clean.
+mgcv 1.9-1 0.98 s; hgam 2.2 to 2.4 s at OpenBLAS's default 4 threads, 0.42 s on one thread. Inside the ten-times rule; nothing tuned.
+Deferred: BLAS thread oversubscription on small problems, after M4.
+
 ## 2026-11-16 (eleventh slice): hgam.bam / hgam.gam wired; the exit test passes
 
 `hgam.gam` (mgcv.r) and `hgam.bam` (bam.r) forward to the front end (`family=` + `link=`, unported methods refused); the response `a / b` (R's `model.frame`) is parsed and evaluated. `tests/test_exit.py` fits `hgam_formula` as written on section 14's data and knots, held to every gate; strict xfail lifted. New `tests/test_entry_points.py`.

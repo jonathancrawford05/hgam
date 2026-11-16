@@ -29,7 +29,8 @@ F_SZ = 'p ~ f + s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))'
 EXIT = (
     'p ~ FaceSize + Smoke + FaceSize:Smoke + s(AttdAge, k=13, bs="cr") + s(PolYear, k=6, bs="cr") + '
     'ti(AttdAge, PolYear, k=c(13, 6), bs="cr") + s(FaceSize, AttdAge, bs="sz", k=13, xt=list(bs="cr")) + '
-    's(Smoke, AttdAge, bs="sz", k=13, xt=list(bs="cr")) + s(FaceSize, PolYear, bs="sz", k=6, xt=list(bs="cr")) + '
+    's(Smoke, AttdAge, bs="sz", k=13, xt=list(bs="cr")) + '
+    's(FaceSize, PolYear, bs="sz", k=6, xt=list(bs="cr")) + '
     's(Smoke, PolYear, bs="sz", k=6, xt=list(bs="cr")) + s(AttdAge, by=StudyYear_C, k=13, bs="cr")'
 )
 

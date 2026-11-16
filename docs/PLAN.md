@@ -55,3 +55,6 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - `bam(discrete=TRUE, select=TRUE)` on a factor beside its sz smooth and on a numeric `by` (done 2026-11-16):
   `tests/test_bam_discrete_fixtures.py`, section 13. Full rank with select in mgcv and hgam; every term, the factor
   included, meets the per-term edf gate.
+- The exit formula on `bam(discrete=TRUE, select=TRUE)` (done 2026-11-16): `tests/test_bam_discrete_fixtures.py`,
+  section 14, section 3's frame (n = 4000) and knots. Full rank in mgcv and hgam; eta 1.1e-4, se 2.6e-4 relative,
+  per-term edf (the three parametric terms included) 2.2e-3. What remains for the exit test is the entry points.

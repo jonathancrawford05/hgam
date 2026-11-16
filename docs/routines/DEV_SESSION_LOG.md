@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16 (thirteenth slice): predict on new data from a discrete fit
+
+Ported `predict.bamd`'s re-discretisation (bam.r): `GamFit.predict` re-bins new data with `discretise_frame` for a `discrete=True` fit; `discrete=False` predicts at raw covariates. New fixture section 15 (`bam_discrete_exit_predict_a`, `_b`), `tests/test_predict_bam.py`. Also fixed review nit 1 of PR #19 in finding 0002.
+Tests: 640 pass before; 644 pass after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: 15a (binned) eta 8.4e-5, se 2.3e-4 relative; 15b eta 4.0e-5, se 2.2e-4. Without re-binning 15a missed by 3.4e-3.
+Deferred: unseen factor levels refused (mgcv zeros them); `type="terms"` / `"lpmatrix"` not ported.
+
 ## 2026-11-16 (twelfth slice): the M3 benchmark of the exit model
 
 Timed the exit model, `hgam.bam` vs `mgcv::bam(discrete = TRUE, select = TRUE)`, median of 15 after a warm-up (`docs/findings/0002-exit-benchmark.md`, scripts in `docs/findings/exit_benchmark/`). No engine change.

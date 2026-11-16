@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's twelfth slice (the M3 benchmark of the exit model). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's thirteenth slice (M4: `predict` on new data from a discrete fit). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -65,14 +65,20 @@ the ten-times rule, so nothing was tuned. Candidate for after M4 (Priorities ite
 problems, or document it; this needs no new dependency only if done through an environment variable, so ask first if
 it would need `threadpoolctl`.
 
-## Next slice: M4, `predict` on new data (first step)
+`predict` on new data from a discrete fit (section 15, `tests/test_predict_bam.py`): `GamFit.predict` re-runs
+`discretise_frame` on the new data, as `predict.bamd` re-runs `discrete.mf` (`discrete=False` predicts at the raw
+covariates, as `predict.bam` falling through to `predict.gam`). On the exit fit, 15a (1500 rows, binned) eta 8.4e-5
+and se 2.3e-4 relative; 15b (40 rows, not binned) eta 4.0e-5, se 2.2e-4. Without re-binning 15a missed by 3.4e-3.
 
-`docs/PLAN.md` M4 (`predict`, `vcov`, `summary`, `gam.check`). First step: `fit.predict(newdata)` for a
-`discrete=True` fit, re-running `discrete.mf` on the new data as `predict.bam` does (bam.r, mgcv 1.9-4; the
-`docs/DEFERRED.md` line on `GamFit.predict` from a discrete fit). Today `tests/test_exit.py` predicts at
-`discretise_frame(fit.model, data)`. Read `predict.bam` first and follow its path exactly. Fixture: a new section in `oracle/make_fixtures.R`
-predicting section 14's `b14` (`se.fit = TRUE`) on a small synthetic newdata frame inside the knots; gate eta at
-1e-3 absolute and se at 1% relative. Then `summary` in the next slice.
+## Next slice: M4, `summary` of a discrete fit (first step)
+
+`docs/PLAN.md` M4. `GamFit.summary()` refuses any fit but `method="REML"` today. First step: the smooth-term table of
+`summary.gam` (mgcv.r, mgcv 1.9-4) on the exit fit: per-term edf (already gated) and `Ref.df`, the test statistic
+and p-value from `testStat` (mgcv.r), and the parametric table (estimate, se, z, p). Read `summary.gam` and
+`testStat` first and follow their path (bam fits go through `summary.gam`). Fixture: a new section in
+`oracle/make_fixtures.R` exporting `summary(b14)`'s `s.table` and `p.table`. p-values are not in the gate table of
+`docs/PRIORITIES.md`: before gating them, put the gate question (options and a recommendation) under "Questions for
+Jonathan"; estimates and se of the parametric table fall under existing gates.
 
 ## Open items for Jonathan
 

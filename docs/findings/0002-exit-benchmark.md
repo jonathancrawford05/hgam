@@ -4,7 +4,8 @@ Date: 2026-11-16. The M3 benchmark from `docs/PRIORITIES.md`: the exit-test mode
 frame, n = 4000, `my_knots`) fitted by `hgam.bam(..., discrete=True, select=True)` and by `mgcv::bam(discrete = TRUE,
 select = TRUE)`, on one machine (4 vCPUs), median of 15 fits after one warm-up. Scripts: `exit_benchmark/`.
 mgcv 1.9-1 (R 4.3.3, Debian reference BLAS, single-threaded); hgam with NumPy 2.5.4 and SciPy's OpenBLAS 0.3.34.
-Measurements, tier 1; wall-clock times vary by about 10% between runs.
+Measurements, tier 1. mgcv and the one-thread row vary by about 10% between runs; the default-threads row varies far
+more (a review rerun of 15 fits gave medians of 2.69 s and 3.28 s, 2.7 to 3.4 times slower than mgcv).
 
 | Fitter | Median (s) | Min (s) | Max (s) | vs mgcv |
 |---|---|---|---|---|

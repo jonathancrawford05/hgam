@@ -351,4 +351,21 @@ b14e <- bam(as.formula(f14x), family = binomial(link = "cloglog"), weights = Exp
 put("bam_discrete_exit_formula", bam_disc_case(b14, f, f14x, "binomial(link='cloglog')",
                                                c(list(knots = my_knots, weights = "ExposCnt", select = TRUE,
                                                       exact = bam_exact(b14e)), bam_rank(b14))))
+# 15. predict.bam on new data from section 14's discrete fit b14 (predict.bamd, bam.r): discrete.mf re-runs on newdata,
+# so each smooth covariate of newdata is compressed on its own (compress.df, m = 1000) over newdata's own range.
+# 15a: 1500 rows with more than 1000 unique values per numeric covariate, so they are binned; 15b: 40 rows, not binned.
+# mgcv's prediction at the raw covariates (discrete = FALSE, predict.gam) is recorded beside each, to show the
+# binning moves eta by more than its gate on 15a.
+set.seed(15)
+nd_frame <- function(n) data.frame(AttdAge = runif(n, 5, 90), PolYear = runif(n, 1.5, 20), StudyYear_C = runif(n, -8, 8),
+                                   FaceSize = factor(sample(c("Low", "High"), n, TRUE), levels = c("Low", "High")),
+                                   Smoke = factor(sample(c("NS", "S"), n, TRUE), levels = c("NS", "S")))
+for (case in list(list(name = "a", n = 1500), list(name = "b", n = 40))) {
+  nd <- nd_frame(case$n)
+  pr <- predict(b14, newdata = nd, se.fit = TRUE)
+  pe <- predict(b14, newdata = nd, se.fit = TRUE, discrete = FALSE)
+  put(paste0("bam_discrete_exit_predict_", case$name),
+      list(newdata = nd, eta = as.numeric(pr$fit), se = as.numeric(pr$se.fit),
+           eta_exact = as.numeric(pe$fit), se_exact = as.numeric(pe$se.fit)))
+}
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

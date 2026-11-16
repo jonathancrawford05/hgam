@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's sixth slice (numeric by on cr). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's sixth slice (numeric by on cr), after applying option B on PR #12. Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -34,24 +34,17 @@ factor main effect beside its sz smooths (section 8's rank-deficient shape).
 
 A numeric `by` on cr, `s(x, by=z, bs="cr")` (section 10, `tests/test_cr_by_numeric.py`): basis vs `smoothCon` at
 1.2e-14, no constraint (k coefficients, label `s(x):z`); a constant `by`, for which mgcv keeps the constraint, is
-refused. 10c (`s(x) + s(x, by=z)` with `select=TRUE`) meets every gate. 10b (the same without select) meets structure,
-edf and se, and the fit at mgcv's sp to 1e-13, but its eta at the estimated sp is 1.24e-3 from mgcv's default fit (gate
-1e-3) and is not gated: mgcv's Newton stops short of its own REML optimum (question below, `docs/DEFERRED.md`).
+refused. 10c (with `select=TRUE`) meets every gate. 10b meets structure, edf and se against mgcv's default fit, and eta
+at the estimated sp against mgcv refitted at `newton` `conv.tol = 1e-12` (1.9e-4; option B, Jonathan's decision on
+PR #12): mgcv's default stops short of its own REML optimum there.
 
 The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 617 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
 ## Next slice
 
-First, on the open pull request (PR #12): apply Jonathan's decision on section 10b, option B (below). It answers the
-review's Blocking 1.
-1. `oracle/make_fixtures.R`, section 10b: besides the default fit, record mgcv refitted with
-   `control = gam.control(newton = list(conv.tol = 1e-12))`: its eta, se, edf, sp and REML score (`gcv.ubre`), and
-   the default fit's REML score. No hgam output goes into the R script.
-2. `tests/test_cr_by_numeric.py`: gate eta at the estimated sp at 1e-3 against the tight fit, and assert the
-   fixture's own justification (mgcv's tight REML score is not higher than its default score). Keep the existing
-   assertions against the default fit.
-3. Regenerate the fixture, update the DEFERRED line and PLAN, and say in the pull request what was measured.
+PR #12 (numeric by) waits for review of its new head; option B is applied there. PR #13 (Jonathan's `docs/PRIORITIES.md`
+wording of option B) is his own change.
 
 After it merges: `select=TRUE` on the rank-deficient factor + sz shape. Fixture section 11: section 8a's model
 `p ~ f + s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))` with `select=TRUE`, held at the gates in

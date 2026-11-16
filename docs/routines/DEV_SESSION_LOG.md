@@ -5,7 +5,7 @@
 Held `s(x, by=z, bs="cr")` to mgcv (`smoothCon`'s numeric-by branch, smooth.r); constant `by` (mgcv keeps the constraint) is now refused. New fixture section 10 (10a smoothCon, 10b fit, 10c fit with select=TRUE), `tests/test_cr_by_numeric.py`.
 Tests: 613 pass and 1 xfail before; 617 pass and 1 xfail after. `make lint` is clean.
 Tier 1, mgcv 1.9-1: basis X 1.2e-14, S 2.1e-15 relative, C 0 rows, labels and 12 coef exact. 10c: eta 2.9e-5, edf 4e-4, se 2.1e-4. 10b: edf 0.029, se 0.79%, eta at mgcv's sp 1e-13, but eta at estimated sp 1.24e-3 (gate 1e-3): mgcv's Newton stops short of its own optimum (hgam is 1.9e-4 from mgcv at conv.tol 1e-12).
-Question for Jonathan on the PR: how to gate 10b's eta. DEFERRED.
+Jonathan chose option B: 10b now records mgcv at newton conv.tol 1e-12 (REML 2441.46465 vs default 2441.46481) and eta is gated against it, 1.9e-4 (se 9.7e-4, edf 3.5e-3).
 
 ## 2026-11-16 (fifth slice): select=TRUE with sz smooths
 

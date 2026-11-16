@@ -241,8 +241,16 @@ d14$p <- rbinom(n, d14$n, 1 - exp(-exp(-4 + 0.08 * (d14$x - 10) - 0.012 * d14$z 
 f14 <- "p ~ s(x, bs='cr', k=6) + s(x, by=z, bs='cr', k=6)"
 m14 <- gam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, data = d14,
            knots = list(x = sz_knots), method = "REML")
+# mgcv's default newton stops short of its own REML optimum on this fixture (the by smooth's sp is on a flat ridge),
+# so the fit is repeated at a tight newton conv.tol. The tight fit is the reference for quantities at estimated sp
+# only where its REML score is not higher than the default fit's (docs/PRIORITIES.md).
+m14t <- gam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, data = d14,
+            knots = list(x = sz_knots), method = "REML", control = gam.control(newton = list(conv.tol = 1e-12)))
 put("gam_binomial_cloglog_by_numeric_reml", c(gam_case(m14, d14, f14, "binomial(link='cloglog')"),
-                                              list(knots = list(x = sz_knots))))
+                                              list(knots = list(x = sz_knots),
+                                                   tight = c(gam_case(m14t, d14, f14, "binomial(link='cloglog')")[
+                                                     c("sp", "edf", "eta", "se", "reml", "outer_iter", "outer_conv")],
+                                                     list(conv_tol = 1e-12)))))
 m14s <- gam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, data = d14,
             knots = list(x = sz_knots), method = "REML", select = TRUE)
 put("gam_binomial_cloglog_by_numeric_select_reml", c(gam_case(m14s, d14, f14, "binomial(link='cloglog')"),

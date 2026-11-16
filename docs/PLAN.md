@@ -42,6 +42,6 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   identified and not gated (Jonathan's decision on PR #8; `docs/DEFERRED.md`).
 - `select=TRUE` with sz smooths (done 2026-11-16): `tests/test_sz_basis.py` (null-space penalty vs `smoothCon(...,
   null.space.penalty=TRUE)`), `gam_binomial_cloglog_sz_select_reml`.
-- A numeric `by` on a cr smooth, the exit formula's `s(AttdAge, by = StudyYear_C)` (done 2026-11-16 except one gate):
-  `tests/test_cr_by_numeric.py`, `gam_binomial_cloglog_by_numeric_select_reml`. The eta of the fit without select
-  waits on Jonathan's answer (mgcv's search stops short of its optimum; `docs/DEFERRED.md`).
+- A numeric `by` on a cr smooth, the exit formula's `s(AttdAge, by = StudyYear_C)` (done 2026-11-16):
+  `tests/test_cr_by_numeric.py`, `gam_binomial_cloglog_by_numeric_reml` (eta gated against mgcv at a tight newton
+  `conv.tol`, Jonathan's decision on PR #12), `gam_binomial_cloglog_by_numeric_select_reml`.

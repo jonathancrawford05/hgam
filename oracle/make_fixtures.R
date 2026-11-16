@@ -334,4 +334,21 @@ b13be <- bam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, 
 put("bam_discrete_binomial_cloglog_by_numeric_select", bam_disc_case(b13b, d14, f14, "binomial(link='cloglog')",
                                                                       list(knots = list(x = sz_knots), select = TRUE,
                                                                            exact = bam_exact(b13be))))
+# 14. the exit formula itself: section 3's b (bam(discrete = TRUE, select = TRUE), my_knots), every key result. Two factors
+# with sz smooths of two covariates each, their interaction, a ti and a numeric by together. The response is written
+# as a column p = DthCnt / ExposCnt (prior weights ExposCnt), so the exported formula needs no arithmetic on the left.
+# mgcv's bam at discrete = FALSE is recorded beside it, and its rank and parametric edf as in section 13.
+f$p <- f$DthCnt / f$ExposCnt
+f14x <- paste('p ~ FaceSize + Smoke + FaceSize:Smoke + s(AttdAge, k=13, bs="cr") + s(PolYear, k=6, bs="cr") +',
+              'ti(AttdAge, PolYear, k=c(13, 6), bs="cr") + s(FaceSize, AttdAge, bs="sz", k=13, xt=list(bs="cr")) +',
+              's(Smoke, AttdAge, bs="sz", k=13, xt=list(bs="cr")) + s(FaceSize, PolYear, bs="sz", k=6, xt=list(bs="cr")) +',
+              's(Smoke, PolYear, bs="sz", k=6, xt=list(bs="cr")) + s(AttdAge, by=StudyYear_C, k=13, bs="cr")')
+b14 <- bam(as.formula(f14x), family = binomial(link = "cloglog"), weights = ExposCnt, data = f, knots = my_knots,
+           method = "fREML", discrete = TRUE, select = TRUE)
+stopifnot(isTRUE(all.equal(unname(b14$linear.predictors), unname(b$linear.predictors))))
+b14e <- bam(as.formula(f14x), family = binomial(link = "cloglog"), weights = ExposCnt, data = f, knots = my_knots,
+            method = "fREML", select = TRUE)
+put("bam_discrete_exit_formula", bam_disc_case(b14, f, f14x, "binomial(link='cloglog')",
+                                               c(list(knots = my_knots, weights = "ExposCnt", select = TRUE,
+                                                      exact = bam_exact(b14e)), bam_rank(b14))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

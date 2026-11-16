@@ -1,7 +1,7 @@
 """``gam(method="fREML", discrete=True)`` held to ``mgcv::bam(method="fREML", discrete=TRUE)`` fixtures
 (``make_fixtures.R`` section 12: 12a cr + ti, 12b cr + sz, 12c and 12d the same with ``select=TRUE``,
 12e a numeric ``by``; section 13: 13a a factor beside its sz smooth and 13b the numeric ``by``, both with
-``select=TRUE``).
+``select=TRUE``; section 14: the exit formula itself).
 
 The fit is ``bgam.fitd``'s performance iteration (``hgam.frontend.bam_fitd``) on covariates discretised
 as ``discrete.mf`` does (``hgam.frontend.discrete.discretise_frame``). Gates (``docs/PRIORITIES.md``):
@@ -25,6 +25,13 @@ TI = 'p ~ s(age, bs="cr", k=8) + s(dur, bs="cr", k=5) + ti(age, dur, bs="cr", k=
 SZ = 'p ~ s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))'
 BY = 'p ~ s(x, bs="cr", k=6) + s(x, by=z, bs="cr", k=6)'
 F_SZ = 'p ~ f + s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))'
+# Section 14: the exit formula (section 3's frame and knots), response written as p = DthCnt / ExposCnt.
+EXIT = (
+    'p ~ FaceSize + Smoke + FaceSize:Smoke + s(AttdAge, k=13, bs="cr") + s(PolYear, k=6, bs="cr") + '
+    'ti(AttdAge, PolYear, k=c(13, 6), bs="cr") + s(FaceSize, AttdAge, bs="sz", k=13, xt=list(bs="cr")) + '
+    's(Smoke, AttdAge, bs="sz", k=13, xt=list(bs="cr")) + s(FaceSize, PolYear, bs="sz", k=6, xt=list(bs="cr")) + '
+    's(Smoke, PolYear, bs="sz", k=6, xt=list(bs="cr")) + s(AttdAge, by=StudyYear_C, k=13, bs="cr")'
+)
 
 
 def _columns(fx: dict) -> dict[str, np.ndarray]:
@@ -48,17 +55,21 @@ CASES = {
     "bam_discrete_binomial_cloglog_f_sz_select": (F_SZ, True),
     # 13b: the numeric by with select=TRUE.
     "bam_discrete_binomial_cloglog_by_numeric_select": (BY, True),
+    # 14: the exit formula, bam(discrete=TRUE, select=TRUE) with prior weights ExposCnt.
+    "bam_discrete_exit_formula": (EXIT, True),
 }
 
 
 def _fit(fx: dict, name: str):
     formula, select = CASES[name]
+    if name == "bam_discrete_exit_formula":
+        assert formula == fx["formula"]
     data = _columns(fx)
     fit = gam(
         formula,
         data,
         'binomial(link="cloglog")',
-        weights="n",
+        weights=fx.get("weights", "n"),
         method="fREML",
         discrete=True,
         knots=fx.get("knots"),

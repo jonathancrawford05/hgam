@@ -48,6 +48,9 @@ promise to reproduce it, and the pinned image's LAPACK may itself split differen
 involved terms is invariant and already meets the gate. Options:
 - A. Gate the summed edf of the terms an unidentified direction runs through (and every other term as now); report
   the split as not identified. Needs a line in `docs/PRIORITIES.md` (yours to change).
+  Sub-choice (PR #8 review): the per-term gate's 1% arm would make the summed gate 0.076 on 8a's sum of 7.6, looser
+  than 0.05 on each term. Take the sum at the 0.05 absolute gate alone? Recommendation: yes; both fixtures meet it
+  (8a 2.1e-3, 8b 1.2e-3).
 - B. Port `totalPenaltySpace` + `gdiPK`'s rank decision at the converged working weights, refitting if it changes,
   and accept that agreement depends on matching LAPACK's eigenvector basis (it does not match scipy's today).
 - C. Change the exit formula so it is not rank deficient (drop `FaceSize` or one sz term): a scope change.

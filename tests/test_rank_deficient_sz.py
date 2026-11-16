@@ -14,8 +14,9 @@ which direction is dropped are held to their gates here:
 - the summed edf of the terms the unidentified directions run through, which does not depend on the choice.
 
 How that sum splits between those terms is decided by which direction mgcv drops, and that depends on the
-arbitrary basis LAPACK returns for a degenerate eigenspace (see ``docs/DEFERRED.md``); it is not asserted
-until Jonathan decides how to gate it (``docs/routines/CONTINUATION.md``).
+arbitrary basis LAPACK returns for a degenerate eigenspace (see ``docs/DEFERRED.md``); it is not
+identified and not asserted. Jonathan decided on PR #8 that these terms are gated on their summed edf, at the
+per-term gate (0.05 absolute or 1%, whichever is larger).
 """
 
 import warnings

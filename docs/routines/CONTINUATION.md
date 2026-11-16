@@ -22,7 +22,10 @@ and `select=TRUE` with sz are refused). Basis vs `smoothCon` at 1.5e-14; the sec
 
 A factor main effect beside sz smooths of that factor (section 8, `tests/test_rank_deficient_sz.py`): structure,
 eta, se, the uninvolved terms' edf and the summed edf of the terms sharing the redundant directions meet their gates.
-The split of that sum between the factor and its sz smooths does not, and is not portable (DEFERRED; question below).
+The split of that sum between the factor and its sz smooths is not identified and not portable (DEFERRED). Jonathan
+decided on PR #8 (option A): those terms are gated on their summed edf, at the per-term gate (0.05 absolute or 1%,
+whichever is larger); the split is reported as not identified and is not gated. `gdiPK`'s rank decision is not
+ported for this and the exit formula stays as it is. The matching `docs/PRIORITIES.md` line is Jonathan's change.
 
 The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 610 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
@@ -35,26 +38,12 @@ The exit formula uses `select=TRUE`; sz with `select=TRUE` is refused today (`te
 2. Fixture (section 9): section 7's model with `select=TRUE`, plus `smoothCon(..., null.space.penalty=TRUE)` S for sz.
 3. Accept `select=TRUE` with sz, hold the penalties to 1e-8 and the fit to the gates.
 
-After that the exit test still needs: numeric `by`, `bam(discrete=TRUE)` on `ti` and sz, and the answer below on
-per-term edf in the rank-deficient sz shape.
+After that the exit test still needs: numeric `by` and `bam(discrete=TRUE)` on `ti` and sz. Where the exit test
+compares per-term edf, it compares the summed edf of the terms that share a redundant direction (decision above).
 
 ## Open items for Jonathan
 
-**Per-term edf where a factor's contrasts are redundant with its sz smooths** (the exit formula's `FaceSize + ... +
-s(FaceSize, AttdAge, bs="sz") + s(FaceSize, PolYear, bs="sz")`). mgcv drops the redundant directions in `gdiPK`
-(gdi.c) by a pivoted QR in the `totalPenaltySpace` basis, an arbitrary basis of a degenerate eigenspace. Under 200
-equally valid rotations of that basis mgcv's own rule changes the split 39 times (8a: f edf 1 or 2), so no port can
-promise to reproduce it, and the pinned image's LAPACK may itself split differently from a local R. The sum over the
-involved terms is invariant and already meets the gate. Options:
-- A. Gate the summed edf of the terms an unidentified direction runs through (and every other term as now); report
-  the split as not identified. Needs a line in `docs/PRIORITIES.md` (yours to change).
-  Sub-choice (PR #8 review): the per-term gate's 1% arm would make the summed gate 0.076 on 8a's sum of 7.6, looser
-  than 0.05 on each term. Take the sum at the 0.05 absolute gate alone? Recommendation: yes; both fixtures meet it
-  (8a 2.1e-3, 8b 1.2e-3).
-- B. Port `totalPenaltySpace` + `gdiPK`'s rank decision at the converged working weights, refitting if it changes,
-  and accept that agreement depends on matching LAPACK's eigenvector basis (it does not match scipy's today).
-- C. Change the exit formula so it is not rank deficient (drop `FaceSize` or one sz term): a scope change.
-Recommendation: A. It is what the data identify, it is reproducible, and it costs no further slices.
+None.
 
 ## Open questions
 

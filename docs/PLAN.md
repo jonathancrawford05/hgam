@@ -36,7 +36,7 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - The sz basis with a cr base, `s(f, x, bs="sz", xt=list(bs="cr"))` (done 2026-11-16, M2, the exit test needs it):
   `tests/test_sz_basis.py`, `gam_binomial_cloglog_sz_reml`.
 - A factor main effect beside sz smooths of that factor, the exit formula's rank-deficient shape (fixtures and gates
-  that hold done 2026-11-16; per-term split waiting on Jonathan): `tests/test_rank_deficient_sz.py`,
+  done 2026-11-16): `tests/test_rank_deficient_sz.py`,
   `gam_binomial_cloglog_f_sz_reml`, `gam_binomial_cloglog_two_sz_reml`. Structure, eta, se, uninvolved edf and the
-  summed edf of the involved terms meet their gates. The per-term split inside the involved terms is open
-  (CONTINUATION, "Open items for Jonathan").
+  summed edf of the involved terms meet their gates. The per-term split inside the involved terms is not
+  identified and not gated (Jonathan's decision on PR #8; `docs/DEFERRED.md`).

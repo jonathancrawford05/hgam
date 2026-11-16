@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16 (fourteenth slice): summary of a discrete fit, the parametric table
+
+Ported `summary.gam`'s parametric table (mgcv.r): `GamSummary.parametric` (Estimate, Std. Error from Vp, z, 2 * pnorm), mgcv's coefficient names (`GamFit.parametric_names`); `summary()` now accepts a `discrete=True` fit. New fixture section 16 (`bam_discrete_exit_summary`), `tests/test_summary_bam.py`.
+Tests: 644 pass before; 647 pass and 1 strict xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: contrasts 8.1e-7, se 1.8e-5 relative, edf 2.2e-3, names exact. Intercept 3.6e-3 (gate 1e-3): it is s(AttdAge)'s level, the constraint row set of discrete bam (strict xfail; question on the PR).
+Deferred: smooth-term tests (Ref.df, Chi.sq, p: testStat / reTest / psum.chisq) to the next slice; estimated-scale p.table not ported.
+
 ## 2026-11-16 (thirteenth slice): predict on new data from a discrete fit
 
 Ported `predict.bamd`'s re-discretisation (bam.r): `GamFit.predict` re-bins new data with `discretise_frame` for a `discrete=True` fit; `discrete=False` predicts at raw covariates. New fixture section 15 (`bam_discrete_exit_predict_a`, `_b`), `tests/test_predict_bam.py`. Also fixed review nit 1 of PR #19 in finding 0002.

@@ -13,7 +13,7 @@ The covariates are first discretised as ``discrete.mf`` (bam.r) does
 ``bam(discrete=FALSE)`` instead (``make_fixtures.R`` section 12 records both).
 
 **Not ported (refused by name).** Free-scale and quasi families, ``gamma != 1``, and anything
-needing the exact-REML Hessian (``vcov(unconditional=True)``, ``summary()``).
+needing the exact-REML Hessian (``vcov(unconditional=True)``); ``summary()`` reports no REML score.
 """
 
 from collections.abc import Mapping

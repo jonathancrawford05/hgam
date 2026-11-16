@@ -222,12 +222,11 @@ class TestGamEntryPoint:
         with pytest.raises(HgamNotImplementedError, match="not a supported pair"):
             gam(FORMULA, _frame(), "poisson", method=method, discrete=discrete)
 
-    def test_unconditional_covariance_and_summary_are_refused(self) -> None:
+    def test_unconditional_covariance_is_refused(self) -> None:
+        # summary() of a discrete fit is ported (tests/test_summary_bam.py, section 16).
         fit = gam(FORMULA, _frame(), "poisson", method="fREML", discrete=True)
         with pytest.raises(HgamNotImplementedError, match="unconditional"):
             fit.vcov(unconditional=True)
-        with pytest.raises(HgamNotImplementedError, match="summary"):
-            fit.summary()
         _, se = fit.predict(_frame(), se_fit=True)
         assert np.all(np.isfinite(se)) and np.all(se > 0)
 

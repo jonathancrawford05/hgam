@@ -63,3 +63,5 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   section 14's data and meets every gate (strict xfail lifted).
 - M4, `predict` on new data from a discrete fit (done 2026-11-16): `GamFit.predict` re-bins new data as `predict.bamd`
   does; `tests/test_predict_bam.py`, section 15. Next: `summary`.
+- M4, `summary`, first step (2026-11-16, open): the parametric table of `summary.gam` on a discrete fit;
+  `tests/test_summary_bam.py`, section 16. The intercept waits on a question (PR); smooth-term tests next.

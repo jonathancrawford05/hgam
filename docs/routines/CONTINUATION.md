@@ -26,7 +26,9 @@ The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a str
 ## Next slice: per-term edf with a factor main effect beside its sz smooth
 
 The exit formula has `FaceSize + Smoke + ... + s(FaceSize, AttdAge, bs="sz", ...)`: the factor main effect sits
-inside the sz smooth's null space (a cr basis sums to one), so the model is structurally rank deficient. hgam
+inside the sz smooth's null space (a cr basis sums to one), so the model is structurally rank deficient. The
+same holds between two sz smooths of one factor (`s(FaceSize, AttdAge, ...)` and `s(FaceSize, PolYear, ...)`),
+each of whose cr bases spans the factor's contrasts; the fixture should cover both shapes. hgam
 already meets eta, se and total edf there, but splits per-term edf differently from mgcv (DEFERRED: mgcv keeps
 `fb` with edf 1 and zeroes `fc`; hgam drops both `f` columns). Per-term edf is a gated key result. Steps:
 1. Read how mgcv chooses what to drop: `gam.fit3` (gam.fit3.r) passes `rank.tol` to C `gdi2` (gdi.c), which

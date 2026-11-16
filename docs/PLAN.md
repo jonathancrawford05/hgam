@@ -40,3 +40,5 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   `gam_binomial_cloglog_f_sz_reml`, `gam_binomial_cloglog_two_sz_reml`. Structure, eta, se, uninvolved edf and the
   summed edf of the involved terms meet their gates. The per-term split inside the involved terms is not
   identified and not gated (Jonathan's decision on PR #8; `docs/DEFERRED.md`).
+- `select=TRUE` with sz smooths (done 2026-11-16): `tests/test_sz_basis.py` (null-space penalty vs `smoothCon(...,
+  null.space.penalty=TRUE)`), `gam_binomial_cloglog_sz_select_reml`.

@@ -4,14 +4,16 @@ mgcv counterpart: ``smooth.construct.sz.smooth.spec`` (smooth.r, mgcv 1.9-4), wi
 contrast that ``smoothCon`` applies through ``XZKr`` (smooth.r).
 
 The absorbed design and per-level penalties are deterministic pieces (1e-8 relative, ``smoothcon_sz_cr``,
-section 7). A fitted model with an sz term is held to its gates in ``tests/test_gam_reml_fixtures.py``
-(section 7).
+section 7); with ``select=TRUE``, the appended null-space penalty too (``smoothcon_sz_cr_select``,
+section 9). Fitted models with an sz term are held to their gates in ``tests/test_gam_reml_fixtures.py``
+(sections 7 and 9).
 """
 
 import numpy as np
 import pytest
 
 from hgam.engine.gam_basis_cr import sz_basis
+from hgam.engine.gam_select_penalty import null_space_penalty
 from hgam.errors import HgamNotImplementedError
 from hgam.frontend.api import gam
 
@@ -67,9 +69,36 @@ def test_unported_sz_forms_are_refused(frame, formula: str, match: str) -> None:
         gam(formula, frame, "gaussian")
 
 
-def test_sz_with_select_is_refused_until_measured(frame) -> None:
-    with pytest.raises(HgamNotImplementedError, match="select=True"):
-        gam('y ~ f + s(f, x, bs="sz", k=5, xt=list(bs="cr"))', frame, "gaussian", select=True)
+def test_sz_with_select_adds_one_null_space_penalty(frame) -> None:
+    """Replaces the earlier slice's refusal test: select=True with sz is now accepted, and adds one
+    smoothing parameter for the sz term (its null-space penalty) beside the per-level ones."""
+    formula = 'y ~ s(x, bs="cr", k=5) + s(f, x, bs="sz", k=5, xt=list(bs="cr"))'
+    plain = gam(formula, frame, "gaussian")
+    selected = gam(formula, frame, "gaussian", select=True)
+    # one extra for the cr smooth, one for the sz term
+    assert selected.log_lambda.size == plain.log_lambda.size + 2
+
+
+@pytest.mark.parametrize("case", ["two_levels", "three_levels"])
+def test_sz_select_penalty_matches_smoothcon(load_fixture, case: str) -> None:
+    """``select=TRUE`` on sz: smoothCon's ``null.space.penalty`` appends one penalty, ``U U'`` for the
+    null space of the summed per-level penalties (section 9a)."""
+    fx = load_fixture("smoothcon_sz_cr_select")["cases"][case]
+    _, penalties = sz_basis(
+        np.asarray(fx["x"], dtype=np.float64),
+        np.asarray(fx["group"], dtype=np.int64),
+        fx["n_levels"],
+        np.asarray(fx["knots"], dtype=np.float64),
+    )
+    result = null_space_penalty(tuple(penalties))
+    assert result is not None
+    s_null, null_dim = result
+    # Structure: exact. mgcv's S list is the per-level penalties, then the null-space penalty.
+    assert len(fx["S"]) == fx["n_levels"] + 1
+    assert [*(int(np.linalg.matrix_rank(s)) for s in penalties), null_dim] == fx["rank"]
+    # Deterministic pieces: 1e-8 relative.
+    for got, ref in zip([*penalties, s_null], fx["S"], strict=True):
+        assert _rel(got, ref) < DETERMINISTIC_RTOL
 
 
 def test_sz_uses_supplied_knots(frame) -> None:

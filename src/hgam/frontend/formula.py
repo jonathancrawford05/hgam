@@ -8,7 +8,7 @@ later by :mod:`hgam.frontend.api`, which holds the DataFrame.
 
 **The grammar is the verified subset, nothing wider** (``MGCV_FEATURE_COVERAGE.md``)::
 
-    response ~ term (+ term)*
+    response ~ term (+ term)*          response := column | column / column
     term     := s(x [, bs="tp"] [, k=K])  |  s(x, bs="cr", k=K [, by=z])  |  s(f, bs="re")
               | s(f, x, bs="sz", k=K, xt=list(bs="cr"))
               | ti(x, z, bs="cr" [, k=K | c(K1, K2)])
@@ -130,6 +130,8 @@ class ParsedFormula:
     response: str
     terms: tuple[TermCall, ...]
     offset: str | None = None
+    response_denominator: str | None = None
+    """The ``b`` of a response written ``a / b`` (the response is column ``a`` divided by column ``b``)."""
     source: str = field(default="", compare=False)
 
 
@@ -379,11 +381,17 @@ def parse_formula(formula: str) -> ParsedFormula:
     response = sides[0].strip()
     if not response:
         raise HgamValidationError(f"gam(): formula {formula!r} has no response (response ~ terms).")
-    if not _IDENT.match(response):
+    # R's model.frame (stats) evaluates the left-hand side as an expression; the one expression ported
+    # is a ratio of two columns, a / b (the exit formula's DthCnt / ExposCnt, a proportion response).
+    ratio = [part.strip() for part in _split_top_level(response, "/")]
+    denominator: str | None = None
+    if len(ratio) == 2 and all(_IDENT.match(part) for part in ratio):
+        response, denominator = ratio
+    elif not _IDENT.match(response):
         raise _refuse(
             f"response {response!r}",
-            "the response must be a plain column name (cbind(), transformations and "
-            "expressions are outside the verified subset)",
+            "the response must be a plain column name or a ratio of two columns, a / b (cbind(), "
+            "transformations and other expressions are outside the verified subset)",
         )
     rhs = sides[1].strip()
     if not rhs:
@@ -452,4 +460,10 @@ def parse_formula(formula: str) -> ParsedFormula:
         terms.append(term)
     if not terms:
         raise HgamValidationError(f"gam(): formula {formula!r} has no model terms.")
-    return ParsedFormula(response=response, terms=tuple(terms), offset=offset, source=formula)
+    return ParsedFormula(
+        response=response,
+        terms=tuple(terms),
+        offset=offset,
+        response_denominator=denominator,
+        source=formula,
+    )

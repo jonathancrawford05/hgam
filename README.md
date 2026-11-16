@@ -3,8 +3,10 @@
 Hierarchical generalized additive models in Python: a GPL port of the hierarchical-GAM core of R's
 [mgcv](https://cran.r-project.org/package=mgcv), tested against mgcv itself.
 
-**Status: pre-alpha scaffold.** Nothing is fitted yet. `hgam.gam` and `hgam.bam` raise
-`NotImplementedError` until the milestones in [docs/PLAN.md](docs/PLAN.md) deliver them.
+**Status: pre-alpha.** `hgam.bam` fits with `method="fREML", discrete=True` only, and `hgam.gam` with
+`method="REML"` only (it must be written out; mgcv's default `GCV.Cp` is refused). Every other method, term,
+family or option is refused by name with `NotImplementedError`. The exit test, the target model fitted through
+`hgam.bam`, meets every gate against mgcv. What is still to come is in [docs/PLAN.md](docs/PLAN.md).
 
 ## What it is for
 

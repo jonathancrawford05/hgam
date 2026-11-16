@@ -1,11 +1,18 @@
 # Development session log
 
+## 2026-11-16 (eleventh slice): hgam.bam / hgam.gam wired; the exit test passes
+
+`hgam.gam` (mgcv.r) and `hgam.bam` (bam.r) forward to the front end (`family=` + `link=`, unported methods refused); the response `a / b` (R's `model.frame`) is parsed and evaluated. `tests/test_exit.py` fits `hgam_formula` as written on section 14's data and knots, held to every gate; strict xfail lifted. New `tests/test_entry_points.py`.
+Tests: 628 pass and 1 xfail before; 640 pass and 0 xfail after (review fix: hgam.gam defaults to mgcv's method="GCV.Cp" and refuses it). `make lint` is clean.
+Tier 1, mgcv 1.9-1: the exit fit equals section 14's (eta 1.1e-4, se 2.6e-4 relative, edf 2.2e-3, structure exact vs sections 3 and 14). Also fixed PR #17's review nit (sp attribution in DEFERRED and the log).
+Deferred: nothing new.
+
 ## 2026-11-16 (tenth slice): the exit formula on bam(discrete=TRUE, select=TRUE)
 
 New fixture section 14 (`bam_discrete_exit_formula`: section 3's `b` refitted with response column p = DthCnt / ExposCnt, exact bam, rank and parametric edf beside it) held in `tests/test_bam_discrete_fixtures.py`; no engine change.
 Tests: 627 pass and 1 xfail before; 628 pass and 1 xfail after. `make lint` is clean.
 Tier 1, mgcv 1.9-1: eta 1.1e-4 (mgcv's own discrete vs exact gap 7.0e-3), se 2.6e-4 relative, per-term edf 2.2e-3 (FaceSize, Smoke, FaceSize:Smoke included), rank 132 of 132. Structure exact.
-Deferred: sp of the ti term (6-14%) and of s(Smoke,PolYear) (up to x2), not gated.
+Deferred: sp of the ti term (6-14%), of s(Smoke,PolYear) (x1.96) and of s(FaceSize,PolYear) (x0.62; attribution corrected after the PR #17 review), not gated.
 
 ## 2026-11-16 (ninth slice): bam(discrete=TRUE, select=TRUE) on f + sz and on a numeric by
 

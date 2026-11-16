@@ -658,7 +658,9 @@ def gam(
             conformance module (ADR-236/237), not through the production fitter.
         method, discrete: ``method="REML"`` (the default) is the exact Laplace REML search.
             ``method="fREML", discrete=True`` is ``bam(method="fREML", discrete=TRUE)``'s
-            performance iteration (``hgam.frontend.bam_fitd``, ADR-260 amendments 2-4),
+            performance iteration (``hgam.frontend.bam_fitd``, ADR-260 amendments 2-4) on the
+            covariates binned as ``discrete.mf`` bins them (``make_fixtures.R`` section 12; ``predict``
+            on new data does not re-bin, unlike ``predict.bam``),
             for poisson and binomial only; the smoothing parameters are the iteration's end
             state, so they differ from ``method="REML"``'s by design. The pair is accepted
             only together; every other combination is refused by name.

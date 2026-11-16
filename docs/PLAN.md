@@ -48,3 +48,7 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - `select=TRUE` on the factor + sz rank-deficient shapes (done 2026-11-16): `tests/test_rank_deficient_sz.py`,
   `gam_binomial_cloglog_f_sz_select_reml`, `gam_binomial_cloglog_two_sz_select_reml`. The null-space penalties make
   the fit full rank in mgcv and hgam, so every term meets the per-term edf gate.
+- `bam(method="fREML", discrete=TRUE)` on cr + ti and on sz, with and without `select=TRUE` (done 2026-11-16, the
+  first `discrete.mf` step of M3): `tests/test_bam_discrete_fixtures.py`, section 12. Covariates are binned per
+  variable by `compress.df` before the fit (`discretise_frame`); without it hgam matched mgcv's `discrete = FALSE` bam
+  (8e-9) and missed its discrete bam (eta 4.0e-3).

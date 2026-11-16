@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16 (eighth slice): bam(discrete=TRUE) on cr + ti and on sz
+
+Ported the one-covariate-margin subset of `discrete.mf` (bam.r) as `discretise_frame`; `fit_engine_bam` now fits on binned covariates and accepts sz. New fixture section 12 (12a cr + ti, 12b sz, 12c/12d with select=TRUE, each with mgcv's discrete = FALSE bam beside it), `tests/test_bam_discrete_fixtures.py`.
+Tests: 619 pass and 1 xfail before; 624 pass and 1 xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1, vs mgcv's discrete bam: 12a eta 3.7e-4, se 1.2e-3, edf 7.1e-3; 12b eta 2e-6; 12c eta 3.6e-4, se 1.3e-3, edf 6.6e-3; 12d eta 1.5e-9. Structure exact. Before binning, 12a matched mgcv's exact bam (8e-9) and missed its discrete bam (4.0e-3).
+Deferred: 12a ti sp ~10% off (constraints over data rows vs mgcv's padded frame); predict on new data does not re-bin.
+
 ## 2026-11-16 (seventh slice): select=TRUE on the factor + sz shapes
 
 New fixture section 11 (8a and 8b with `select=TRUE`) and a test in `tests/test_rank_deficient_sz.py`; no engine change. The null-space penalties identify the shared directions: mgcv's rank equals the coefficient count and hgam pivots nothing.

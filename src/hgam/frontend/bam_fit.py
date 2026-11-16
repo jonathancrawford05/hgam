@@ -8,8 +8,11 @@ selection differs: :func:`~hgam.frontend.bam_fitd.bam_fitd` replaces the Laplace
 search. The smoothing parameters are therefore the *iteration's end state*, which is what
 ``bam`` reports and why exact-REML ``gam`` sits ~1e-2 from it on weak-signal cells.
 
-**Not ported (refused by name).** Free-scale and quasi families, ``gamma != 1``,
-``sz`` terms (their one-sp-per-level block shape has never been exercised), and anything
+The covariates are first discretised as ``discrete.mf`` (bam.r) does
+(:func:`~hgam.frontend.discrete.discretise_frame`); without that step the fit is mgcv's
+``bam(discrete=FALSE)`` instead (``make_fixtures.R`` section 12 records both).
+
+**Not ported (refused by name).** Free-scale and quasi families, ``gamma != 1``, and anything
 needing the exact-REML Hessian (``vcov(unconditional=True)``, ``summary()``).
 """
 
@@ -31,6 +34,7 @@ from hgam.engine.gam_predict import fit_term_state
 from hgam.engine.gam_term_spec import ModelSpec
 from hgam.errors import HgamNotImplementedError
 from hgam.frontend.bam_fitd import bam_fitd
+from hgam.frontend.discrete import discretise_frame
 
 __all__ = ["fit_engine_bam"]
 
@@ -39,7 +43,7 @@ def fit_engine_bam(model: ModelSpec, data: Mapping[str, np.ndarray], y: np.ndarr
     """Fit ``model`` by the ``bgam.fitd`` performance iteration.
 
     Args:
-        model: Poisson or binomial; terms ``cr`` / ``ti`` / ``re`` / parametric (``select``
+        model: Poisson or binomial; terms ``cr`` / ``ti`` / ``sz`` / ``re`` / parametric (``select``
             as set on the model).
         data: covariate arrays keyed by name, plus the weights/offset columns if named.
         y: the response.
@@ -62,10 +66,9 @@ def fit_engine_bam(model: ModelSpec, data: Mapping[str, np.ndarray], y: np.ndarr
             'supported — bam builds them on its compressed frame; write bs="cr" '
             "(ADR-261)."
         )
-    if any(term.basis == "sz" for term in model.terms):
-        raise HgamNotImplementedError(
-            "gam(method='fREML', discrete=True): sz terms are not supported (ADR-260 amendment 2)."
-        )
+    # discrete.mf (bam.r): every numeric covariate is binned before the design is built, so the
+    # fit, its edf and its term states (prediction) are at the discretised covariates.
+    data = discretise_frame(model, data)
     with unique_row_constraint():
         full_design = assemble_model_design(model, data)
     design = pivot_design(full_design)

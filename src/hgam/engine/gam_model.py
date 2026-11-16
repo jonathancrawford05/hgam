@@ -422,13 +422,15 @@ def _warn_if_rank_deficient(full: ModelDesign, pivoted: ModelDesign, *, stacklev
     labels = [b["label"] for b in full["term_blocks"] if bool(involved[b["start"] : b["end"]].any())]
     warnings.warn(
         f"The model specification has {n_dir} redundant direction(s) the data cannot identify, "
-        f"running through the terms {labels}; typically a smooth and a by-factor smooth of the "
-        "same covariate share a null space. The fit is valid: fitted values, edf_total and the "
-        "Vp-based standard errors are well defined. Per-term edf and the unconditional "
-        "covariance (Vc) depend on which coefficient is eliminated and are NOT identified "
-        "(mgcv's own values change between runs, ADR-256): Vc is refused and per-term edf "
-        "should not be interpreted. To remove the redundancy, drop the bare s(x) and fit "
-        "f + s(x, by=f).",
+        f"running through the terms {labels}. Typical causes: a smooth and a by-factor smooth of "
+        "the same covariate share a null space (fix: drop the bare s(x) and fit f + s(x, by=f)); "
+        "or a factor's contrasts lie in the null space of an sz smooth of that factor, which "
+        "happens with a factor main effect beside s(f, x, bs='sz') or with two sz smooths of one "
+        "factor (mgcv keeps such models; matching its per-term edf there is not yet ported). "
+        "The fit is valid: fitted values, edf_total and the Vp-based standard errors are well "
+        "defined. Per-term edf and the unconditional covariance (Vc) depend on which coefficient "
+        "is eliminated and are NOT identified (ADR-256): Vc is refused and per-term edf should "
+        "not be interpreted.",
         HgamRankDeficiencyWarning,
         stacklevel=stacklevel,
     )

@@ -52,6 +52,7 @@ from hgam.frontend.bam_fit import fit_engine_bam
 from hgam.frontend.formula import (
     ParametricCall,
     ParsedFormula,
+    SzCall,
     TensorCall,
     parse_formula,
 )
@@ -514,6 +515,34 @@ def _build_model(
                 )
             )
             smooth_meta.append((call.text, int(np.prod(call.k))))
+        elif isinstance(call, SzCall):
+            # mgcv counterpart: smooth.construct.sz.smooth.spec (smooth.r, mgcv 1.9-4), cr base. The factor
+            # columns of the design come first whatever the written order, but only s(f, x) is measured.
+            factor_name, smoothed = call.variables
+            if not _is_factor(_column(df, factor_name)):
+                raise HgamNotImplementedError(
+                    f"gam(): {call.text}: bs='sz' is ported with the factor written first, s(f, x, ...); "
+                    f"{factor_name!r} is not a factor column."
+                )
+            need_numeric(smoothed, call.text)
+            levels = need_factor(factor_name).levels
+            if select:
+                raise HgamNotImplementedError(
+                    f"gam(): select=True with the sz smooth {call.text} is not yet measured against mgcv; "
+                    "fit without select=True."
+                )
+            smooth.append(
+                TermSpec(
+                    label=call.text,
+                    variables=(factor_name, smoothed),
+                    basis="sz",
+                    k=(call.k,),
+                    knots=cr_knots(smoothed, call.k, call.text),
+                    n_levels=len(levels),
+                )
+            )
+            # mgcv's bs.dim for sz: prod(nf - 1) * the base smooth's bs.dim.
+            smooth_meta.append((call.text, call.k * (len(levels) - 1)))
         elif call.basis == "re":
             refuse_knots(call.variable, call.text)
             levels = need_factor(call.variable).levels
@@ -610,7 +639,8 @@ def gam(
         formula: e.g. ``'y ~ g + s(x, bs="cr", k=8) + ti(x, z, bs="cr", k=c(6, 5))'``.
             Supported: a bare ``s(x, k=)`` / ``s(x, bs="tp", k=)`` (thin-plate, ``mgcv``'s
             default, ADR-261), ``s(x, bs="cr", k=, by=)`` (numeric or factor ``by``),
-            ``s(f, bs="re")``, ``ti(x, z, bs="cr", k=)``, factors ``a``, ``a:b``
+            ``s(f, bs="re")``, ``s(f, x, bs="sz", k=, xt=list(bs="cr"))``,
+            ``ti(x, z, bs="cr", k=)``, factors ``a``, ``a:b``
             (with both main effects), ``offset(col)``. Anything else is refused by
             name (:class:`~hgam.errors.HgamValidationError`).
         data: a mapping from column name to a 1-D array. String arrays and
@@ -635,10 +665,10 @@ def gam(
             state, so they differ from ``method="REML"``'s by design. The pair is accepted
             only together; every other combination is refused by name.
         knots: ``mgcv``'s ``knots = list(x = c(...))``: knot locations per variable, used as given by
-            every ``bs="cr"`` smooth of that variable and every ``ti`` margin on it (mgcv counterpart:
-            ``smooth.construct.cr.smooth.spec``, smooth.r, mgcv 1.9-4, which stops when the count is
-            not ``k``). Knots for a variable reached only by a ``tp`` or ``re`` term are refused, and
-            so are names no smooth uses (mgcv ignores those).
+            every ``bs="cr"`` smooth of that variable, every ``ti`` margin on it and every ``sz`` smooth
+            of it (mgcv counterpart: ``smooth.construct.cr.smooth.spec``, smooth.r, mgcv 1.9-4, which
+            stops when the count is not ``k``). Knots for a variable reached only by a ``tp`` or ``re``
+            term are refused, and so are names no smooth uses (mgcv ignores those).
 
     Returns:
         a :class:`GamFit` (a :class:`~hgam.engine.gam_model.EngineGAMFit`

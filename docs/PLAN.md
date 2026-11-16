@@ -61,3 +61,5 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - The exit test passes (done 2026-11-16): `hgam.bam` / `hgam.gam` forward to the front end, the response
   `DthCnt / ExposCnt` is evaluated as `model.frame` does, and `tests/test_exit.py` fits `hgam_formula` as written on
   section 14's data and meets every gate (strict xfail lifted).
+- M4, `predict` on new data from a discrete fit (done 2026-11-16): `GamFit.predict` re-bins new data as `predict.bamd`
+  does; `tests/test_predict_bam.py`, section 15. Next: `summary`.

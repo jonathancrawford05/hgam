@@ -49,6 +49,7 @@ from hgam.engine.gam_rank_pivot import unidentified_directions
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec, factor_by_terms
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 from hgam.frontend.bam_fit import fit_engine_bam
+from hgam.frontend.discrete import discretise_frame
 from hgam.frontend.formula import (
     ParametricCall,
     ParsedFormula,
@@ -202,6 +203,7 @@ class GamFit(EngineGAMFit):
         se_fit: Literal[False] = False,
         unconditional: bool = False,
         encoded: bool = False,
+        discrete: bool = True,
     ) -> np.ndarray: ...
 
     @overload
@@ -213,6 +215,7 @@ class GamFit(EngineGAMFit):
         se_fit: Literal[True],
         unconditional: bool = False,
         encoded: bool = False,
+        discrete: bool = True,
     ) -> tuple[np.ndarray, np.ndarray]: ...
 
     def predict(
@@ -223,11 +226,28 @@ class GamFit(EngineGAMFit):
         se_fit: bool = False,
         unconditional: bool = False,
         encoded: bool = False,
+        discrete: bool = True,
     ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
-        """``predict.gam``. ``newdata`` is encoded with the fitted factor coding (string
-        levels in, offset column included), unless ``encoded=True`` says it already holds
-        the integer codes and floats :meth:`EngineGAMFit.predict` takes."""
+        """mgcv counterpart: ``predict.gam`` (mgcv.r); for a ``discrete=True`` fit, ``predict.bam`` and
+        ``predict.bamd`` (bam.r), mgcv 1.9-4.
+
+        ``newdata`` is encoded with the fitted factor coding (string levels in, offset column
+        included), unless ``encoded=True`` says it already holds the integer codes and floats
+        :meth:`EngineGAMFit.predict` takes.
+
+        For a fit made with ``discrete=True`` and ``discrete=True`` here (``predict.bam``'s default),
+        ``predict.bamd`` runs ``discrete.mf`` on ``newdata`` itself: each smooth covariate (and numeric
+        ``by``) of ``newdata`` is compressed on its own by ``compress.df`` at ``m = NULL``, so above 1000
+        unique values it is snapped to 1000 points over ``newdata``'s own range, and the prediction is
+        made at those values (:func:`~hgam.frontend.discrete.discretise_frame`). ``predict.bamd``'s
+        ``Xbd`` / ``diagXVXd`` products over the marginal matrices are replaced by the model matrix at
+        the discretised rows, which gives the same eta and se. ``discrete=False`` predicts at the
+        covariates as given (``predict.bam`` falling through to ``predict.gam``). Parametric covariates
+        need no binning: only factors are accepted there. A factor level the fit did not see is refused
+        (``predict.bamd`` sets its dummies to zero with a warning)."""
         data = newdata if encoded else self.encode(newdata)
+        if discrete and self.fit_method == "fREML-discrete":
+            data = discretise_frame(self.model, data)
         if se_fit:
             return super().predict(data, type, se_fit=True, unconditional=unconditional)
         return super().predict(data, type, se_fit=False, unconditional=unconditional)
@@ -660,7 +680,7 @@ def gam(
             ``method="fREML", discrete=True`` is ``bam(method="fREML", discrete=TRUE)``'s
             performance iteration (``hgam.frontend.bam_fitd``, ADR-260 amendments 2-4) on the
             covariates binned as ``discrete.mf`` bins them (``make_fixtures.R`` section 12; ``predict``
-            on new data does not re-bin, unlike ``predict.bam``),
+            re-bins new data as ``predict.bam`` does, section 15),
             for poisson and binomial only; the smoothing parameters are the iteration's end
             state, so they differ from ``method="REML"``'s by design. The pair is accepted
             only together; every other combination is refused by name.

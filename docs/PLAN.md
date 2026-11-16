@@ -45,3 +45,6 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - A numeric `by` on a cr smooth, the exit formula's `s(AttdAge, by = StudyYear_C)` (done 2026-11-16):
   `tests/test_cr_by_numeric.py`, `gam_binomial_cloglog_by_numeric_reml` (eta gated against mgcv at a tight newton
   `conv.tol`, Jonathan's decision on PR #12), `gam_binomial_cloglog_by_numeric_select_reml`.
+- `select=TRUE` on the factor + sz rank-deficient shapes (done 2026-11-16): `tests/test_rank_deficient_sz.py`,
+  `gam_binomial_cloglog_f_sz_select_reml`, `gam_binomial_cloglog_two_sz_select_reml`. The null-space penalties make
+  the fit full rank in mgcv and hgam, so every term meets the per-term edf gate.

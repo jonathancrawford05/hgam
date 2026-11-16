@@ -256,4 +256,16 @@ m14s <- gam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, d
 put("gam_binomial_cloglog_by_numeric_select_reml", c(gam_case(m14s, d14, f14, "binomial(link='cloglog')"),
                                                      list(knots = list(x = sz_knots), select = TRUE)))
 
+# 11. select = TRUE on section 8's rank-deficient shapes (8a: f + s(x) + s(f, x, sz); 8b: f with two sz smooths of a
+# two-level factor). The null-space penalties (smoothCon's null.space.penalty, smooth.r) penalise the directions
+# the factor shares with its sz smooths, so mgcv's fit is full rank (m$rank equals the coefficient count) and the
+# per-term edf are identified.
+m11a <- gam(as.formula(f8a), family = binomial(link = "cloglog"), weights = n, data = d10,
+            knots = list(x = sz_knots), method = "REML", select = TRUE)
+put("gam_binomial_cloglog_f_sz_select_reml", c(rank_case(m11a, d10, f8a, list(x = sz_knots)), list(select = TRUE)))
+m11b <- gam(as.formula(f8b), family = binomial(link = "cloglog"), weights = n, data = d11,
+            knots = list(x = sz_knots, z = sz_knots), method = "REML", select = TRUE)
+put("gam_binomial_cloglog_two_sz_select_reml", c(rank_case(m11b, d11, f8b, list(x = sz_knots, z = sz_knots)),
+                                                 list(select = TRUE)))
+
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

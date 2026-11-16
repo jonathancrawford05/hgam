@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's ninth slice (bam(discrete=TRUE, select=TRUE) on f + sz and a numeric by). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's tenth slice (the exit formula on bam(discrete=TRUE, select=TRUE), section 14). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -47,21 +47,27 @@ meets its gate (eta at most 3.7e-4); so does section 10's numeric-by model (12e,
 `select=TRUE` on a factor beside its sz smooth (13a, full rank, factor edf gated) and on the numeric by (13b): eta 1e-9
 and 5e-14. Without binning hgam matched mgcv's `discrete = FALSE` bam instead (8e-9).
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 627 pass,
+The exit formula itself (section 14, `bam_discrete_exit_formula`, section 3's frame with n = 4000 and `my_knots`,
+response column p = DthCnt / ExposCnt, weights ExposCnt) meets every gate through
+`hgam.frontend.gam(..., method="fREML", discrete=True, select=True)`: eta 1.1e-4, se 2.6e-4 relative, per-term edf
+2.2e-3 including FaceSize, Smoke and FaceSize:Smoke, full rank (132 of 132) in mgcv and hgam. Structure exact.
+
+The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 628 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
-## Next slice: the full exit formula on `bam(discrete=TRUE, select=TRUE)`, held to mgcv
+## Next slice: wire `hgam.bam` / `hgam.gam` to the front end and lift the exit test's strict xfail
 
-Every term shape of the exit formula now meets its gates on the discrete path (sections 12 and 13). Section 3 records
-only the exit formula's structure on its synthetic frame `f` (n = 4000).
-1. Fixture section 14: record section 3's `b` (already `bam(discrete = TRUE, select = TRUE)` with `my_knots`) with
-   `bam_disc_case` plus `bam_rank` (eta, se, per-term edf, sp, rank, factor edf), as `bam_discrete_exit_formula`.
-   The response is `DthCnt / ExposCnt` with weights `ExposCnt`: write the ratio as a column in the exported data.
-2. Hold `gam(..., method="fREML", discrete=True, select=True)` to it in `tests/test_bam_discrete_fixtures.py`. Two
-   factors with sz smooths and a two-way factor interaction are new together; if a gate misses, compare per term
-   against the recorded exact bam and against sections 8/11 before porting anything.
+1. `hgam.bam(formula, data, family=, link=, weights=, discrete=, select=, knots=)` in `src/hgam/api.py` calls
+   `hgam.frontend.api.gam(..., method="fREML")`; `hgam.gam` calls it with `method="REML"`. Keep the stubs' mgcv
+   counterpart lines. Refuse by name any keyword not forwarded (never accept and ignore).
+2. The exit formula's left side is `DthCnt / ExposCnt`: either port the response arithmetic for a ratio of two columns
+   (as `model.frame` evaluates it) or refuse it by name and have the test pass the ratio column. Porting the ratio is
+   small and is what the exit test writes; prefer it.
+3. `tests/test_exit.py` passes `data=None`: give it section 14's data (`load_fixture("bam_discrete_exit_formula")`,
+   which carries DthCnt and ExposCnt), pass `knots` from that fixture, and hold the fit to section 14's gates (or
+   reuse the section 14 test's checks). Remove the strict xfail only when it passes; the PR says so.
 
-After that: wire `hgam.gam` / `hgam.bam` (the exit test's entry points) to the front end and lift the strict xfail.
+After that, M3/M4 per `docs/PLAN.md` (predict on new data re-binning, summary).
 
 ## Open items for Jonathan
 

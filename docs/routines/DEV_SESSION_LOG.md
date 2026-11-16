@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16 (fourth slice): a factor main effect beside sz smooths
+
+New fixture section 8 (8a: `f + s(x) + s(f, x, sz)`; 8b: `f` with two sz smooths of a two-level factor) and `tests/test_rank_deficient_sz.py`; no engine change.
+Tests: 608 pass and 1 xfail before; 610 pass and 1 xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: eta 1.0e-4 / 3.6e-5, se 5.8e-4 / 3.7e-4 relative; edf of the involved terms summed 2.1e-3 / 1.2e-3; uninvolved terms inside the gate.
+Not met: the per-term split inside the involved terms. mgcv's `gdiPK` choice depends on an arbitrary eigenvector basis (39 of 200 rotations change it): question for Jonathan, DEFERRED.
+
 ## 2026-11-16 (third slice): the sz basis
 
 Accepted `s(f, x, bs="sz", k=, xt=list(bs="cr"))` in the front end (mgcv `smooth.construct.sz.smooth.spec` + `smoothCon`'s `XZKr`), knots shared as for cr; other xt, x-first order, `by=` and `select=TRUE` with sz are refused. New fixture section 7.

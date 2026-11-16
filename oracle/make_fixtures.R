@@ -180,4 +180,31 @@ m10 <- gam(as.formula(f10), family = binomial(link = "cloglog"), weights = n, da
            knots = list(x = sz_knots), method = "REML")
 put("gam_binomial_cloglog_sz_reml", c(gam_case(m10, d10, f10, "binomial(link='cloglog')"), list(knots = list(x = sz_knots))))
 
+# 8. a factor main effect beside sz smooths of that factor, the exit formula's shape: structurally rank deficient,
+# because each level's constant lies in the cr null space of the sz term. 8a is section 7's model with f added; 8b
+# has two sz smooths of one two-level factor, as the exit formula has for FaceSize. mgcv drops the unidentified
+# directions in gdiPK (gdi.c), in the basis of totalPenaltySpace (gam.fit3.r); per coefficient edf and the
+# coefficient names show which. gam_case's edf covers smooths only, so the factor's own edf is exported too.
+rank_case <- function(m, d, formula, knots) {
+  edf_param <- sapply(split(m$edf[seq_len(m$nsdf)], m$assign), sum)
+  c(gam_case(m, d, formula, "binomial(link='cloglog')"),
+    list(knots = knots, rank = m$rank, coef_names = names(coef(m)), coef = unname(coef(m)), edf_coef = unname(m$edf),
+         param_labels = attr(m$pterms, "term.labels"), edf_param = unname(edf_param[-1])))
+}
+f8a <- "p ~ f + s(x, bs='cr', k=6) + s(f, x, bs='sz', k=6, xt=list(bs='cr'))"
+m8a <- gam(as.formula(f8a), family = binomial(link = "cloglog"), weights = n, data = d10,
+           knots = list(x = sz_knots), method = "REML")
+put("gam_binomial_cloglog_f_sz_reml", rank_case(m8a, d10, f8a, list(x = sz_knots)))
+set.seed(11); n <- 2000
+d11 <- data.frame(x = runif(n, 1, 21), z = runif(n, 1, 21), f = factor(sample(c("a", "b"), n, TRUE), levels = c("a", "b")),
+                  n = sample(20:200, n, TRUE))
+fb <- d11$f == "b"
+d11$p <- rbinom(n, d11$n, 1 - exp(-exp(-4 + 0.08 * (d11$x - 10) - 0.3 * exp(-d11$z / 4) - 0.2 * fb +
+                                       0.15 * fb * sin(d11$x / 3) - 0.1 * fb * exp(-d11$z / 3)))) / d11$n
+f8b <- paste("p ~ f + s(x, bs='cr', k=6) + s(z, bs='cr', k=6) + s(f, x, bs='sz', k=6, xt=list(bs='cr')) +",
+             "s(f, z, bs='sz', k=6, xt=list(bs='cr'))")
+m8b <- gam(as.formula(f8b), family = binomial(link = "cloglog"), weights = n, data = d11,
+           knots = list(x = sz_knots, z = sz_knots), method = "REML")
+put("gam_binomial_cloglog_two_sz_reml", rank_case(m8b, d11, f8b, list(x = sz_knots, z = sz_knots)))
+
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

@@ -51,10 +51,8 @@ that share a redundant direction (Jonathan's decision on PR #8).
 
 ## Open items for Jonathan
 
-- PR #10, SETTINGS condition 5 ("No test was removed"): the slice replaces `test_sz_with_select_is_refused_until_measured`
-  with an acceptance test plus two fixture-backed tests. Options: (a) allow retiring a refusal test when a fixture-backed
-  acceptance test replaces it, and say so in SETTINGS; (b) keep the condition literal, so such slices wait for you.
-  Recommendation (a), as the review's: every slice that lifts a refusal (numeric `by`, `bam(discrete=TRUE)`) meets this.
+None. (PR #10's question on SETTINGS condition 5 is decided: option (a). A refusal test may be retired when a
+fixture-backed acceptance test of the same input replaces it; the wording is in `docs/routines/SETTINGS.md`.)
 
 ## Open questions
 

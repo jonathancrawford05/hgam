@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's eleventh slice (hgam.bam / hgam.gam wired; the exit test passes). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's twelfth slice (the M3 benchmark of the exit model). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -59,17 +59,20 @@ expressions are refused; a zero denominator is refused). **The exit test passes*
 `hgam_formula` as written on section 14's data and knots through `hgam.bam` and meets every gate. Tests: 640 pass,
 no xfail. What differs is in `docs/DEFERRED.md`.
 
-## Next slice: time the exit model against mgcv (M3's one benchmark)
+Run time (M3's one benchmark, `docs/findings/0002-exit-benchmark.md`): on the exit model mgcv's `bam` takes a median
+0.98 s; `hgam.bam` 2.2 to 2.4 s with OpenBLAS's default four threads and 0.42 s with `OPENBLAS_NUM_THREADS=1`. Inside
+the ten-times rule, so nothing was tuned. Candidate for after M4 (Priorities item 3): cap BLAS threads for small
+problems, or document it; this needs no new dependency only if done through an environment variable, so ask first if
+it would need `threadpoolctl`.
 
-`docs/PRIORITIES.md`: "From M3, time the exit-test model against mgcv once per milestone and record it. Tune only
-after the exit test passes, unless a slice is more than ten times slower than mgcv." The exit test now passes.
-1. Time `hgam.bam(hgam_formula, ...)` on section 14's data (n = 4000) and `mgcv::bam(..., discrete = TRUE,
-   select = TRUE)` on section 3's frame in the session's R, each as the median of several runs after a warm-up, on
-   the same machine. Record both and the ratio in one place (`docs/findings/`, one short note) and one log line; no
-   new dependency (use `time.perf_counter` and R's `system.time`). Add no timing assertion to the test suite.
-2. If hgam is more than ten times slower, profile once and write the hot spot into this file as the slice after;
-   otherwise the slice after is M4 per `docs/PLAN.md` (`predict` on new data re-binning as `predict.bam` does,
-   `docs/DEFERRED.md`; then `summary`).
+## Next slice: M4, `predict` on new data (first step)
+
+`docs/PLAN.md` M4 (`predict`, `vcov`, `summary`, `gam.check`). First step: `fit.predict(newdata)` for a
+`discrete=True` fit, re-running `discrete.mf` on the new data as `predict.bam` does (bam.r, mgcv 1.9-4; the
+`docs/DEFERRED.md` line on `GamFit.predict` from a discrete fit). Today `tests/test_exit.py` predicts at
+`discretise_frame(fit.model, data)`. Read `predict.bam` first and follow its path exactly. Fixture: a new section in `oracle/make_fixtures.R`
+predicting section 14's `b14` (`se.fit = TRUE`) on a small synthetic newdata frame inside the knots; gate eta at
+1e-3 absolute and se at 1% relative. Then `summary` in the next slice.
 
 ## Open items for Jonathan
 

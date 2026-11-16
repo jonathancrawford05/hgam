@@ -64,7 +64,7 @@ def test_a_thin_plate_smooth_takes_no_by() -> None:
         ('y ~ s(x, bs="cc")', "bs='cc'"),
         ('y ~ s(x, bs="ps")', "bs='ps'"),
         ('y ~ s(f, x, bs="fs")', "bs='fs'"),
-        ('y ~ s(f, x, bs="sz", k=8, xt=list(bs="cr"))', "bs='sz'"),
+        ('y ~ s(f, x, bs="sz", k=8)', "without xt="),
         ('y ~ s(x, z, bs="cr")', "multi-variable smooth"),
         ('y ~ s(x, bs="cr", sp=1)', "argument 'sp'"),
         ('y ~ s(x, bs="cr", fx=TRUE)', "argument 'fx'"),

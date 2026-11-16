@@ -1,4 +1,4 @@
-"""``gam(method="REML")`` fits held to ``mgcv::gam`` fixtures (``make_fixtures.R`` sections 2, 5 and 6).
+"""``gam(method="REML")`` fits held to ``mgcv::gam`` fixtures (``make_fixtures.R`` sections 2, 5, 6 and 7).
 
 The outer smoothing-parameter search here is the moved engine's safeguarded Newton
 (``hgam.engine.gam_reml_newton``), which re-derives rather than ports mgcv's ``newton`` (gam.fit3.r).
@@ -17,8 +17,13 @@ SE_RTOL = 1e-2
 
 
 def _columns(fx: dict) -> dict[str, np.ndarray]:
+    """Numeric columns as float64; factor columns (written by jsonlite as strings) as string arrays."""
     rows = fx["data"]
-    return {name: np.asarray([r[name] for r in rows], dtype=np.float64) for name in rows[0]}
+    out: dict[str, np.ndarray] = {}
+    for name in rows[0]:
+        values = [r[name] for r in rows]
+        out[name] = np.asarray(values) if isinstance(values[0], str) else np.asarray(values, dtype=np.float64)
+    return out
 
 
 CASES = {
@@ -39,6 +44,14 @@ CASES = {
     # section 6: the same model shape with user-supplied knots shared by s() and the ti() margins.
     "gam_binomial_cloglog_knots_reml": dict(
         formula='p ~ s(age, bs="cr", k=8) + s(dur, bs="cr", k=5) + ti(age, dur, bs="cr", k=c(8, 5))',
+        family='binomial(link="cloglog")',
+        weights="n",
+        derived={},
+    ),
+    # section 7: an sz factor-smooth (cr base) beside a cr smooth of the same covariate, knots shared by both:
+    # one smoothing parameter per factor level.
+    "gam_binomial_cloglog_sz_reml": dict(
+        formula='p ~ s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))',
         family='binomial(link="cloglog")',
         weights="n",
         derived={},

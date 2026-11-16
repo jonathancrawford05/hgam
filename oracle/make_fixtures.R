@@ -155,4 +155,29 @@ f8 <- "p ~ s(age, bs='cr', k=8) + s(dur, bs='cr', k=5) + ti(age, dur, bs='cr', k
 m8 <- gam(as.formula(f8), family = binomial(link = "cloglog"), weights = n, data = d8, knots = k8, method = "REML")
 put("gam_binomial_cloglog_knots_reml", c(gam_case(m8, d8, f8, "binomial(link='cloglog')"), list(knots = k8)))
 
+# 7. the sz basis (smooth.construct.sz.smooth.spec, smooth.r) with xt = list(bs = "cr"), as the exit test uses it:
+# smoothCon's absorbed X and per-level S for a 2- and a 3-level factor at supplied knots, then a REML fit with an
+# sz term beside a cr smooth of the same covariate, knots shared by both. No factor main effect: the cr null space
+# already holds each level's constant, so adding f makes the model rank deficient (see docs/DEFERRED.md).
+set.seed(9); n <- 300
+sz_knots <- c(1, 3, 6, 10, 15, 21)
+sz_case <- function(levels) {
+  ds <- data.frame(x = runif(n, 1, 21), f = factor(sample(levels, n, TRUE), levels = levels))
+  sm <- smoothCon(s(f, x, bs = "sz", k = 6, xt = list(bs = "cr")), ds, knots = list(x = sz_knots),
+                  absorb.cons = TRUE)[[1]]
+  list(x = ds$x, group = as.integer(ds$f) - 1L, n_levels = length(levels), knots = sz_knots, label = sm$label,
+       X = sm$X, S = sm$S, rank = sm$rank, bs_dim = sm$bs.dim)
+}
+put("smoothcon_sz_cr", list(cases = list(two_levels = sz_case(c("a", "b")), three_levels = sz_case(c("a", "b", "c")))))
+set.seed(10); n <- 1500
+d10 <- data.frame(x = runif(n, 1, 21), f = factor(sample(c("a", "b", "c"), n, TRUE), levels = c("a", "b", "c")),
+                  n = sample(20:200, n, TRUE))
+fe <- c(a = 0, b = 0.3, c = -0.2)[as.character(d10$f)]
+fs <- c(a = 0.25, b = -0.2, c = 0)[as.character(d10$f)] * sin(d10$x / 3)
+d10$p <- rbinom(n, d10$n, 1 - exp(-exp(-4 + 0.08 * (d10$x - 10) + fe + fs))) / d10$n
+f10 <- "p ~ s(x, bs='cr', k=6) + s(f, x, bs='sz', k=6, xt=list(bs='cr'))"
+m10 <- gam(as.formula(f10), family = binomial(link = "cloglog"), weights = n, data = d10,
+           knots = list(x = sz_knots), method = "REML")
+put("gam_binomial_cloglog_sz_reml", c(gam_case(m10, d10, f10, "binomial(link='cloglog')"), list(knots = list(x = sz_knots))))
+
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

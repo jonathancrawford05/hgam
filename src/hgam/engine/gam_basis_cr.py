@@ -663,7 +663,10 @@ def ti_basis(
 def sz_basis(
     x: np.ndarray, group: np.ndarray, n_levels: int, knots: np.ndarray
 ) -> tuple[np.ndarray, tuple[np.ndarray, ...]]:
-    """The single-factor ``s(<factor>, x, bs="sz", xt=list(bs="cr"))`` design and its
+    """mgcv counterpart: ``smooth.construct.sz.smooth.spec`` with ``smoothCon``'s ``XZKr`` contrast and
+    penalty scaling (smooth.r), mgcv 1.9-4. Held to ``smoothcon_sz_cr`` in ``tests/test_sz_basis.py``.
+
+    The single-factor ``s(<factor>, x, bs="sz", xt=list(bs="cr"))`` design and its
     ``n_levels`` penalty blocks (slice 6, module docstring's numbered construction).
 
     Args:

@@ -33,3 +33,5 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   mgcv's `newton` is not ported. Re-port it only if a later fixture fails a gate on the search.
 - User-supplied knots for cr smooths and ti margins (done 2026-11-16, an M2 item the exit test needs):
   `tests/test_cr_knots.py`, `gam_binomial_cloglog_knots_reml`.
+- The sz basis with a cr base, `s(f, x, bs="sz", xt=list(bs="cr"))` (done 2026-11-16, M2, the exit test needs it):
+  `tests/test_sz_basis.py`, `gam_binomial_cloglog_sz_reml`.

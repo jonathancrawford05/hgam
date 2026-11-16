@@ -3,7 +3,7 @@
 ## 2026-11-16 (second slice): user-supplied cr knots
 
 Added `knots=` to `hgam.frontend.gam` (mgcv `smooth.construct.cr.smooth.spec`): shared by a variable's cr smooths and ti margins, count must equal k, refused for tp/re and for unused names. New fixture section 6; section 2 now records `labels` (PR #5 nits).
-Tests: 586 pass and 1 xfail before; 593 pass and 1 xfail after. `make lint` is clean.
+Tests: 586 pass and 1 xfail before; 596 pass and 1 xfail after (incl. review follow-up: by-form knot tests). `make lint` is clean.
 cr basis at supplied knots vs `smoothCon`: 1e-14 relative. Knots fit (tier 1): eta 3.3e-5, edf 2.8e-4, se 2.4e-4 relative; the same fit with default knots misses the eta gate (7.6e-3), so the knots are used.
 Corrected PR #5's sp claim: 7e-5 on the Poisson fixture, not 1e-7.
 

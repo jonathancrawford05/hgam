@@ -18,7 +18,7 @@ and every ti margin on it; the count must equal k (mgcv stops otherwise). Refuse
 no smooth uses. Held by `tests/test_cr_knots.py` (basis at supplied knots vs `smoothCon`, 1e-14) and the
 section 6 fit (eta 3.3e-5).
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 593 pass,
+The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 596 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
 ## Next slice: the sz basis

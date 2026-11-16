@@ -57,3 +57,38 @@ def test_unused_knots_are_refused_not_ignored(frame) -> None:
 def test_knots_on_a_tp_smooth_are_not_ported(frame) -> None:
     with pytest.raises(HgamNotImplementedError, match="knots="):
         gam("y ~ s(x, k=5)", frame, "gaussian", knots={"x": [0, 2, 5, 8, 10]})
+
+
+def test_knots_for_strings_are_refused_as_validation(frame) -> None:
+    with pytest.raises(HgamValidationError, match="finite numbers"):
+        gam('y ~ s(x, bs="cr", k=4)', frame, "gaussian", knots={"x": ["a", "b", "c", "d"]})
+
+
+BY_KNOTS = [0.0, 1.0, 2.0, 3.0, 6.0, 10.0]
+
+
+@pytest.fixture
+def by_frame(frame) -> dict[str, np.ndarray]:
+    rng = np.random.default_rng(1)
+    out = dict(frame)
+    out["g"] = np.array(["a", "b"])[rng.integers(0, 2, frame["x"].size)]
+    return out
+
+
+@pytest.mark.parametrize(
+    "formula",
+    ['y ~ s(x, bs="cr", k=6, by=z)', 'y ~ g + s(x, bs="cr", k=6, by=g)'],
+    ids=["numeric_by", "factor_by"],
+)
+def test_by_smooths_use_supplied_knots(by_frame, formula: str) -> None:
+    """Every ``by`` form takes ``knots[[x]]`` as mgcv's cr constructor does: the fitted terms record the
+    supplied knots, the fit differs from default placement, and a wrong count is refused."""
+    fit = gam(formula, by_frame, "gaussian", knots={"x": BY_KNOTS})
+    smooth_states = [s for s in fit.term_states if s.knots]
+    assert smooth_states
+    for state in smooth_states:
+        np.testing.assert_array_equal(state.knots[0], BY_KNOTS)
+    default = gam(formula, by_frame, "gaussian")
+    assert np.max(np.abs(fit.eta - default.eta)) > 1e-3
+    with pytest.raises(HgamValidationError, match="!= k"):
+        gam(formula, by_frame, "gaussian", knots={"x": [0.0, 5.0, 10.0]})

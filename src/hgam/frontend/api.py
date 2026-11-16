@@ -396,7 +396,12 @@ def _supplied_knots(knots: Mapping[str, Sequence[float]] | None) -> dict[str, tu
         raise HgamValidationError("gam(): knots= must be a mapping from variable name to knot locations.")
     out: dict[str, tuple[float, ...]] = {}
     for name, locations in knots.items():
-        values = np.asarray(locations, dtype=np.float64)
+        try:
+            values = np.asarray(locations, dtype=np.float64)
+        except (TypeError, ValueError) as err:
+            raise HgamValidationError(
+                f"gam(): knots[{name!r}] must be a 1-D sequence of finite numbers."
+            ) from err
         if values.ndim != 1 or not np.all(np.isfinite(values)):
             raise HgamValidationError(f"gam(): knots[{name!r}] must be a 1-D sequence of finite numbers.")
         out[str(name)] = tuple(float(v) for v in values)

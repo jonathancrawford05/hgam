@@ -237,21 +237,12 @@ to exact bit-for-bit agreement (max abs diff **0.0**, not merely float
 round-trip) on ``design_X`` and ``penalty_S``, every level, on a synthetic
 3-level case, tier 1, before this function was written.
 
-Not handled yet
-----------------
-**Extrapolation beyond the knot range.** All five of slice 2's cases place ``x``
-strictly inside ``[knots[0], knots[-1]]`` (default knots are quantiles of ``x``
-itself; the supplied-knot cases, including the target formula's own
-``AttdAge``/``PolYear`` knot vectors, draw ``x`` from the same range the knots
-span), so this was never exercised and is not verified. The natural boundary condition
-(``δ`` at the two end knots is zero) makes extrapolation locally linear only in
-the immediate neighbourhood of a boundary knot with zero curvature there — the
-per-interval Hermite formula used for interior evaluation does not by itself
-reduce to that outside the range, and nothing here has measured what ``mgcv``
-actually does at ``x`` outside ``[knots[0], knots[-1]]``. A future slice needing
-knots that do not span the data range (e.g. the target formula's own hand-chosen
-``AttdAge``/``PolYear`` knots against real data) must verify this before relying
-on it — CLAUDE.md: mark the uncertainty rather than guess the derivation.
+Extrapolation beyond the knot range
+-----------------------------------
+:func:`_cr_basis_raw` extrapolates linearly outside ``[knots[0], knots[-1]]``, continuing the value and
+slope at the end knot, which is what ``crspl`` (mgcv.c) does. User-supplied knots (``hgam.frontend.gam``'s
+``knots=``) make this reachable, but no fixture yet holds data outside the supplied knots to ``mgcv``
+(``docs/DEFERRED.md``).
 """
 
 import contextlib

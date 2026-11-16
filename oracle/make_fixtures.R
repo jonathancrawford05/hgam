@@ -125,4 +125,22 @@ b6 <- bam(p ~ s(age, bs = "cr", k = 8) + s(dur, bs = "cr", k = 5), family = bino
           weights = n, data = d5, method = "fREML", discrete = TRUE)
 put("bgam_fitd_binomial_cloglog", bam_case(b6, d5$p, rep(0, n), d5$n))
 
+# 5. gam(method = "REML"): the outer Newton search (newton, gam.fit3.r) on a cr + ti binomial-cloglog model
+# with prior weights. Per-term sp and edf, the fitted linear predictor and its standard errors.
+gam_case <- function(m, d, formula, family) {
+  list(data = d, formula = formula, family = family, method = "REML", sp = unname(m$sp),
+       sp_labels = names(m$sp), labels = sapply(m$smooth, function(s) s$label),
+       edf = sapply(m$smooth, function(sm) sum(m$edf[sm$first.para:sm$last.para])), edf_total = sum(m$edf),
+       n_coef = length(coef(m)), eta = as.numeric(predict(m, type = "link")),
+       se = as.numeric(predict(m, se.fit = TRUE)$se.fit), reml = as.numeric(m$gcv.ubre),
+       outer_iter = m$outer.info$iter, outer_conv = m$outer.info$conv)
+}
+set.seed(7); n <- 1500
+d7 <- data.frame(age = runif(n, 20, 90), dur = runif(n, 1, 21), n = sample(20:200, n, TRUE))
+d7$p <- rbinom(n, d7$n, 1 - exp(-exp(-4.5 + 0.05 * (d7$age - 40) - 0.4 * exp(-d7$dur / 4) +
+                                     0.15 * sin(d7$age / 10) * cos(d7$dur / 5)))) / d7$n
+f7 <- "p ~ s(age, bs='cr', k=8) + s(dur, bs='cr', k=5) + ti(age, dur, bs='cr', k=c(5, 4))"
+m7 <- gam(as.formula(f7), family = binomial(link = "cloglog"), weights = n, data = d7, method = "REML")
+put("gam_binomial_cloglog_ti_reml", gam_case(m7, d7, f7, "binomial(link='cloglog')"))
+
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

@@ -1,4 +1,4 @@
-"""A factor main effect beside sz smooths of that factor, held to ``mgcv::gam`` (make_fixtures.R section 8).
+"""A factor main effect beside its sz smooths, held to ``mgcv::gam`` (make_fixtures.R sections 8 and 11).
 
 The exit formula's shape is structurally rank deficient: a cr basis sums to one, so every level's constant
 lies in the null space of an sz smooth of that factor, and the factor's contrast columns are redundant with it
@@ -95,3 +95,43 @@ def test_rank_deficient_sz_meets_the_gates(load_fixture, name: str) -> None:
     got_sum = sum(got[label] for label in involved)
     ref_sum = sum(ref[label] for label in involved)
     assert _within_edf_gate(got_sum, ref_sum), (got_sum, ref_sum)
+
+
+SELECT_CASES = {
+    # 11a: 8a with select=TRUE.
+    "gam_binomial_cloglog_f_sz_select_reml": CASES["gam_binomial_cloglog_f_sz_reml"]["formula"],
+    # 11b: 8b with select=TRUE.
+    "gam_binomial_cloglog_two_sz_select_reml": CASES["gam_binomial_cloglog_two_sz_reml"]["formula"],
+}
+
+
+@pytest.mark.parametrize("name", list(SELECT_CASES))
+def test_rank_deficient_sz_with_select_meets_the_gates(load_fixture, name: str) -> None:
+    """With ``select=TRUE`` (section 11) the null-space penalties penalise the directions the factor shares
+    with its sz smooths, so mgcv's fit is full rank and every term's edf is identified: each term is held to
+    the per-term gate, not only their sum."""
+    fx = load_fixture(name)
+    data = _columns(fx)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", HgamRankDeficiencyWarning)
+        fit = gam(
+            SELECT_CASES[name], data, FAMILY, weights="n", method="REML", knots=fx["knots"], select=True
+        )
+    assert fit.converged
+
+    # Structure: exact, and full rank in both.
+    assert fx["rank"] == fx["n_coef"]
+    assert list(fit.smooth_labels) == fx["labels"]
+    assert fit.coef_full.size == fx["n_coef"]
+    assert len(fit.pivoted_columns) == 0
+    assert fit.log_lambda.size == len(fx["sp"])
+
+    eta, se = fit.predict(data, se_fit=True)
+    assert np.max(np.abs(eta - np.asarray(fx["eta"]))) < ETA_ATOL
+    np.testing.assert_allclose(se, fx["se"], rtol=SE_RTOL)
+
+    ref = dict(zip(fx["labels"], fx["edf"], strict=True))
+    param_labels = np.atleast_1d(fx["param_labels"]).tolist()
+    ref.update(zip(param_labels, np.atleast_1d(fx["edf_param"]).tolist(), strict=True))
+    for label, value in ref.items():
+        assert _within_edf_gate(fit.edf_per_term[label], value), (label, fit.edf_per_term[label], value)

@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16 (seventh slice): select=TRUE on the factor + sz shapes
+
+New fixture section 11 (8a and 8b with `select=TRUE`) and a test in `tests/test_rank_deficient_sz.py`; no engine change. The null-space penalties identify the shared directions: mgcv's rank equals the coefficient count and hgam pivots nothing.
+Tests: 617 pass and 1 xfail before; 619 pass and 1 xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: 11a eta 8e-5, se 3.6e-4, per-term edf 8.5e-4; 11b eta 3.0e-4, se 9.2e-4, per-term edf 3.6e-3. Structure exact.
+Deferred: 11a's near-linear s(x) sp (log10 7.40 vs 7.83, flat ridge); 11b's mgcv convergence message differs on the JSON round trip.
+
 ## 2026-11-16 (sixth slice): numeric by on a cr smooth
 
 Held `s(x, by=z, bs="cr")` to mgcv (`smoothCon`'s numeric-by branch, smooth.r); constant `by` (mgcv keeps the constraint) is now refused. New fixture section 10 (10a smoothCon, 10b fit, 10c fit with select=TRUE), `tests/test_cr_by_numeric.py`.

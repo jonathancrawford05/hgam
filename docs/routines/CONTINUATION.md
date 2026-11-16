@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's sixth slice (numeric by on cr), after applying option B on PR #12. Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's seventh slice (select=TRUE on the factor + sz shapes). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -29,8 +29,9 @@ ported for this and the exit formula stays as it is. The matching `docs/PRIORITI
 
 `select=TRUE` with sz smooths is accepted (section 9, `tests/test_sz_basis.py` and the section 9 case in
 `tests/test_gam_reml_fixtures.py`): the null-space penalty agrees with `smoothCon(..., null.space.penalty=TRUE)` to
-6e-14, and section 7's model with `select=TRUE` meets every gate. Not yet measured: `select=TRUE` together with a
-factor main effect beside its sz smooths (section 8's rank-deficient shape).
+6e-14, and section 7's model with `select=TRUE` meets every gate. With a factor main effect beside its sz smooths
+(section 11: sections 8a and 8b with `select=TRUE`, `tests/test_rank_deficient_sz.py`) the null-space penalties make
+the fit full rank in mgcv and hgam, and every term meets the per-term edf gate.
 
 A numeric `by` on cr, `s(x, by=z, bs="cr")` (section 10, `tests/test_cr_by_numeric.py`): basis vs `smoothCon` at
 1.2e-14, no constraint (k coefficients, label `s(x):z`); a constant `by`, for which mgcv keeps the constraint, is
@@ -38,19 +39,22 @@ refused. 10c (with `select=TRUE`) meets every gate. 10b meets structure, edf and
 at the estimated sp against mgcv refitted at `newton` `conv.tol = 1e-12` (1.9e-4; option B, Jonathan's decision on
 PR #12): mgcv's default stops short of its own REML optimum there.
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 617 pass,
+The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 619 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
-## Next slice
+## Next slice: `bam(discrete=TRUE)` on cr + ti and on sz, held to mgcv
 
-PR #12 (numeric by) waits for review of its new head; option B is applied there. PR #13 (Jonathan's `docs/PRIORITIES.md`
-wording of option B) is his own change.
+The exit model is fitted with `bam(..., discrete = TRUE, select = TRUE)`. The front end runs it as
+`gam(..., method="fREML", discrete=True)` (`fit_engine_bam`, `tero` margin order). Today only `bgam_fitd_*` (section 3,
+cr only, fixed design) holds that path.
+1. Fixture section 12: `bam(method = "fREML", discrete = TRUE)` on section 5's cr + ti model (`d7`) and on section 7's
+   sz model (`d10`, knots shared), recorded with `gam_case`. Add `select = TRUE` variants if the slice stays small.
+2. Hold `gam(..., method="fREML", discrete=True)` to them at the gates in a new `tests/test_bam_discrete_fixtures.py`.
+   If one misses, compare against mgcv's own `bam` at `discrete = FALSE` before porting anything (the 1e-3 gate already
+   allows for mgcv's own discrete-vs-exact spread, `docs/PRIORITIES.md`).
 
-After it merges: `select=TRUE` on the rank-deficient factor + sz shape. Fixture section 11: section 8a's model
-`p ~ f + s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))` with `select=TRUE`, held at the gates in
-`tests/test_rank_deficient_sz.py` (summed edf of `f` and the sz term). Then `bam(discrete=TRUE)` on `ti` and sz. Where the
-exit test compares per-term edf, it compares the summed edf of the terms that share a redundant direction (Jonathan's
-decision on PR #8).
+After that the exit test needs the full formula on discrete with `select = TRUE` (section 3's frame), then wiring
+`hgam.gam` / `hgam.bam`.
 
 ## Open items for Jonathan
 

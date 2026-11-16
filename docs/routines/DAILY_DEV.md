@@ -114,7 +114,9 @@ Record the counts. If `main` is red, this run's only job is the smallest correct
 - Fixtures: add the case to `oracle/make_fixtures.R` and commit what `make fixtures` writes (tier 1, from the
   session's own R). That is enough: CI's `oracle` job regenerates every fixture in the pinned image and runs the
   suite against those, so tier 1 copies in the repository never decide a merge. Do not try to download CI
-  artifacts; the session's network policy blocks them.
+  artifacts; the session's network policy blocks them. If the session has no R with mgcv (`which Rscript`),
+  install it (`apt-get update && apt-get install -y r-base-core r-cran-mgcv r-cran-jsonlite`); if that fails, do
+  not start a slice that needs a new fixture: report it and stop.
 - Unsupported input raises `NotImplementedError` naming what is missing. Nothing is accepted and ignored.
 - If an approach fails three times, stop. Write up what you tried in the log and open the pull request with
   what is solid, or none.

@@ -13,6 +13,7 @@ Read by `DAILY_DEV.md` and `PR_REVIEW.md`. Only Jonathan edits this file.
      `docs/PRIORITIES.md`, `oracle/compare_fixtures.py`, or anything in `docs/routines/` other than
      `CONTINUATION.md` and `DEV_SESSION_LOG.md`, which every run must update.
   5. No test was removed, skipped or newly marked xfail, and no gate in `docs/PRIORITIES.md` was loosened.
-  6. The "Ready" review was posted by the review routine's session, not by the session that wrote the code.
+  6. The "Ready" review ends with a `claude.ai/code/session_...` link, and that link differs from the session
+     link at the foot of the pull request body. A review with no session link does not count.
   If any one fails, the pull request waits for Jonathan.
 - `max_slices_per_run: 2`

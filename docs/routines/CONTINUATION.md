@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's fifth slice (select=TRUE with sz). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's sixth slice (numeric by on cr), after applying option B on PR #12. Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -32,26 +32,37 @@ ported for this and the exit formula stays as it is. The matching `docs/PRIORITI
 6e-14, and section 7's model with `select=TRUE` meets every gate. Not yet measured: `select=TRUE` together with a
 factor main effect beside its sz smooths (section 8's rank-deficient shape).
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 613 pass,
+A numeric `by` on cr, `s(x, by=z, bs="cr")` (section 10, `tests/test_cr_by_numeric.py`): basis vs `smoothCon` at
+1.2e-14, no constraint (k coefficients, label `s(x):z`); a constant `by`, for which mgcv keeps the constraint, is
+refused. 10c (with `select=TRUE`) meets every gate. 10b meets structure, edf and se against mgcv's default fit, and eta
+at the estimated sp against mgcv refitted at `newton` `conv.tol = 1e-12` (1.9e-4; option B, Jonathan's decision on
+PR #12): mgcv's default stops short of its own REML optimum there.
+
+The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 617 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
-## Next slice: numeric `by` on a cr smooth, held to mgcv
+## Next slice
 
-The exit formula has `s(AttdAge, by = StudyYear_C, k = 13, bs = "cr")`. The front end accepts a numeric `by` on cr
-(`api.py`, label `s(x):z`), but no oracle fixture in this repository holds it.
-1. Read how mgcv applies a numeric `by` in `smoothCon` (smooth.r: the by multiplies X; with a numeric by the sum-to-zero
-   constraint is not applied, so the term keeps k coefficients) and check the label and coefficient count.
-2. Fixture (section 10): `p ~ s(x, bs="cr", k=6) + s(x, by=z, bs="cr", k=6)` binomial cloglog with weights, REML,
-   shared knots; also with `select=TRUE` if the slice stays small.
-3. Add the case to `tests/test_gam_reml_fixtures.py` and meet every gate.
+PR #12 (numeric by) waits for review of its new head; option B is applied there. PR #13 (Jonathan's `docs/PRIORITIES.md`
+wording of option B) is his own change.
 
-After that the exit test still needs: `select=TRUE` on the rank-deficient factor + sz shape (section 8 with select), and
-`bam(discrete=TRUE)` on `ti` and sz. Where the exit test compares per-term edf, it compares the summed edf of the terms
-that share a redundant direction (Jonathan's decision on PR #8).
+After it merges: `select=TRUE` on the rank-deficient factor + sz shape. Fixture section 11: section 8a's model
+`p ~ f + s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))` with `select=TRUE`, held at the gates in
+`tests/test_rank_deficient_sz.py` (summed edf of `f` and the sz term). Then `bam(discrete=TRUE)` on `ti` and sz. Where the
+exit test compares per-term edf, it compares the summed edf of the terms that share a redundant direction (Jonathan's
+decision on PR #8).
 
 ## Open items for Jonathan
 
-None. (PR #10's question on SETTINGS condition 5 is decided: option (a). A refusal test may be retired when a
+None.
+
+Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a fitted quantity at
+estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at the unchanged gate.
+The fixture records both mgcv fits and their REML scores, and the tight fit is the reference only where mgcv's own
+tight score is not higher than its default score. mgcv's `newton` is not ported for this (option A not taken); the
+moved Newton search stays. The rule is in `docs/PRIORITIES.md`.
+
+(PR #10's question on SETTINGS condition 5 is decided: option (a). A refusal test may be retired when a
 fixture-backed acceptance test of the same input replaces it; the wording is in `docs/routines/SETTINGS.md`.)
 
 ## Open questions

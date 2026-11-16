@@ -27,7 +27,7 @@ from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
 from hgam.engine.gam_basis_tp import tp_basis
 from hgam.engine.gam_term_spec import TermSpec
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 __all__ = [
     "TermExtract",
@@ -145,7 +145,16 @@ def build_python_cr_term(x: np.ndarray, term: TermSpec, by: np.ndarray | None = 
 
     design_unc, s_unc = cr_basis(x, knots)
     if by is not None:
-        design = by_scale_design(design_unc, np.asarray(by, dtype=np.float64))
+        by = np.asarray(by, dtype=np.float64)
+        # mgcv counterpart: smoothCon (smooth.r), mgcv 1.9-4, the numeric-by branch: the sum-to-zero
+        # constraint is dropped only when ``sd(by) > mean(by) * .Machine$double.eps * 1000``; otherwise
+        # mgcv keeps it. That branch (a constant by) is not ported.
+        if not np.std(by, ddof=1) > np.mean(by) * np.finfo(np.float64).eps * 1000.0:
+            raise HgamNotImplementedError(
+                f"{term.label!r}: a numeric by variable {term.by!r} that is constant, for which "
+                "mgcv's smoothCon keeps the sum-to-zero constraint, is not ported."
+            )
+        design = by_scale_design(design_unc, by)
         s = s_unc
     else:
         design, s = absorb_sum_to_zero_constraint(design_unc, s_unc)

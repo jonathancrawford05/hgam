@@ -1,4 +1,4 @@
-"""``gam(method="REML")`` fits held to ``mgcv::gam`` fixtures (``make_fixtures.R`` sections 2, 5, 6, 7 and 9).
+"""``gam(method="REML")`` fits held to ``mgcv::gam`` fixtures (``make_fixtures.R`` sections 2, 5-7, 9, 10).
 
 The outer smoothing-parameter search here is the moved engine's safeguarded Newton
 (``hgam.engine.gam_reml_newton``), which re-derives rather than ports mgcv's ``newton`` (gam.fit3.r).
@@ -60,6 +60,16 @@ CASES = {
     # the sz term.
     "gam_binomial_cloglog_sz_select_reml": dict(
         formula='p ~ s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))',
+        family='binomial(link="cloglog")',
+        weights="n",
+        derived={},
+        select=True,
+    ),
+    # section 10c: a bare cr smooth beside a numeric-by cr smooth of the same covariate (the exit formula's
+    # s(AttdAge, by = StudyYear_C)), knots shared, select=TRUE. Section 10b, without select, is in
+    # tests/test_cr_by_numeric.py.
+    "gam_binomial_cloglog_by_numeric_select_reml": dict(
+        formula='p ~ s(x, bs="cr", k=6) + s(x, by=z, bs="cr", k=6)',
         family='binomial(link="cloglog")',
         weights="n",
         derived={},

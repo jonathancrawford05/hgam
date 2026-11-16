@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-16 (sixth slice): numeric by on a cr smooth
+
+Held `s(x, by=z, bs="cr")` to mgcv (`smoothCon`'s numeric-by branch, smooth.r); constant `by` (mgcv keeps the constraint) is now refused. New fixture section 10 (10a smoothCon, 10b fit, 10c fit with select=TRUE), `tests/test_cr_by_numeric.py`.
+Tests: 613 pass and 1 xfail before; 617 pass and 1 xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: basis X 1.2e-14, S 2.1e-15 relative, C 0 rows, labels and 12 coef exact. 10c: eta 2.9e-5, edf 4e-4, se 2.1e-4. 10b: edf 0.029, se 0.79%, eta at mgcv's sp 1e-13, but eta at estimated sp 1.24e-3 (gate 1e-3): mgcv's Newton stops short of its own optimum (hgam is 1.9e-4 from mgcv at conv.tol 1e-12).
+Question for Jonathan on the PR: how to gate 10b's eta. DEFERRED.
+
 ## 2026-11-16 (fifth slice): select=TRUE with sz smooths
 
 Accepted `select=TRUE` with sz (smoothCon's `null.space.penalty` need.full branch, smooth.r); the engine's `null_space_penalty` already built it, so only the front-end refusal went. New fixture section 9 (9a smoothCon S with null.space.penalty, 9b section 7's fit with select=TRUE).

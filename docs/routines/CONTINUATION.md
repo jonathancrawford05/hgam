@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's fifth slice (select=TRUE with sz). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's sixth slice (numeric by on cr). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -32,26 +32,37 @@ ported for this and the exit formula stays as it is. The matching `docs/PRIORITI
 6e-14, and section 7's model with `select=TRUE` meets every gate. Not yet measured: `select=TRUE` together with a
 factor main effect beside its sz smooths (section 8's rank-deficient shape).
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 613 pass,
+A numeric `by` on cr, `s(x, by=z, bs="cr")` (section 10, `tests/test_cr_by_numeric.py`): basis vs `smoothCon` at
+1.2e-14, no constraint (k coefficients, label `s(x):z`); a constant `by`, for which mgcv keeps the constraint, is
+refused. 10c (`s(x) + s(x, by=z)` with `select=TRUE`) meets every gate. 10b (the same without select) meets structure,
+edf and se, and the fit at mgcv's sp to 1e-13, but its eta at the estimated sp is 1.24e-3 from mgcv's default fit (gate
+1e-3) and is not gated: mgcv's Newton stops short of its own REML optimum (question below, `docs/DEFERRED.md`).
+
+The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 617 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
-## Next slice: numeric `by` on a cr smooth, held to mgcv
+## Next slice
 
-The exit formula has `s(AttdAge, by = StudyYear_C, k = 13, bs = "cr")`. The front end accepts a numeric `by` on cr
-(`api.py`, label `s(x):z`), but no oracle fixture in this repository holds it.
-1. Read how mgcv applies a numeric `by` in `smoothCon` (smooth.r: the by multiplies X; with a numeric by the sum-to-zero
-   constraint is not applied, so the term keeps k coefficients) and check the label and coefficient count.
-2. Fixture (section 10): `p ~ s(x, bs="cr", k=6) + s(x, by=z, bs="cr", k=6)` binomial cloglog with weights, REML,
-   shared knots; also with `select=TRUE` if the slice stays small.
-3. Add the case to `tests/test_gam_reml_fixtures.py` and meet every gate.
+If Jonathan has answered the 10b question on the open pull request, apply the answer there first (rule 1 of
+`DAILY_DEV.md`). Otherwise the pull request waits.
 
-After that the exit test still needs: `select=TRUE` on the rank-deficient factor + sz shape (section 8 with select), and
-`bam(discrete=TRUE)` on `ti` and sz. Where the exit test compares per-term edf, it compares the summed edf of the terms
-that share a redundant direction (Jonathan's decision on PR #8).
+After it merges: `select=TRUE` on the rank-deficient factor + sz shape. Fixture section 11: section 8a's model
+`p ~ f + s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))` with `select=TRUE`, held at the gates in
+`tests/test_rank_deficient_sz.py` (summed edf of `f` and the sz term). Then `bam(discrete=TRUE)` on `ti` and sz. Where the
+exit test compares per-term edf, it compares the summed edf of the terms that share a redundant direction (Jonathan's
+decision on PR #8).
 
 ## Open items for Jonathan
 
-None. (PR #10's question on SETTINGS condition 5 is decided: option (a). A refusal test may be retired when a
+- **How to gate eta on section 10b** (`gam_binomial_cloglog_by_numeric_reml`), where mgcv's default Newton search
+  stops short of its own REML optimum on a flat ridge (mgcv's score is lower at hgam's sp; mgcv at conv.tol 1e-12 moves
+  1.4e-3 from its default and lands 1.9e-4 from hgam). Options: (A) port mgcv's `newton` (gam.fit3.r) so hgam stops
+  where mgcv stops: several slices, and the exit model may need it anyway; (B) gate eta at estimated sp against
+  mgcv refitted at a tight `conv.tol` whenever mgcv's own score is lower at hgam's point (fixture records both fits);
+  (C) leave 10b's eta ungated, as now, and rely on 10c and the exit test. Recommendation: B, it holds hgam to mgcv's
+  own optimum at the existing gate and costs one fixture line; switch to A only if the exit model misses on the search.
+
+(PR #10's question on SETTINGS condition 5 is decided: option (a). A refusal test may be retired when a
 fixture-backed acceptance test of the same input replaces it; the wording is in `docs/routines/SETTINGS.md`.)
 
 ## Open questions

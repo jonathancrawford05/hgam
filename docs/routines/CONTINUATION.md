@@ -43,18 +43,17 @@ PR #12): mgcv's default stops short of its own REML optimum there.
 discrete=True)` bins every numeric covariate a smooth reaches with `compress.df`, one covariate at a time, as
 `discrete.mf` does for one-covariate margins (`hgam.frontend.discrete.discretise_frame`), then runs `bam_fitd`. sz is
 accepted there. On section 5's cr + ti model and section 7's sz model, with and without `select=TRUE`, every key result
-meets its gate (eta at most 3.7e-4). Without binning hgam matched mgcv's `discrete = FALSE` bam instead (8e-9).
+meets its gate (eta at most 3.7e-4); so does section 10's numeric-by model (12e, eta 1e-13). Without binning hgam matched mgcv's `discrete = FALSE` bam instead (8e-9).
 
-The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 624 pass,
+The top-level `hgam.gam` / `hgam.bam` are still stubs; the exit test stays a strict xfail. Tests: 625 pass,
 1 strict xfail. What differs is in `docs/DEFERRED.md`.
 
 ## Next slice: the exit formula's remaining shapes on `bam(discrete=TRUE, select=TRUE)`
 
-Section 12 covers cr, ti and sz on the discrete path. The exit formula also has a numeric `by`
-(`s(AttdAge, by = StudyYear_C)`) and factor main effects beside their sz smooths (rank deficient without `select`).
+Section 12 covers cr, ti, sz and a numeric `by` (12e, without `select`) on the discrete path. The exit formula also
+has factor main effects beside their sz smooths (rank deficient without `select`).
 1. Fixture section 13: `bam(method = "fREML", discrete = TRUE, select = TRUE)` on section 11a's model (`f8a` on `d10`)
    and on section 10's numeric-by model (`f14` on `d14`), recorded with `bam_disc_case` (exact bam beside it).
-   `discretise_frame` already bins a numeric `by` first, as `discrete.mf` does; check that mgcv bins it on its own.
 2. Hold them in `tests/test_bam_discrete_fixtures.py` at the gates. If one misses, compare against the recorded
    `exact` fit first: a match there means the binning, a miss means the iteration.
 
@@ -76,3 +75,6 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 ## Open questions
 
 None.
+
+PR #15 review nit (not done, predates it): an sz term's factor is assumed to be `variables[0]`; `s(x, f, bs="sz")`
+would fail with a bare `ValueError`, not a named refusal. Add the refusal when the sz parser is next touched.

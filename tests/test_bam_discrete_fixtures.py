@@ -1,5 +1,6 @@
 """``gam(method="fREML", discrete=True)`` held to ``mgcv::bam(method="fREML", discrete=TRUE)`` fixtures
-(``make_fixtures.R`` section 12: 12a cr + ti, 12b cr + sz, 12c and 12d the same with ``select=TRUE``).
+(``make_fixtures.R`` section 12: 12a cr + ti, 12b cr + sz, 12c and 12d the same with ``select=TRUE``,
+12e a numeric ``by``).
 
 The fit is ``bgam.fitd``'s performance iteration (``hgam.frontend.bam_fitd``) on covariates discretised
 as ``discrete.mf`` does (``hgam.frontend.discrete.discretise_frame``). Gates (``docs/PRIORITIES.md``):
@@ -21,6 +22,7 @@ SE_RTOL = 1e-2
 
 TI = 'p ~ s(age, bs="cr", k=8) + s(dur, bs="cr", k=5) + ti(age, dur, bs="cr", k=c(5, 4))'
 SZ = 'p ~ s(x, bs="cr", k=6) + s(f, x, bs="sz", k=6, xt=list(bs="cr"))'
+BY = 'p ~ s(x, bs="cr", k=6) + s(x, by=z, bs="cr", k=6)'
 
 
 def _columns(fx: dict) -> dict[str, np.ndarray]:
@@ -38,6 +40,8 @@ CASES = {
     "bam_discrete_binomial_cloglog_sz": (SZ, False),
     "bam_discrete_binomial_cloglog_ti_select": (TI, True),
     "bam_discrete_binomial_cloglog_sz_select": (SZ, True),
+    # 12e: a numeric by, binned on its own before the margin (discrete.mf).
+    "bam_discrete_binomial_cloglog_by_numeric": (BY, False),
 }
 
 

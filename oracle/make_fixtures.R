@@ -305,4 +305,12 @@ b12de <- bam(as.formula(f10), family = binomial(link = "cloglog"), weights = n, 
 put("bam_discrete_binomial_cloglog_sz_select", bam_disc_case(b12d, d10, f10, "binomial(link='cloglog')",
                                                               list(knots = list(x = sz_knots), select = TRUE,
                                                                    exact = bam_exact(b12de))))
+# 12e: section 10's numeric-by model (f14 on d14, knots shared): discrete.mf compresses the by variable on its own,
+# before the margin.
+b12e <- bam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, data = d14, knots = list(x = sz_knots),
+            method = "fREML", discrete = TRUE)
+b12ee <- bam(as.formula(f14), family = binomial(link = "cloglog"), weights = n, data = d14, knots = list(x = sz_knots),
+             method = "fREML")
+put("bam_discrete_binomial_cloglog_by_numeric", bam_disc_case(b12e, d14, f14, "binomial(link='cloglog')",
+                                                               list(knots = list(x = sz_knots), exact = bam_exact(b12ee))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

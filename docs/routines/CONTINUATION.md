@@ -113,7 +113,8 @@ Smooths with a factor covariate (sz, re) are NA as in mgcv. The ti branch is not
 `n_rep` shuffles are drawn so the terms after it keep R's stream; a factor-by smooth is refused. `data` is the training
 frame (mgcv's `b$model`, raw covariates, not the binned ones). Exit fit under `set.seed(21)`: k' exact, edf 1.4e-6,
 residuals 1.8e-7, k-index 6.8e-10 relative, p-value exact on the three 1-D terms. k-index and p are not key results
-(no gate in PRIORITIES); the test asserts the measured values. Tests: 745 pass, no xfail.
+(no gate in PRIORITIES); the test asserts the measured values. The `n > subsample` branch is held to
+`k.check(b14, subsample = 1000, n.rep = 50)` (same section; k-index and p exact). Tests: 746 pass, no xfail.
 
 ## Next slice: k.check's tensor branch (ti), then gam.check's report (M4)
 

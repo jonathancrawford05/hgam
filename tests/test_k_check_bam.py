@@ -123,3 +123,16 @@ def test_factor_by_is_refused():
     fit = hgam.gam("y ~ g + s(x, by=g, k=6, bs='cr')", data={"x": x, "g": g, "y": y}, method="REML")
     with pytest.raises(hgam.errors.HgamNotImplementedError, match="factor-by"):
         fit.k_check({"x": x}, seed=1)
+
+
+def test_subsample_branch(exit_fit, frame, ref):
+    """``n > subsample``: ``sample(1:n, subsample)`` picks the rows first (PR #28 review 7c35e5c)."""
+    sub = ref["subsampled"]
+    table = exit_fit.k_check(frame, seed=ref["seed"], subsample=sub["subsample"], n_rep=sub["n_rep"])
+    for r, row in zip(table, sub["k_table"], strict=True):
+        if r.status != "tested":
+            continue
+        print(f"subsampled {r.label}: k-index {r.k_index:.8f} vs {row[2]:.8f}; p {r.p_value} vs {row[3]}")
+        assert r.k_index is not None
+        np.testing.assert_allclose(r.k_index, row[2], rtol=1e-6)
+        assert r.p_value == row[3]

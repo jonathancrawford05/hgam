@@ -102,3 +102,7 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - M4, `gam.check` report (done 2026-11-17): `GamFit.gam_check(data, seed=)` gives what `gam.check` prints for the discrete
   fit (method, optimizer, `outer.info` grad and Hessian, model rank, the k table after `qq.gam`'s ten draws), plots not
   ported; rank 132 / 132 exact, k table exact (`tests/test_gam_check_bam.py`, section 22). **M4 is done for the exit fit.**
+- Widening, factor `by` on cr (done 2026-11-17): `s(x, by=f, bs="cr")` measured against mgcv with no engine change:
+  basis vs `smoothCon` 1.7e-14, structure and coefficient names exact, eta 5.7e-7 (REML gam) and 1e-13 (discrete bam,
+  with and without `select=TRUE`), se 5.6e-4, edf within 2.3e-4 of the gate's width, predict on new data 1.2e-13
+  (`tests/test_cr_by_factor.py`, section 23). An ordered factor is refused. Next: `fs`.

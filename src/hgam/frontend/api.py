@@ -408,6 +408,17 @@ def _column(df: Mapping[str, object], name: str) -> Column:
     col = df[name]
     if isinstance(col, Factor):
         return col
+    if (
+        getattr(col, "ordered", False) is True
+        or getattr(getattr(col, "dtype", None), "ordered", False) is True
+    ):
+        # An ordered categorical (pandas' Categorical(ordered=True)) is R's ordered factor: model.matrix
+        # codes it with contr.poly, and smoothCon's factor-by branch (smooth.r, mgcv 1.9-4) drops its first
+        # level's smooth. Neither is ported, and np.asarray would silently make it an unordered factor.
+        raise HgamNotImplementedError(
+            f"gam(): column {name!r} is an ordered factor; ordered factors (contr.poly coding, and the "
+            "reference level an ordered by variable drops in smoothCon) are not ported. Pass it unordered."
+        )
     arr = np.asarray(col)
     if arr.ndim != 1:
         raise HgamValidationError(f"gam(): column {name!r} must be one-dimensional, got shape {arr.shape}.")

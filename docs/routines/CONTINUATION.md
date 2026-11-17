@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's fourteenth slice (M4: `summary` of a discrete fit, parametric table). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's fifteenth slice (M4: discrete bam's constraint rows). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -70,36 +70,34 @@ it would need `threadpoolctl`.
 covariates, as `predict.bam` falling through to `predict.gam`). On the exit fit, 15a (1500 rows, binned) eta 8.4e-5
 and se 2.3e-4 relative; 15b (40 rows, not binned) eta 4.0e-5, se 2.2e-4. Without re-binning 15a missed by 3.4e-3.
 
-`summary` of a discrete fit, first step (section 16, `tests/test_summary_bam.py`, PR open): `GamSummary.parametric` is
+`summary` of a discrete fit, first step (section 16, `tests/test_summary_bam.py`): `GamSummary.parametric` is
 `summary.gam`'s `p.table` for a fixed scale (Estimate, Std. Error from Vp, z, `2 * pnorm`), under mgcv's coefficient
-names (`GamFit.parametric_names`, from `model.matrix`'s rule); `summary()` accepts a `discrete=True` fit (no REML
-score). On the exit fit, with mgcv's level order (Low, High): contrasts 8.1e-7, se 1.8e-5 relative, names exact. The
-intercept is 3.6e-3 off (gate 1e-3, strict xfail `test_intercept_meets_the_estimate_gate`): the gap is all the level
-of `s(AttdAge)` (shape agrees to 8e-6). `discrete.mf` bins AttdAge to 981 points and the others to 985, so mgcv pads
-AttdAge with 4 seeded `sample()` draws before `gam.setup` takes `colSums(X)` over `mf0`. But mgcv's stored constraint
-direction (`attr(b14$smooth[[1]], "qrc")`) matches neither the 981 distinct points (1 - cos 8e-6) nor those plus the 4
-pads (2.3e-5), so the row set is not pinned yet. Scripts that showed this were scratch (not committed): rebuild
-`discrete.mf`'s input as bam does (sz specs get one-variable margins first, bam.r ~2265) to call it directly.
+names (`GamFit.parametric_names`); `summary()` accepts a `discrete=True` fit (no REML score).
 
-## Next slice: pin and port discrete bam's constraint rows (Q1, option A)
+Discrete bam's constraint rows (section 17, `tests/test_discrete_constraint_rows.py`, ADR 0002): `gam.setup` builds the
+smooths on `discrete.mf`'s padded frame `mf0`, so each cr and ti-margin constraint is `colMeans(X)` over its rows (unique
+values, shuffled, padded with `sample()` under `temp.seed(8547)`). `hgam.frontend.r_rng.RRandom` ports R's
+Mersenne-Twister and `sample.int` (Rejection), exact to R's draws; `discrete_model_frame` rebuilds `mf0` row for row
+(5.7e-14); `fit_engine_bam` takes the constraints over it (`constraint_frame`; `unique_row_constraint` is gone). On the
+exit fit: intercept 4.8e-7 (was 3.6e-3), every coefficient 9.8e-7, se 4.1e-6, eta 7.4e-8, predict 15a 6.0e-8. An offset
+beside prior weights is refused in a discrete fit (its order in the parametric frame is not carried). Tests: 665 pass,
+no xfail.
 
-Pin the row set of `s(AttdAge)`'s constraint in `bam(discrete=TRUE)` (read `gam.setup` with `modCon=2`,
-`smoothCon` with `sparse.cons=0` on `mf0`, and the padding in `discrete.mf`), port it into `unique_row_constraint`
-(ADR-260 amendment 9 chose not to; this reopens it, so write the ADR amendment), and lift the strict xfail. It should
-also move the ti sp gap in `docs/DEFERRED.md`. Re-check every bam fixture's gates afterwards.
+## Next slice: the smooth-term table of `summary.gam` (M4)
 
-Then: the smooth-term table of `summary.gam` on the exit fit, at the Q2 gates above. Every exit smooth
-has `null.space.dim == 0` (select=TRUE), so all go through `reTest` / `recov` (mgcv.r), not `testStat`, and the p-value
-through `psum.chisq` (Davies' algorithm, C code `davies.c`; `liu2` is only its fallback). Section 16's fixture already
-holds `s_table` (edf, Ref.df, Chi.sq, p-value). Ref.df here is 12, 5, 60, 11, 7, 6, 5, 13.
+Port `summary.gam`'s `s.table` for the exit fit at the Q2 gates: Ref.df exact; Chi.sq 1% relative; p-value 1e-3 absolute
+or 1% relative, whichever is larger. Every exit smooth has `null.space.dim == 0` (select=TRUE), so all go through
+`reTest` (mgcv.r ~3737) and `recov` (~3620), not `testStat`; the p-value is `psum.chisq` (~3487), which calls Davies'
+algorithm (C code `davies.c`) and falls back to `liu2` (~3521). Section 16's fixture already holds `s_table` (edf,
+Ref.df, Chi.sq, p-value); Ref.df there is 12, 5, 60, 11, 7, 6, 5, 13. If that is over 600 lines, do `recov` + `reTest`
+(Chi.sq and Ref.df) first and leave p refused. The Q2 row in `docs/PRIORITIES.md` is Jonathan's change; check it is there.
 
 ## Open items for Jonathan
 
 None.
 
 Decided on PR #21 (2026-11-16): Q1 option (A): port mgcv's constraint rows for discrete bam, held to the
-"Deterministic pieces ... constraints" gate, so the intercept meets the estimate gate. The strict xfail
-`test_intercept_meets_the_estimate_gate` stays until that port lifts it. Q2 option (a): smooth-term tests are gated
+"Deterministic pieces ... constraints" gate (done 2026-11-17, ADR 0002; the strict xfail is lifted). Q2 option (a): smooth-term tests are gated
 at Ref.df exact; Chi.sq 1% relative; p-value 1e-3 absolute or 1% relative, whichever is larger. The matching
 `docs/PRIORITIES.md` row is Jonathan's change (a routine slice does not edit that file).
 

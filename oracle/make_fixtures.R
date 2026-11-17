@@ -378,4 +378,30 @@ put("bam_discrete_exit_summary", list(
   s_names = rownames(s14$s.table), s_table = unname(s14$s.table), s_columns = colnames(s14$s.table),
   residual_df = s14$residual.df, n = s14$n, dev_expl = s14$dev.expl, r_sq = s14$r.sq, scale = s14$scale,
   null_space_dim = sapply(b14$smooth, function(sm) sm$null.space.dim), levels = lapply(f[sapply(f, is.factor)], levels)))
+# 17. the rows bam(discrete = TRUE) takes each sum-to-zero constraint over (discrete.mf, bam.r; smoothCon, smooth.r).
+# discrete.mf, under temp.seed(8547), compresses and shuffles each covariate (compress.df) and pads every column to the
+# longest with sample(); gam.setup then builds the smooths on that padded frame, so colMeans(X) is over its rows.
+# 17a: R's own stream under set.seed(8547) (RNG.c, random.c), the draws discrete.mf makes. 17b: section 14's padded
+# frame (captured from the gam.setup call by trace) and the unit constraint direction (qr.Q of the stored qrc) of
+# s(AttdAge), s(PolYear) and both ti margins.
+set.seed(8547); r_unif <- runif(5); r_perm <- sample.int(981, 981); r_rep <- sample.int(985, 50, replace = TRUE)
+set.seed(8547); r_mixed <- c(sample.int(2, 2), sample.int(70000, 5, replace = TRUE), sample.int(1, 3, replace = TRUE))
+put("r_rng_set_seed_8547", list(seed = 8547, unif = r_unif, perm_981 = r_perm, rep_985_50 = r_rep,
+                                mixed = list(perm_2 = r_mixed[1:2], rep_70000_5 = r_mixed[3:7], rep_1_3 = r_mixed[8:10])))
+mf17 <- NULL
+trace(mgcv:::gam.setup, quote(assign("mf17", data, envir = globalenv())), print = FALSE, where = asNamespace("mgcv"))
+b17 <- bam(as.formula(f14x), family = binomial(link = "cloglog"), weights = ExposCnt, data = f, knots = my_knots,
+           method = "fREML", discrete = TRUE, select = TRUE)
+untrace(mgcv:::gam.setup, where = asNamespace("mgcv"))
+stopifnot(isTRUE(all.equal(unname(b17$linear.predictors), unname(b14$linear.predictors))))
+con_dir <- function(sm) as.numeric(qr.Q(attr(sm, "qrc"))[, 1])
+ti17 <- b17$smooth[[which(sapply(b17$smooth, function(sm) sm$label) == "ti(PolYear,AttdAge)")]]
+put("bam_discrete_constraint_rows", list(
+  columns = names(mf17), maxr = nrow(mf17),
+  AttdAge = mf17$AttdAge, PolYear = mf17$PolYear, StudyYear_C = mf17$StudyYear_C, p = mf17$p,
+  weights = mf17[["(weights)"]], FaceSize = as.integer(mf17$FaceSize) - 1L, Smoke = as.integer(mf17$Smoke) - 1L,
+  n_unique = sapply(mf17, function(v) length(unique(v))),
+  constraint = list(s_AttdAge = con_dir(b17$smooth[[1]]), s_PolYear = con_dir(b17$smooth[[2]]),
+                    ti_PolYear = con_dir(ti17$margin[[1]]), ti_AttdAge = con_dir(ti17$margin[[2]])),
+  margin_terms = sapply(ti17$margin, function(m) m$term)))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

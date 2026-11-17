@@ -247,22 +247,23 @@ slope at the end knot, which is what ``crspl`` (mgcv.c) does. User-supplied knot
 
 import contextlib
 import contextvars
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 
 import numpy as np
 
-from hgam.errors import HgamComputationError, HgamValidationError
+from hgam.errors import HgamComputationError, HgamNotImplementedError, HgamValidationError
 
 __all__ = [
     "absorb_sum_to_zero_constraint",
     "by_factor_mask_design",
     "by_scale_design",
+    "constraint_frame",
+    "constraint_rows",
     "cr_basis",
     "cr_default_knots",
     "sum_to_zero_null_space",
     "sz_basis",
     "ti_basis",
-    "unique_row_constraint",
 ]
 
 _MIN_K = 3
@@ -504,42 +505,45 @@ def by_factor_mask_design(design: np.ndarray, group: np.ndarray, level: int) -> 
     return np.asarray(design * mask[:, np.newaxis], dtype=np.float64)
 
 
-def _distinct_rows(design: np.ndarray) -> np.ndarray:
-    """One row per distinct row of ``design``. ``np.unique(axis=0)`` sorts structured rows and
-    takes seconds at 4e5 rows, so the rows are first keyed by a fixed 1-D projection; the result is
-    VERIFIED exact (every row must equal its representative) and falls back to the full row
-    ``unique`` if two distinct rows ever shared a key."""
-    key = design @ np.linspace(1.0, 2.0, design.shape[1])
-    _, first, inverse = np.unique(key, return_index=True, return_inverse=True)
-    reps = design[first]
-    if np.array_equal(reps[inverse.reshape(-1)], design):
-        return reps
-    return np.unique(design, axis=0)
-
-
-_UNIQUE_ROW_CONSTRAINT: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "polaris_unique_row_constraint", default=False
+_CONSTRAINT_FRAME: contextvars.ContextVar[Mapping[str, np.ndarray] | None] = contextvars.ContextVar(
+    "hgam_constraint_frame", default=None
 )
 
 
 @contextlib.contextmanager
-def unique_row_constraint() -> Iterator[None]:
-    """Compute every sum-to-zero constraint from ONE row per distinct covariate value.
+def constraint_frame(frame: Mapping[str, np.ndarray]) -> Iterator[None]:
+    """Take every cr sum-to-zero constraint over ``frame``'s rows instead of the data rows.
 
-    ``bam(discrete=TRUE)`` builds its smooths on ``discrete.mf``'s compressed frame (each
-    variable's unique values, padded to equal length), so ``C = colMeans(X)`` there weights each
-    distinct value about equally, not by how many data rows carry it. The default (data rows)
-    is what ``gam()`` does and is unchanged. The padding's random multiplicities (a seeded
-    ``sample()``) are NOT reproduced; this is the deterministic part only. ADR-260 amendment 9.
-    """
-    token = _UNIQUE_ROW_CONSTRAINT.set(True)
+    mgcv counterpart: ``smoothCon`` (smooth.r), mgcv 1.9-1, ``C = colMeans(X)`` with
+    ``sparse.cons = 0``, where ``bam(discrete=TRUE)`` builds ``X`` on ``discrete.mf``'s padded
+    frame (``hgam.frontend.discrete.discrete_model_frame``). ``frame`` maps each covariate to
+    that frame's column. The default (no frame) is ``gam()``'s: the data rows."""
+    token = _CONSTRAINT_FRAME.set(frame)
     try:
         yield
     finally:
-        _UNIQUE_ROW_CONSTRAINT.reset(token)
+        _CONSTRAINT_FRAME.reset(token)
 
 
-def sum_to_zero_null_space(design: np.ndarray) -> np.ndarray:
+def constraint_rows(variable: str, knots: np.ndarray) -> np.ndarray | None:
+    """The unconstrained cr design at the active :func:`constraint_frame`'s ``variable`` column
+    (the rows ``smoothCon`` takes ``colMeans`` over), or ``None`` outside one (the data rows).
+
+    Raises:
+        HgamNotImplementedError: a frame is active but does not carry ``variable``.
+    """
+    frame = _CONSTRAINT_FRAME.get()
+    if frame is None:
+        return None
+    if variable not in frame:
+        raise HgamNotImplementedError(
+            f"constraint_rows: the discrete model frame has no column {variable!r} to take its "
+            "sum-to-zero constraint over."
+        )
+    return cr_basis(np.asarray(frame[variable], dtype=np.float64), knots)[0]
+
+
+def sum_to_zero_null_space(design: np.ndarray, rows: np.ndarray | None = None) -> np.ndarray:
     """``mgcv``'s constraint null-space basis ``Z`` for ``colMeans(X) · β = 0``.
 
     Split out of :func:`absorb_sum_to_zero_constraint` (slice 5's ``ti()`` work,
@@ -551,12 +555,20 @@ def sum_to_zero_null_space(design: np.ndarray) -> np.ndarray:
 
     Args:
         design: The unconstrained ``(n, k)`` design from :func:`cr_basis`.
+        rows: The design rows to take ``colMeans`` over instead of ``design``'s
+            (:func:`constraint_rows`); ``None`` is ``design`` itself.
 
     Returns:
         ``(k, k-1)`` — every column of ``Q`` after the first, from the full QR of
         ``colMeans(X)ᵀ`` (module docstring §4).
     """
-    rows = _distinct_rows(design) if _UNIQUE_ROW_CONSTRAINT.get() else design
+    if rows is None:
+        rows = design
+    elif rows.shape[1] != design.shape[1]:
+        raise HgamValidationError(
+            f"sum_to_zero_null_space: constraint rows have {rows.shape[1]} column(s), "
+            f"design {design.shape[1]}."
+        )
     constraint = rows.mean(axis=0).reshape(-1, 1)
     if np.allclose(constraint, 0.0):
         raise HgamComputationError(
@@ -567,12 +579,15 @@ def sum_to_zero_null_space(design: np.ndarray) -> np.ndarray:
     return np.asarray(q[:, 1:], dtype=np.float64)
 
 
-def absorb_sum_to_zero_constraint(design: np.ndarray, s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def absorb_sum_to_zero_constraint(
+    design: np.ndarray, s: np.ndarray, rows: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray]:
     """Apply ``mgcv``'s default identifiability constraint: ``colMeans(X) · β = 0``.
 
     Args:
         design: The unconstrained ``(n, k)`` design from :func:`cr_basis`.
         s: The unconstrained ``(k, k)`` penalty from :func:`cr_basis`.
+        rows: The rows to take the constraint over (:func:`sum_to_zero_null_space`).
 
     Returns:
         ``(design_constrained, s_constrained)``, ``(n, k-1)`` and ``(k-1, k-1)``.
@@ -582,7 +597,7 @@ def absorb_sum_to_zero_constraint(design: np.ndarray, s: np.ndarray) -> tuple[np
         raise HgamValidationError(
             f"absorb_sum_to_zero_constraint: design has {k} column(s) but s is {s.shape}."
         )
-    z = sum_to_zero_null_space(design)
+    z = sum_to_zero_null_space(design, rows)
     design_c = design @ z
     s_c = z.T @ s @ z
     return design_c, (s_c + s_c.T) / 2.0
@@ -599,6 +614,9 @@ def ti_basis(
     x2: np.ndarray,
     knots1: np.ndarray,
     knots2: np.ndarray,
+    *,
+    constraint_rows1: np.ndarray | None = None,
+    constraint_rows2: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """The two-margin ``ti(x1, x2, bs="cr")`` tensor-interaction design and
     penalties (slice 5's ``ti(AttdAge, PolYear)``, module docstring's numbered
@@ -614,6 +632,8 @@ def ti_basis(
         x2: Margin-2 covariate values, ``(n,)``.
         knots1: Margin-1 knot vector, ``(k1,)``, ``k1 >= 3``.
         knots2: Margin-2 knot vector, ``(k2,)``, ``k2 >= 3``.
+        constraint_rows1, constraint_rows2: each margin's constraint rows
+            (:func:`constraint_rows`); ``None`` takes them over the data rows.
 
     Returns:
         ``(design, s1, s2)``: ``design`` is ``(n, (k1-1)*(k2-1))``, column order
@@ -631,8 +651,8 @@ def ti_basis(
 
     design1_unc, s1_unc = cr_basis(x1, knots1)
     design2_unc, s2_unc = cr_basis(x2, knots2)
-    design1, s1_marg = absorb_sum_to_zero_constraint(design1_unc, s1_unc)
-    design2, s2_marg = absorb_sum_to_zero_constraint(design2_unc, s2_unc)
+    design1, s1_marg = absorb_sum_to_zero_constraint(design1_unc, s1_unc, constraint_rows1)
+    design2, s2_marg = absorb_sum_to_zero_constraint(design2_unc, s2_unc, constraint_rows2)
     # Step 2 (no-op for cr margins — module docstring): mgcv's np=TRUE
     # reparameterization is skipped whenever every margin sets `noterp`, which
     # smooth.construct.cr.smooth.spec always does. Nothing to apply here.

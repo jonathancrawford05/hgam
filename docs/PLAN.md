@@ -63,5 +63,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   section 14's data and meets every gate (strict xfail lifted).
 - M4, `predict` on new data from a discrete fit (done 2026-11-16): `GamFit.predict` re-bins new data as `predict.bamd`
   does; `tests/test_predict_bam.py`, section 15. Next: `summary`.
-- M4, `summary`, first step (2026-11-16, open): the parametric table of `summary.gam` on a discrete fit;
-  `tests/test_summary_bam.py`, section 16. The intercept waits on a question (PR); smooth-term tests next.
+- M4, `summary`, first step (done 2026-11-16): the parametric table of `summary.gam` on a discrete fit;
+  `tests/test_summary_bam.py`, section 16.
+- M4, discrete bam's constraint rows (done 2026-11-17, Q1 option A of PR #21): R's RNG and `discrete.mf`'s padded
+  frame ported (`hgam.frontend.r_rng`, `discrete_model_frame`, ADR 0002, section 17); the intercept meets its gate
+  (4.8e-7) and the strict xfail is lifted. Next: the smooth-term table of `summary.gam`.

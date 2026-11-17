@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-17 (fifteenth slice): discrete bam's constraint rows
+
+Ported R's RNG (`set.seed`, Mersenne-Twister, `sample.int` Rejection: RNG.c, random.c) and `discrete.mf`'s padded frame `mf0` (bam.r, `discrete_model_frame`); cr and ti-margin constraints in `fit_engine_bam` are `colMeans` over it, as `smoothCon` takes them (ADR 0002). New fixture section 17, `tests/test_discrete_constraint_rows.py`; strict xfail lifted.
+Tests: 647 pass and 1 strict xfail before; 665 pass, 0 xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: R draws exact; `mf0` 5.7e-14; constraint directions 1.2e-15 (gate 1e-8). Exit fit: intercept 4.8e-7 (was 3.6e-3), eta 7.4e-8 (was 1.1e-4), se 7.0e-7, edf 1.3e-6.
+Deferred: an offset beside weights is refused in a discrete fit; 12d and 13a eta moves 1e-9 to 3e-6 with the summation order alone; 12a's ti sp still 1.11 times mgcv's (eta 2e-13).
+
 ## 2026-11-16 (fourteenth slice): summary of a discrete fit, the parametric table
 
 Ported `summary.gam`'s parametric table (mgcv.r): `GamSummary.parametric` (Estimate, Std. Error from Vp, z, 2 * pnorm), mgcv's coefficient names (`GamFit.parametric_names`); `summary()` now accepts a `discrete=True` fit. New fixture section 16 (`bam_discrete_exit_summary`), `tests/test_summary_bam.py`.

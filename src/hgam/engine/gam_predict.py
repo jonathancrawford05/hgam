@@ -34,6 +34,7 @@ import numpy as np
 from hgam.engine.gam_basis_cr import (
     by_factor_mask_design,
     by_scale_design,
+    constraint_rows,
     cr_basis,
     cr_default_knots,
     sum_to_zero_null_space,
@@ -102,7 +103,7 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         knots = _knots_for(term, term.variables[0], term.k[0], x)
         if term.by is not None:
             return TermState(term=term, knots=(knots,))
-        z = sum_to_zero_null_space(cr_basis(x, knots)[0])
+        z = sum_to_zero_null_space(cr_basis(x, knots)[0], constraint_rows(term.variables[0], knots))
         return TermState(term=term, knots=(knots,), constraint=(z,))
     if term.basis == "tp":
         x = np.asarray(_column(data, term.variables[0], term), dtype=np.float64)
@@ -113,7 +114,9 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         for variable, k in zip(term.variables, term.k, strict=True):
             x = np.asarray(_column(data, variable, term), dtype=np.float64)
             knots = _knots_for(term, variable, k, x)
-            margins.append((knots, sum_to_zero_null_space(cr_basis(x, knots)[0])))
+            margins.append(
+                (knots, sum_to_zero_null_space(cr_basis(x, knots)[0], constraint_rows(variable, knots)))
+            )
         return TermState(
             term=term,
             knots=tuple(m[0] for m in margins),

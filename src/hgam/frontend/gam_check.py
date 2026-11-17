@@ -157,7 +157,7 @@ def _k_check(
                 f"k_check: {label} is a factor-by smooth; k.check drops the by and tests the covariate "
                 "over all rows, which is not ported."
             )
-        if term.basis in ("sz", "re"):
+        if term.basis in ("sz", "fs", "re"):
             out.append(KCheckRow(label, k_prime, edf, None, None, "factor"))
             continue
         if term.basis == "ti":

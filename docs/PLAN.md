@@ -109,3 +109,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - Widening, `fs` on cr, first step (2026-11-17): the basis. `nat.param` (type 1) and `smooth.construct.fs.smooth.spec`
   ported (`hgam.engine.gam_basis_fs`), held to `smoothCon` and `PredictMat` at 2.4e-14 up to column signs and the order
   of the two null-space columns (`tests/test_fs_basis.py`, section 24). `gam()` still refuses `bs="fs"`. Next: the fit.
+- Widening, `fs` on cr, second step (2026-11-17): the REML gam fit. `s(x, f, bs="fs", xt="cr", k=)` (either order,
+  factor found by type) through `gam(method="REML")`: structure, names and full rank exact, eta 1.1e-4, se 4.3e-4
+  relative, edf 1.3e-3 of the gate width, predict on new data 1.1e-4 (`tests/test_fs_fit.py`, section 24b). Refused:
+  `discrete=True` (bam's tensor-like fs margins), `select=True`, `by=`, `m=`, the default tp base. Next: fs in
+  discrete bam.

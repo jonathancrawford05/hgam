@@ -24,6 +24,7 @@ from hgam.engine.gam_basis_cr import (
     sz_basis,
     ti_basis,
 )
+from hgam.engine.gam_basis_fs import fs_basis
 from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
 from hgam.engine.gam_basis_tp import tp_basis
@@ -37,6 +38,7 @@ __all__ = [
     "build_python_parametric_term",
     "build_python_re_term",
     "build_python_sz_term",
+    "build_python_fs_term",
     "build_python_ti_term",
     "build_python_tp_term",
 ]
@@ -256,6 +258,34 @@ def build_python_ti_term(x1: np.ndarray, x2: np.ndarray, term: TermSpec) -> Term
         s=(s1, s2),
         rank=(rank1, rank2),
         knots=None,
+    )
+
+
+def build_python_fs_term(x: np.ndarray, group: np.ndarray, term: TermSpec) -> TermExtract:
+    """mgcv counterpart: ``smooth.construct.fs.smooth.spec`` with ``xt = "cr"`` and ``smoothCon``'s penalty
+    scaling (smooth.r), mgcv 1.9-4, through :func:`~hgam.engine.gam_basis_fs.fs_basis`.
+
+    ``term.variables`` is ``(factor_name, smoothed_name)``. The ``1 + null_dim`` penalties keep mgcv's
+    ``rank`` vector (``rank * nf``, then ``nf`` per null-space direction). No constraint is absorbed.
+    """
+    if term.basis != "fs" or term.n_levels is None:
+        raise HgamValidationError(
+            f"build_python_fs_term only handles basis='fs' with n_levels set; {term.label!r} is "
+            f"basis={term.basis!r}."
+        )
+    x = np.asarray(x, dtype=np.float64)
+    supplied = term.knots_by_variable().get(term.variables[1])
+    k = term.k[0]
+    knots = np.asarray(supplied, dtype=np.float64) if supplied is not None else cr_default_knots(x, k)
+    basis = fs_basis(x, np.asarray(group, dtype=np.int64), term.n_levels, knots)
+    return TermExtract(
+        label=term.label,
+        index_start=0,
+        index_end=basis.design.shape[1],
+        design=basis.design,
+        s=basis.penalties,
+        rank=basis.rank,
+        knots=tuple(float(v) for v in knots),
     )
 
 

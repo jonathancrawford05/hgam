@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-17 (twenty-ninth slice): the `fs` fit (second step of `fs`, PLAN step 3)
+
+No open PR at start (PR #36 had merged). `s(x, f, bs="fs", xt="cr", k=)` wired into the REML gam path: parser, `TermSpec(basis="fs")`, `build_python_fs_term`, predict through `Predict.matrix.fs.interaction` with `P` kept in `TermState.fs_p`; no engine change to the fit itself. `test_fs_is_still_refused` retired (SETTINGS condition 5), replaced by `tests/test_fs_fit.py`.
+Tests: 769 → 780 (eleven in `tests/test_fs_fit.py`, one parser case; one refusal test removed). `make lint` clean. Section 24b (tier 1, mgcv 1.9-1): eta 1.1e-4, se 4.3e-4 relative, edf 1.3e-3 of the gate width, predict on new data 1.1e-4; structure, names, rank exact.
+Deferred: fs in discrete bam, fs with select=TRUE (refused). Next: fs in discrete bam.
+
 ## 2026-11-17 (twenty-eighth slice): the `fs` basis (first step of `fs`, PLAN step 3)
 
 PR #35 auto-merged (six conditions posted). `nat.param` (type 1) and `smooth.construct.fs.smooth.spec` on cr ported in `hgam.engine.gam_basis_fs`, with `Predict.matrix.fs.interaction`; `gam()` still refuses `bs="fs"`. The full fit would exceed the slice limit, so this is the basis only.

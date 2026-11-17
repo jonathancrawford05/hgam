@@ -37,14 +37,16 @@ __all__ = [
     "factor_by_terms",
 ]
 
-SUPPORTED_BASES: tuple[str, ...] = ("cr", "tp", "ti", "sz", "re", "parametric", "raw")
+SUPPORTED_BASES: tuple[str, ...] = ("cr", "tp", "ti", "sz", "fs", "re", "parametric", "raw")
 """The basis kinds PLAN §3 puts in scope, plus ``"raw"``.
 
 ``"cr"`` — Wood's cubic regression spline (slice 2). ``"tp"`` — Wood's thin-plate
 regression spline of one covariate, ``mgcv``'s default basis (Slice R4, ADR-261; see
 :mod:`hgam.engine.gam_basis_tp`). ``"ti"`` — tensor interaction with
 marginal main effects excluded (slice 5). ``"sz"`` — sum-to-zero factor-smooth
-interaction (slice 6). ``"re"`` — the random-effect / level-indicator basis
+interaction (slice 6). ``"fs"`` — the uncentred factor-smooth interaction on a cr base
+(:mod:`hgam.engine.gam_basis_fs`; ``variables`` is ``(factor_name, smoothed_name)`` as for
+``"sz"``, one ``k``, ``n_levels`` required). ``"re"`` — the random-effect / level-indicator basis
 (capability ladder rung L2, ``docs/PLAN_mgcv_capability_ladder.md`` slice 2): design is
 the factor's own level-indicator matrix, penalty is the identity — see
 :mod:`hgam.engine.gam_basis_re`. ``"parametric"`` — an unpenalized
@@ -226,6 +228,20 @@ class TermSpec:
                     f"TermSpec {self.label!r} is basis='sz' with n_levels="
                     f"{self.n_levels!r}; sz needs at least 2 factor levels."
                 )
+        elif self.basis == "fs":
+            # smooth.construct.fs.smooth.spec: one factor and one smoothed covariate, one k (the base
+            # smooth's), and one copy of the base per level, so the level count is an input.
+            if len(self.variables) != 2 or len(self.k) != 1:
+                raise HgamValidationError(
+                    f"TermSpec {self.label!r} is basis='fs' with variables {self.variables} and "
+                    f"k={self.k!r}; fs names exactly two (the factor, then the smoothed covariate) "
+                    "and takes one k."
+                )
+            if self.n_levels is None or self.n_levels < 2:
+                raise HgamValidationError(
+                    f"TermSpec {self.label!r} is basis='fs' with n_levels={self.n_levels!r}; fs needs "
+                    "n_levels set, >= 2 (mgcv's length(levels(fac)))."
+                )
         elif self.basis == "re":
             # mgcv's own asymmetry the other way from sz: a "re" term names a
             # single factor variable, carries no basis dimension of its own (its
@@ -363,7 +379,7 @@ class TermSpec:
                     f"must lie in [0, {self.n_levels})."
                 )
         if (
-            self.basis not in ("sz", "re")
+            self.basis not in ("sz", "fs", "re")
             and not (self.basis == "cr" and self.by_factor is not None)
             and self.n_levels is not None
         ):

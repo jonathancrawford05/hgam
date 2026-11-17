@@ -133,9 +133,18 @@ are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 
 
 PR #24 merged, so `docs/PLAN.md`'s "Order of work from here" applies. Step 2 is open: the confirmation PR
 (`dev/2026-11-17-confirm-initial-scope`) lists every initial-scope item with its test, fixture and numbers. No new
-work starts until Jonathan confirms on it. After he confirms, the order is: (1) the BLAS thread setting below
-(decided on PR #31, Priorities item 3), unless he says otherwise on the confirmation PR; (2) step 3's widening,
-starting with factor `by`.
+work starts until Jonathan confirms on it. After he confirms, the order is: (0) the unseen-level refusal below;
+(1) the BLAS thread setting below (decided on PR #31, Priorities item 3), unless he says otherwise on the
+confirmation PR; (2) step 3's widening, starting with factor `by`.
+
+### First: name the unseen-level refusal (PR #32 review b087411, should-fix 1)
+
+`_FactorCoding.encode` (`src/hgam/frontend/api.py:147`) raises `HgamValidationError` for a factor level the fit did
+not see. Its message says "mgcv refuses an unseen level too", which is wrong. `predict.gam` (mgcv.r) warns "factor
+levels ... not in original fit", and `predict.bamd` zeroes that factor's dummies. At predict time, raise
+`HgamNotImplementedError` naming mgcv's behaviour, and fix the message. Update the tests that expect the validation
+error (`tests/test_predict_bam.py:82`, `tests/frontend/test_api.py:89`, `tests/engine/test_gam_predict.py:148`) to
+expect the refusal. A refusal needs no fixture.
 
 ### Then: BLAS thread setting (Priorities item 3)
 

@@ -6,6 +6,7 @@ PR #31 auto-merged (six SETTINGS conditions posted; the branch delete was refuse
 Tests: 756 pass before and after, no xfail. `make lint` is clean. Pinned-image run (CI `oracle`, PR #31 head): 756 pass against the tier 3 fixtures.
 The numbers quoted are tier 1 (mgcv 1.9-1). CI does not print the tier 3 margins, and its artifacts are blocked here.
 Deferred: nothing new.
+Review b087411: should-fix 1, the unseen-level refusal is a mislabelled `HgamValidationError`; it is moved out of the checklist's refusals, and a slice is scheduled in CONTINUATION. Should-fix 2: the exit row was remeasured (eta 7.5e-8, se 7.2e-7, edf 1.4e-6).
 
 ## 2026-11-17 (twenty-third slice, follow-up): Jonathan's answer on PR #31
 

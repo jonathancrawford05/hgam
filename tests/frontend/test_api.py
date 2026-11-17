@@ -87,7 +87,7 @@ def test_predict_encodes_new_data_and_matches_codes(frame: Frame) -> None:
 def test_unseen_level_in_newdata_is_refused(frame: Frame) -> None:
     fit = gam('y ~ g + s(x, bs="cr", k=8)', frame, "gaussian")
     bad = _with(_head(frame, 3), g=np.array(["zzz"] * 3))
-    with pytest.raises(HgamValidationError, match="level 'zzz'"):
+    with pytest.raises(HgamNotImplementedError, match="level 'zzz'.*not ported"):
         fit.predict(bad)
 
 
@@ -247,6 +247,12 @@ def test_factor_levels_follow_r_rules(frame: Frame) -> None:
         "gaussian",
     )
     assert fit.factor_levels["g"] == ("z", "a", "m")  # a declared Factor order is kept
+    with pytest.raises(HgamValidationError, match="not one of its stated levels"):
+        gam(
+            'y ~ g + s(x, bs="cr", k=6)',
+            _with(frame, g=Factor(["z", "a", "q"] * 86 + ["z", "a"], levels=["z", "a"])),
+            "gaussian",
+        )
     with pytest.raises(HgamValidationError, match="at least 2"):
         gam('y ~ g + s(x, bs="cr", k=6)', _with(frame, g=np.array(["only"] * len(frame["x"]))), "gaussian")
     with pytest.raises(HgamNotImplementedError, match="numeric column"):

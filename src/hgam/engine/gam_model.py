@@ -715,7 +715,7 @@ class EngineGAMFit:
         returns ``eta = offset + X beta``; ``"response"`` applies the inverse
         link. Numeric covariates outside the training range extrapolate
         linearly, as ``mgcv``'s ``cr`` does (ADR-249); a factor code the fit did
-        not see raises.
+        not see is refused as not ported (``HgamNotImplementedError``).
         """
         if type not in ("link", "response"):
             raise HgamValidationError(

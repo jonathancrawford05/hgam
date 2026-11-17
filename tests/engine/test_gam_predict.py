@@ -15,7 +15,7 @@ from hgam.engine.gam_basis_cr import cr_basis
 from hgam.engine.gam_model import assemble_model_design, fit_engine_gam
 from hgam.engine.gam_predict import fit_term_state, predict_design
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec, factor_by_terms
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 _X_KNOTS = (0.0, 1.0, 2.5, 4.0, 6.0, 8.0, 10.0)
 _Z_KNOTS = (0.0, 1.0, 2.0, 3.0, 5.0)
@@ -145,7 +145,7 @@ def test_unseen_factor_level_raises_and_missing_offset_raises() -> None:
     terms = (TermSpec(label="s(f)", variables=("f",), basis="re", n_levels=3),)
     model = ModelSpec(family="gaussian", link="identity", terms=terms, offset_column="off")
     fit = fit_engine_gam(model, data, y)
-    with pytest.raises(HgamValidationError, match="unseen level"):
+    with pytest.raises(HgamNotImplementedError, match="unseen level is not ported"):
         fit.predict({"f": np.array([0, 3]), "off": np.zeros(2)})
     with pytest.raises(HgamValidationError, match="offset"):
         fit.predict({"f": np.array([0, 1])})

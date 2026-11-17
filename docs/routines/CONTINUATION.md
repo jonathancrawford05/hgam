@@ -86,14 +86,14 @@ no xfail.
 Smooth-term table, first step (section 16 and 18, `hgam.frontend.smooth_tests`, PR open): `summary()` of a discrete fit
 gives every fully penalised smooth (`null.space.dim == 0`) `reTest`'s Chi.sq and Ref.df (`reTest`, `recov` with no
 random terms, `mroot` via SciPy's `dpstrf`); `bam_fitd` carries X'WX (`EngineGAMFit.xwx`). Exit fit: Chi.sq 1.7e-6
-relative on all eight; Ref.df exact on five; the three sz terms give 7, 6, 5 vs mgcv's 11, 7, 6 (strict xfail, question
-on the PR). p-values are `None`. A smooth with a `bs="re"` term beside it keeps `None` (`reTest` would take `recov`'s
+relative on all eight; Ref.df exact on five; the three sz terms give 7, 6, 5 vs mgcv's 11, 7, 6, reported and not gated
+(Jonathan's option (a) on PR #23). p-values are `None`. A smooth with a `bs="re"` term beside it keeps `None` (`reTest` would take `recov`'s
 `re` branch, not ported; PR #23 review). `null_space_dim` is mgcv's rule where it is known without the constructors (0
-under select=TRUE and for re), else `None`. Tests: 675 pass, 3 strict xfail.
+under select=TRUE and for re), else `None`. Tests: 678 pass, no xfail.
 
 ## Next slice: the smooth-term p-value, `psum.chisq` (M4)
 
-If the PR's question is answered first, apply the answer to the three sz Ref.df tests. Then port `psum.chisq` (mgcv.r
+Port `psum.chisq` (mgcv.r
 ~3487): Davies' algorithm (mgcv's C `davies.c`, `qfc`), falling back to `liu2` (~3521) on `ifault` other than 0 and 2.
 Gate (Q2): p-value 1e-3 absolute or 1% relative, whichever is larger; section 16's `s_table[:, 3]` holds mgcv's. Measured
 this run: mgcv's own `psum.chisq` on hgam's eigenvalues gives mgcv's p to 3e-6, so the sz Ref.df gap does not move p.
@@ -103,12 +103,12 @@ its eigenvalues for this (it computes them already). Over 600 lines: port `davie
 
 ## Open items for Jonathan
 
-Q (PR for slice sixteen): Ref.df of the three sz terms on the exit fit (7, 6, 5 vs mgcv's 11, 7, 6). Ref.df counts
-eigenvalues above `max * eps^0.8`, and `mroot(Ve[m, m])`'s rank comes from `dpstrf` stopping at the first non-positive
-pivot of a matrix whose spectrum runs to 1e-17, so the count is set by rounding (one honest attempt: the port follows
-mgcv's path with the same LAPACK routine). Options: (a) gate Ref.df exact only where mgcv's rank is not set by rounding,
-and gate the sz terms through Chi.sq and the p-value; (b) keep exact for all and leave the three strict xfails; (c) port
-something other than mgcv's rule. Recommendation: (a).
+None.
+
+Decided on PR #23 (2026-11-17): option (a). Ref.df is gated exact only where mgcv's rank is not set by rounding; on the
+exit fit's s(FaceSize,AttdAge), s(Smoke,AttdAge) and s(FaceSize,PolYear) it is reported, not gated, and those terms are
+gated through Chi.sq and (when ported) the p-value. The matching `docs/PRIORITIES.md` row (with Q2's smooth-term gates)
+is Jonathan's change.
 
 Decided on PR #21 (2026-11-16): Q1 option (A): port mgcv's constraint rows for discrete bam, held to the
 "Deterministic pieces ... constraints" gate (done 2026-11-17, ADR 0002; the strict xfail is lifted). Q2 option (a): smooth-term tests are gated

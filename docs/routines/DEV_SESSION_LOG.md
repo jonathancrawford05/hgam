@@ -2,10 +2,10 @@
 
 ## 2026-11-17 (seventeenth slice): psum.chisq and Davies' algorithm
 
-Ported mgcv's `davies.c` (`hgam.frontend.davies`: errbd, ctff, truncation, findu, integrate, cfe, davies, with R's `revsort` and `log1pmx`) and `psum.chisq` / `liu2` (mgcv.r) into `smooth_tests`. New fixture section 19 (`psum_chisq_davies`, 15 cases plus liu2), `tests/test_psum_chisq.py`. Not yet wired into `summary()`.
-Tests: 678 pass before; 718 pass, no xfail after (+40, all in `tests/test_psum_chisq.py`). `make lint` is clean.
-Tier 1, mgcv 1.9-1: p-value 4.4e-16 absolute at most (gate 1e-3 or 1%); davies' trace 4.3e-15 relative, its term, integration and call counts and ifault exact on every case (aux integration, convergence factor, range exits, ties, liu2 fallback).
-Deferred: Davies' ifault 2 branch has no fixture; liu2 uses SciPy's ncx2 for pnchisq.
+Ported mgcv's `davies.c` (`hgam.frontend.davies`: errbd, ctff, truncation, findu, integrate, cfe, davies, with R's `revsort` and `log1pmx`) and `psum.chisq` / `liu2` (mgcv.r) into `smooth_tests`. New fixture section 19 (`psum_chisq_davies`, 19 cases plus liu2), `tests/test_psum_chisq.py`. Not yet wired into `summary()`.
+Tests: 678 pass before; 726 pass, no xfail after (+48, all in `tests/test_psum_chisq.py`; review fix: four branch cases). `make lint` is clean.
+Tier 1, mgcv 1.9-1: p-value 4.4e-16 absolute at most (gate 1e-3 or 1%); davies' trace 4.3e-15 relative, its term, integration and call counts and ifault exact on every case (aux integration, convergence factor, range exits, ties, liu2 fallback, aux lim exit, cfe fail and clamp, ifault 3).
+Deferred: four Davies branches have no fixture (ifault 2, two aux-loop breaks, sd == 0); liu2 fixture reaches chi2 only.
 
 ## 2026-11-17 (sixteenth slice): summary.gam's smooth-term table, Chi.sq and Ref.df
 

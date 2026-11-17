@@ -93,8 +93,8 @@ under select=TRUE and for re), else `None`. Tests: 678 pass, no xfail.
 
 The smooth-term p-value's distribution, first step (section 19, `tests/test_psum_chisq.py`, PR open): `davies.c` is ported
 line for line in `hgam.frontend.davies` (with R's `revsort` and `log1pmx`); `psum_chisq` and `liu2` (mgcv.r) are in
-`hgam.frontend.smooth_tests`. Against `psum.chisq(..., trace = TRUE)` on 15 cases: p to 4.4e-16, `trace` to 4.3e-15
-relative, ifault and every count exact. Not yet called by `summary()`. Tests: 718 pass, no xfail.
+`hgam.frontend.smooth_tests`. Against `psum.chisq(..., trace = TRUE)` on 19 cases: p to 4.4e-16, `trace` to 4.3e-15
+relative, ifault and every count exact. Not yet called by `summary()`. Tests: 726 pass, no xfail.
 
 ## Next slice: wire the p-value into `summary()` (M4)
 

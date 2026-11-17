@@ -42,7 +42,8 @@ def test_psum_chisq_matches_mgcv(name: str) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("error", RuntimeWarning)
             got = psum_chisq(case["q"][0], **_args(case))
-    np.testing.assert_allclose(got[0], case["p"], rtol=1e-8, atol=1e-12)
+    want = np.nan if case["p"] in (None, "NA") else case["p"]  # R's NA (negative_nc: no fallback)
+    np.testing.assert_allclose(got[0], want, rtol=1e-8, atol=1e-12, equal_nan=True)
 
 
 @pytest.mark.parametrize("name", sorted(CASES))

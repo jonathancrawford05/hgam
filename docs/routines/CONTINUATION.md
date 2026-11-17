@@ -164,6 +164,9 @@ Large data (about 30 million rows) is deferred: see `docs/DEFERRED.md`.
 
 ## Open items for Jonathan
 
+Open on PR #34 (`nthreads`): `threadpoolctl` was also put in the `dev` extra so CI runs the cap. Options: (a) keep
+it; (b) drop it from `dev` and add `--extra threads` to CI (touches `.github/`); (c) stub-only tests. Recommendation (a).
+
 Decided on PR #32 (2026-11-17): option (a). The initial scope is confirmed against the pinned image (every checklist
 item inside its gate, largest margin Ve's diagonal 8.1e-5 against 1e-2). The next slices are in the order above.
 

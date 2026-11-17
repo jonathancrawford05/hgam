@@ -60,8 +60,8 @@ class SmoothSummary:
     """``log10`` of each of the term's smoothing parameters (``ti`` and ``select=TRUE``
     terms carry more than one), in penalty-block order."""
     n_coef: int
-    null_space_dim: int = 0
-    """Columns the term's penalties leave unpenalised (``smooth$null.space.dim``)."""
+    null_space_dim: int | None = None
+    """``smooth$null.space.dim``; ``None`` where the constructor's value is not ported."""
     ref_df: int | None = None
     """``summary.gam``'s ``Ref.df`` (``reTest``'s rank); ``None`` where not ported."""
     chi_sq: float | None = None
@@ -288,7 +288,7 @@ def build_summary(
                 for v in fit.log_lambda[offsets[label] : offsets[label] + blocks[label]["n_penalties"]]
             ),
             n_coef=int(blocks[label]["end"] - blocks[label]["start"]),
-            null_space_dim=_null_space_dim(fit, blocks[label], offsets[label]),
+            null_space_dim=_null_space_dim(fit, label),
         )
         for label in smooth_labels
     )
@@ -330,17 +330,16 @@ def build_summary(
     )
 
 
-def _null_space_dim(fit: EngineGAMFit, block: dict, first_penalty: int) -> int:
-    """``smooth$null.space.dim``: the term's columns less the rank of its penalties' sum (each
-    block scaled to unit Frobenius norm first, so no block's scale hides another's range)."""
-    cols = slice(block["start"], block["end"])
-    total = np.zeros((block["end"] - block["start"],) * 2)
-    for s_j in fit.design["penalty_blocks"][first_penalty : first_penalty + block["n_penalties"]]:
-        sub = np.asarray(s_j, dtype=np.float64)[cols, cols]
-        norm = np.linalg.norm(sub)
-        if norm > 0:
-            total += sub / norm
-    return int(total.shape[0] - np.linalg.matrix_rank(total))
+def _null_space_dim(fit: EngineGAMFit, label: str) -> int | None:
+    """mgcv counterpart: ``smooth$null.space.dim`` as ``smoothCon`` (smooth.r) leaves it, mgcv 1.9-1,
+    where it is known without the constructors' own values: 0 under ``select=TRUE`` (``gam.setup``
+    passes ``null.space.penalty = select``; ``smoothCon`` adds a penalty on any unpenalised space and
+    sets the field to 0) and 0 for a ``bs="re"`` term (``smooth.construct.re.smooth.spec``). Other
+    terms carry their constructor's value, which is not ported: ``None``."""
+    term = next(t for t in fit.model.terms if t.label == label)
+    if fit.model.select or term.basis == "re":
+        return 0
+    return None
 
 
 def _with_smooth_tests(
@@ -348,15 +347,19 @@ def _with_smooth_tests(
 ) -> tuple[SmoothSummary, ...]:
     """mgcv counterpart: the smooth loop of ``summary.gam`` (mgcv.r), mgcv 1.9-1: a term with
     ``null.space.dim == 0`` goes to ``reTest``. Ported only where ``X'WX`` is carried (the bam
-    path), the scale is fixed and no coefficient was pivoted out."""
+    path), the scale is fixed and no coefficient was pivoted out, and only for a term with no
+    random-effect smooth beside it: ``reTest`` collects every other smooth with ``$random`` set
+    (``bs="re"``, ``smooth.construct.re.smooth.spec``) and then takes ``recov``'s ``re`` branch,
+    which is not ported. Those terms keep ``None`` (PR #23 review, blocking 1)."""
     if fit.xwx is None or fit.vp_override is None or not family.dispersion_fixed or fit.pivoted_columns:
         return smooths
     s_total = np.zeros_like(fit.xwx)
     for lam, s_j in zip(fit.lambda_, fit.design["penalty_blocks"], strict=True):
         s_total += lam * s_j
+    random = {t.label for t in fit.model.terms if t.basis == "re"}
     out = []
     for sm in smooths:
-        if sm.null_space_dim == 0:
+        if sm.null_space_dim == 0 and not (random - {sm.label}):
             b = blocks[sm.label]
             stat, rank = re_test(fit.coef, fit.xwx, s_total, fit.vp_override, slice(b["start"], b["end"]))
             sm = replace(sm, ref_df=rank, chi_sq=stat)

@@ -33,7 +33,8 @@ def mroot(a: np.ndarray) -> np.ndarray:
     a = np.asarray(a, dtype=np.float64)
     if a.ndim != 2 or a.shape[0] != a.shape[1]:
         raise HgamValidationError(f"mroot: a square matrix is required, got shape {a.shape}.")
-    if not np.allclose(a, a.T, rtol=1.5e-8, atol=0.0):
+    # all.equal(A, t(A)): mean relative difference against tolerance 1.5e-8 (PR #23 review nit).
+    if np.sum(np.abs(a - a.T)) > 1.5e-8 * np.sum(np.abs(a)):
         raise HgamValidationError("mroot: supplied matrix not symmetric.")
     p = a.shape[0]
     u, piv, rank, info = lapack.dpstrf(a, tol=0.0, lower=0)

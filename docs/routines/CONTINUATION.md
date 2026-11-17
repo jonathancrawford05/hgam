@@ -87,7 +87,9 @@ Smooth-term table, first step (section 16 and 18, `hgam.frontend.smooth_tests`, 
 gives every fully penalised smooth (`null.space.dim == 0`) `reTest`'s Chi.sq and Ref.df (`reTest`, `recov` with no
 random terms, `mroot` via SciPy's `dpstrf`); `bam_fitd` carries X'WX (`EngineGAMFit.xwx`). Exit fit: Chi.sq 1.7e-6
 relative on all eight; Ref.df exact on five; the three sz terms give 7, 6, 5 vs mgcv's 11, 7, 6 (strict xfail, question
-on the PR). p-values are `None`. Tests: 674 pass, 3 strict xfail.
+on the PR). p-values are `None`. A smooth with a `bs="re"` term beside it keeps `None` (`reTest` would take `recov`'s
+`re` branch, not ported; PR #23 review). `null_space_dim` is mgcv's rule where it is known without the constructors (0
+under select=TRUE and for re), else `None`. Tests: 675 pass, 3 strict xfail.
 
 ## Next slice: the smooth-term p-value, `psum.chisq` (M4)
 

@@ -1,7 +1,8 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-fifth slice: the unseen-level refusal
-(`dev/2026-11-17-unseen-level-refusal`, PR #32 review b087411 should-fix 1). Read `docs/PRIORITIES.md` before choosing
+Last updated: 2026-11-17, by the development run's twenty-sixth slice: `nthreads` as a BLAS cap
+(`dev/2026-11-17-nthreads`, Priorities item 3, Jonathan's option (A) on PR #31). PR #33 (the unseen-level refusal)
+has merged. Read `docs/PRIORITIES.md` before choosing
 work.
 
 ## State
@@ -129,38 +130,35 @@ grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `E
 draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
 are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-## Next slice: nthreads, then widening
+## Next slice: widening, starting with factor `by`
 
-Jonathan confirmed the initial scope on PR #32 (2026-11-17, option (a)). `docs/PLAN.md`'s "Order of work" step 2 is
-done, and step 3 (widening) is open. Order: (1) the BLAS thread setting below (PR #31); (2) step 3's widening, starting
-with factor `by`. The unseen-level refusal (step 0) is this run's PR: start (1) only after it has merged.
+Jonathan confirmed the initial scope on PR #32 (2026-11-17, option (a)). `docs/PLAN.md`'s "Order of work" step 3
+(widening) is open. Start it only after the `nthreads` PR has merged: it adds an optional extra, so Jonathan merges it
+(SETTINGS condition 4).
 
-The unseen-level refusal (done in this run's PR): at predict time, a factor level the fit did not see raises
-`HgamNotImplementedError` naming mgcv's behaviour (`predict.gam` warns and recodes to NA, `predict.bamd` zeroes the
-dummies), from `_FactorCoding.encode(..., at_predict=True)` (`src/hgam/frontend/api.py`) and the engine's `_codes`
-(`src/hgam/engine/gam_predict.py`). At fit time a `Factor` value outside its stated levels stays an
-`HgamValidationError`, with a corrected message.
+### Done in the last two PRs
+
+- The unseen-level refusal (PR #33, merged): at predict time, a factor level the fit did not see raises
+  `HgamNotImplementedError` naming mgcv's behaviour, from `_FactorCoding.encode(..., at_predict=True)` and the engine's
+  `_codes`. Review nit carried forward: the clause "predict.bamd sets that factor's dummies to zero" rests on
+  `predict.bamd`'s header comment (bam.r 1.9-4, lines 1777-1778); check it in R with a fixture when unseen-level
+  handling is ported.
+- `nthreads` (this run's PR): `hgam.bam(..., nthreads=1)` caps BLAS through `threadpoolctl` for the fit
+  (`hgam.frontend.threads`, `tests/test_nthreads.py`); the extra is `hgam[threads]`, and `threadpoolctl` is also in
+  `dev` so CI runs the cap. Benchmark row added to finding 0002 (0.49 s median at the default).
+
+### Then: factor `by` (PLAN step 3)
+
+`docs/SCOPE.md` lists `by` (numeric and factor); numeric `by` on cr is done (section 10). The front end already builds
+factor-by smooths, `s(x, by=f, bs="cr")` (`factor_by_terms` in `hgam.engine.gam_term_spec`, wired in
+`src/hgam/frontend/api.py`; `select=True` beside a bare smooth of the same variable is refused,
+`_refuse_select_with_bare_and_factor_by`), but no section of `oracle/make_fixtures.R` holds it to mgcv. First step:
+read `smoothCon`'s factor-by branch (smooth.r, mgcv 1.9-4: one copy per level, labels `s(x):fa`, and whether the
+sum-to-zero constraint is kept), add a fixture section with a REML gam fit and a discrete bam fit of
+`y ~ f + s(x, by=f, bs="cr")`, and hold basis, structure, eta, se and per-term edf to their gates. Fix what fails.
 
 Fixture rule (from PR #32): every test module reads fixtures through `conftest.FIXTURES` or `load_fixture`, and a new
 test that holds a key result calls `margin(...)` so CI's `oracle` job prints it.
-
-### Then: BLAS thread setting (Priorities item 3)
-
-Jonathan decided on PR #31 (2026-11-17): option (A), as a setting.
-
-1. Read `bam` in bam.r (mgcv 1.9-4) for `nthreads`: its default (1), its two-element form, and where it is used.
-2. Add `threadpoolctl` as an optional extra (`hgam[threads]`; Jonathan approved it on PR #31, so the extra itself is
-   decided, but the PR still waits for his merge under SETTINGS condition 4).
-3. `hgam.bam(..., nthreads=1)`: inside `bam_fitd`, `threadpool_limits(nthreads, user_api="blas")` when
-   `threadpoolctl` imports. Without it, `nthreads=1` leaves BLAS as the process set it (the README note on
-   `OPENBLAS_NUM_THREADS=1` stays), and `nthreads > 1` raises naming the missing extra, so the argument is never
-   accepted and ignored. Forms of `nthreads` the port does not follow (for example the two-element vector) are refused.
-   The docstring says the limit is process-wide for the length of the fit, and that mgcv's `nthreads` drives its own
-   OpenMP code rather than BLAS, so this is a mapping onto mgcv's argument name, not a port of its threading.
-4. Test: the fit's key results are unchanged with and without the cap (the exit test), and the limit is restored
-   after the fit, including when the fit raises.
-5. Rerun `docs/findings/exit_benchmark/time_hgam.py` with default threads and the extra installed; add one row to
-   finding 0002.
 
 Large data (about 30 million rows) is deferred: see `docs/DEFERRED.md`.
 
@@ -169,8 +167,8 @@ Large data (about 30 million rows) is deferred: see `docs/DEFERRED.md`.
 Decided on PR #32 (2026-11-17): option (a). The initial scope is confirmed against the pinned image (every checklist
 item inside its gate, largest margin Ve's diagonal 8.1e-5 against 1e-2). The next slices are in the order above.
 
-Decided on PR #31 (2026-11-17): option (A) as a setting, `nthreads` with default 1 (next slice above); optimise for
-large data (about 30m rows) later (DEFERRED).
+Decided on PR #31 (2026-11-17): option (A) as a setting, `nthreads` with default 1 (done in the `nthreads` PR); optimise
+for large data (about 30m rows) later (DEFERRED).
 
 Decided on PR #23 (2026-11-17): option (a). Ref.df is gated exact only where mgcv's rank is not set by rounding; on the
 exit fit's s(FaceSize,AttdAge), s(Smoke,AttdAge) and s(FaceSize,PolYear) it is reported, not gated, and those terms are

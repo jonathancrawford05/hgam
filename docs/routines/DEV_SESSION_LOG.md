@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-17 (twenty-sixth slice): `nthreads` as a BLAS cap (Priorities item 3, PR #31 option A)
+
+PR #33 auto-merged (six conditions posted; the branch delete was refused by the proxy again). `hgam.bam(..., nthreads=1)` maps bam's `nthreads` (read in bam.r 1.9-4: scalar expanded to `rep(n, 2)`, non-finite or < 1 becomes 1) onto `threadpool_limits(n, user_api="blas")` for the length of the fit, through the new extra `hgam[threads]`; without it only `nthreads=1` is accepted; the two-element form is refused.
+Tests: 756 → 762 (`tests/test_nthreads.py`, six). `make lint` clean. Exit fit meets its gates at `nthreads=1` and `4` (the two differ by 3.3e-8 in eta). Benchmark: median 0.49 s at the default, 1.98 s at `nthreads=4` (mgcv 0.98 s).
+`threadpoolctl` also went into the `dev` extra so CI exercises the cap; that and the extra wait for Jonathan's merge (SETTINGS condition 4).
+
 ## 2026-11-17 (twenty-fifth slice): the unseen-level refusal (PR #32 review b087411, should-fix 1)
 
 A factor level the fit did not see is now refused at predict time as not ported (`HgamNotImplementedError`, in `_FactorCoding.encode(at_predict=True)` and the engine's `_codes`), naming mgcv's behaviour (`predict.gam` warns and recodes to NA; `predict.bamd` zeroes the dummies, read in mgcv 1.9-4). The fit-time message for a `Factor` value outside its stated levels no longer claims mgcv refuses it.

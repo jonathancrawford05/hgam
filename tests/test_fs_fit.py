@@ -80,10 +80,11 @@ BESIDE = {
 
 @pytest.mark.parametrize("name", list(BESIDE))
 def test_fs_beside_its_null_space_meets_the_gates(name: str, load_fixture, margin) -> None:
-    """Section 24c: a cr smooth of the same covariate (the global-plus-group-curves form) or a factor main effect
-    beside the fs term. Both lie in the span of the fs null-space columns and fs has ``side.constrain = FALSE``,
-    so only the penalties identify the fit; mgcv's rank is the full column count. The two null-space smoothing
-    parameters come out swapped against mgcv here, as DEFERRED records; they are not gated."""
+    """Section 24c: a cr smooth of the same covariate (the global-plus-group-curves form) or a factor main
+    effect beside the fs term. Both lie in the span of the fs null-space columns and fs has
+    ``side.constrain = FALSE``, so only the penalties identify the fit; mgcv's rank is the full column count.
+    The two null-space smoothing parameters come out swapped against mgcv here, as DEFERRED records; they are
+    not gated."""
     fx = load_fixture(name)
     data = _columns(fx["data"])
     fit = gam(BESIDE[name], data, FAMILY, weights="n", method="REML", knots=fx["knots"])
@@ -110,7 +111,8 @@ def test_fs_beside_its_null_space_meets_the_gates(name: str, load_fixture, margi
 
 def test_fs_k_check_row_and_null_space_dim(load_fixture) -> None:
     """mgcv's ``k.check`` (plots.r) gives NA for a smooth with a factor covariate, and
-    ``smooth.construct.fs.smooth.spec`` sets ``null.space.dim <- 0``. Not key results; read from the source."""
+    ``smooth.construct.fs.smooth.spec`` sets ``null.space.dim <- 0``. Not key results; read from the
+    source."""
     fx = load_fixture(NAME)
     data = _columns(fx["data"])
     fit = gam(FORMULA, data, FAMILY, weights="n", method="REML", knots=fx["knots"])

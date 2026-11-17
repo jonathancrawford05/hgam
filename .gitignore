@@ -7,3 +7,4 @@ dist/
 # real experience data never enters this repository
 data/
 *.parquet
+.coverage

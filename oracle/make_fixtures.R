@@ -416,10 +416,8 @@ put("mroot_chol", list(cases = lapply(list(full = A18a, deficient = A18b), funct
 # (reTest: psum.chisq(stat, ev), or psum.chisq(0, c(ev, -stat/k), df = c(rep(1, length(ev)), k)) for an estimated scale).
 # Each case records p, and davies' trace and ifault (trace = TRUE), so the port is held to mgcv's path as well as its
 # value. The cases reach: both range exits (far_tail, zero_q), the convergence factor (multi_q, far_tail, skew), the
-# auxiliary integration (dominant), ties in |lb| (ties), non-central terms with a normal term, df rounding, the
-# liu2 fallback (nlim = 5: ifault 1), the auxiliary loop's lim exit (aux_lim: c = -1 with ifault 0, so p = 2 as mgcv
-# gives it), cfe's fail return (cfe_fail) and its axl2 clamp (cfe_clamp), and a negative nc (ifault 3, p = NA, since the
-# fallback needs nc = 0). liu2 is also recorded on its own.
+# auxiliary integration (dominant), ties in |lb| (ties), non-central terms with a normal term, df rounding, and the
+# liu2 fallback (nlim = 5: ifault 1). liu2 is also recorded on its own.
 set.seed(19)
 psum19 <- list(
   central = list(q = 12, lb = c(3.1, 1.7, 0.9, 0.4, 0.05)),
@@ -434,9 +432,13 @@ psum19 <- list(
   skew = list(q = 25, lb = c(1, 0.999, 1e-3), df = c(1, 1, 50)),
   df_round = list(q = 9, lb = c(1.2, 0.6), df = c(2.5, 3.4)),
   fallback = list(q = 12, lb = c(3.1, 1.7, 0.9), nlim = 5),
+  # davies.c branches reached only here (PR #25 review): the auxiliary loop's `ntm > lim` exit, which
+  # returns c = -1 with ifault = 0 so psum.chisq reports p = 2 without a warning; cfe's `fail` return;
+  # cfe's `axl = axl2` clamp
   aux_lim = list(q = 3, lb = c(10, rep(0.01, 30)), nlim = 5),
   cfe_fail = list(q = 3, lb = c(10, rep(0.5, 200))),
   cfe_clamp = list(q = 12, lb = c(1, 0.05)),
+  # a negative nc: davies.c's ifault = 3 exit; psum.chisq's fallback needs nc = 0, so p = NA
   negative_nc = list(q = 4, lb = c(2, 1), nc = c(-1, 0)))
 put("psum_chisq_davies", list(
   cases = lapply(psum19, function(a) {

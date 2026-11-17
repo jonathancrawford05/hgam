@@ -64,6 +64,7 @@ __all__ = [
     "Factor",
     "GamFit",
     "gam",
+    "parametric_coefficient_names",
     "r_factor_levels",
     "structural_rank_deficiency",
 ]
@@ -171,19 +172,18 @@ class GamFit(EngineGAMFit):
     ``ti``, the level count for ``re``."""
     n_parametric: int = 0
     """``mgcv``'s ``m$nsdf``: the intercept plus the parametric block's columns."""
+    parametric_names: tuple[str, ...] = ()
+    """``mgcv``'s ``names(coef(m))[1:nsdf]``: ``(Intercept)``, then each parametric term's
+    ``model.matrix`` column names (:func:`parametric_coefficient_names`)."""
 
     def summary(self) -> GamSummary:
-        """The fit report (``summary.gam``'s counterpart, no p-values): per-smooth edf and
-        ``log10(sp)``, scale, REML score, deviance explained, ``n`` and the Newton
-        search's convergence report. ``print(fit.summary())`` renders it."""
-        if self.fit_method != "REML":
-            raise HgamNotImplementedError(
-                f"GamFit.summary(): not implemented for a {self.fit_method!r} fit "
-                "(it reports the exact-REML score and the Newton search's convergence). "
-                "Read edf_total, edf_per_term, log_lambda, n_iterations and "
-                "predict(se_fit=True) directly."
-            )
-        return build_summary(self, self.formula, self.smooth_labels, self.n_parametric)
+        """mgcv counterpart: ``summary.gam`` (mgcv.r; ``bam`` fits use it too), mgcv 1.9-4, in part.
+
+        The parametric table (``p.table``), per-smooth edf and ``log10(sp)``, scale, REML score
+        (not for a ``discrete=True`` fit: bam's fREML score is not ported), deviance explained,
+        ``n`` and the outer search's convergence report. The smooth-term tests (``Ref.df``,
+        ``Chi.sq``, p-value) are not ported yet. ``print(fit.summary())`` renders it."""
+        return build_summary(self, self.formula, self.smooth_labels, self.n_parametric, self.parametric_names)
 
     def encode(self, newdata: Mapping[str, object]) -> dict[str, np.ndarray]:
         """``newdata`` as the arrays :meth:`EngineGAMFit.predict` reads."""
@@ -251,6 +251,25 @@ class GamFit(EngineGAMFit):
         if se_fit:
             return super().predict(data, type, se_fit=True, unconditional=unconditional)
         return super().predict(data, type, se_fit=False, unconditional=unconditional)
+
+
+def parametric_coefficient_names(
+    terms: Sequence[TermSpec], factor_levels: Mapping[str, tuple[str, ...]]
+) -> tuple[str, ...]:
+    """The names R's ``model.matrix`` gives the parametric block under ``contr.treatment``:
+    ``(Intercept)``, then per factor term its non-reference levels pasted to the variable name
+    (``FaceSizeHigh``), and per interaction ``a:b`` the products, first-named variable fastest
+    (``FaceSizeHigh:SmokeS``), as :func:`~hgam.engine.gam_basis_parametric.parametric_design`
+    orders the columns."""
+    names = ["(Intercept)"]
+    for term in terms:
+        if term.basis != "parametric":
+            continue
+        combos: list[list[str]] = [[]]
+        for v in term.variables:
+            combos = [[*c, f"{v}{lv}"] for lv in factor_levels[v][1:] for c in combos]
+        names.extend(":".join(c) for c in combos)
+    return tuple(names)
 
 
 def _column(df: Mapping[str, object], name: str) -> Column:
@@ -764,4 +783,7 @@ def gam(
         smooth_labels=tuple(label for label, _ in smooth_meta),
         smooth_bs_dim=tuple(dim for _, dim in smooth_meta),
         n_parametric=nsdf,
+        parametric_names=parametric_coefficient_names(
+            model.terms, {name: c.levels for name, c in codings.items()}
+        ),
     )

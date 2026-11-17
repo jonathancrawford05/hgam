@@ -368,4 +368,14 @@ for (case in list(list(name = "a", n = 1500), list(name = "b", n = 40))) {
       list(newdata = nd, eta = as.numeric(pr$fit), se = as.numeric(pr$se.fit),
            eta_exact = as.numeric(pe$fit), se_exact = as.numeric(pe$se.fit)))
 }
+# 16. summary.gam of section 14's discrete fit b14 (summary.gam, mgcv.r; bam fits use it): the parametric table
+# (estimate, se, z, p; the scale is fixed) and the smooth table (edf, Ref.df, Chi.sq, p), with the scalars printed
+# beside them. Ref.df, Chi.sq and p come from testStat / reTest (mgcv.r). The factor levels are exported: the frame's
+# levels (Low, High) are not the order R would sort the strings in, and the coefficient names depend on them.
+s14 <- summary(b14)
+put("bam_discrete_exit_summary", list(
+  p_names = rownames(s14$p.table), p_table = unname(s14$p.table), p_columns = colnames(s14$p.table),
+  s_names = rownames(s14$s.table), s_table = unname(s14$s.table), s_columns = colnames(s14$s.table),
+  residual_df = s14$residual.df, n = s14$n, dev_expl = s14$dev.expl, r_sq = s14$r.sq, scale = s14$scale,
+  null_space_dim = sapply(b14$smooth, function(sm) sm$null.space.dim), levels = lapply(f[sapply(f, is.factor)], levels)))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

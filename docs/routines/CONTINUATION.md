@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-16, by the development run's thirteenth slice (M4: `predict` on new data from a discrete fit). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-16, by the development run's fourteenth slice (M4: `summary` of a discrete fit, parametric table). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -70,19 +70,38 @@ it would need `threadpoolctl`.
 covariates, as `predict.bam` falling through to `predict.gam`). On the exit fit, 15a (1500 rows, binned) eta 8.4e-5
 and se 2.3e-4 relative; 15b (40 rows, not binned) eta 4.0e-5, se 2.2e-4. Without re-binning 15a missed by 3.4e-3.
 
-## Next slice: M4, `summary` of a discrete fit (first step)
+`summary` of a discrete fit, first step (section 16, `tests/test_summary_bam.py`, PR open): `GamSummary.parametric` is
+`summary.gam`'s `p.table` for a fixed scale (Estimate, Std. Error from Vp, z, `2 * pnorm`), under mgcv's coefficient
+names (`GamFit.parametric_names`, from `model.matrix`'s rule); `summary()` accepts a `discrete=True` fit (no REML
+score). On the exit fit, with mgcv's level order (Low, High): contrasts 8.1e-7, se 1.8e-5 relative, names exact. The
+intercept is 3.6e-3 off (gate 1e-3, strict xfail `test_intercept_meets_the_estimate_gate`): the gap is all the level
+of `s(AttdAge)` (shape agrees to 8e-6). `discrete.mf` bins AttdAge to 981 points and the others to 985, so mgcv pads
+AttdAge with 4 seeded `sample()` draws before `gam.setup` takes `colSums(X)` over `mf0`. But mgcv's stored constraint
+direction (`attr(b14$smooth[[1]], "qrc")`) matches neither the 981 distinct points (1 - cos 8e-6) nor those plus the 4
+pads (2.3e-5), so the row set is not pinned yet. Scripts that showed this were scratch (not committed): rebuild
+`discrete.mf`'s input as bam does (sz specs get one-variable margins first, bam.r ~2265) to call it directly.
 
-`docs/PLAN.md` M4. `GamFit.summary()` refuses any fit but `method="REML"` today. First step: the smooth-term table of
-`summary.gam` (mgcv.r, mgcv 1.9-4) on the exit fit: per-term edf (already gated) and `Ref.df`, the test statistic
-and p-value from `testStat` (mgcv.r), and the parametric table (estimate, se, z, p). Read `summary.gam` and
-`testStat` first and follow their path (bam fits go through `summary.gam`). Fixture: a new section in
-`oracle/make_fixtures.R` exporting `summary(b14)`'s `s.table` and `p.table`. p-values are not in the gate table of
-`docs/PRIORITIES.md`: before gating them, put the gate question (options and a recommendation) under "Questions for
-Jonathan"; estimates and se of the parametric table fall under existing gates.
+## Next slice: pin and port discrete bam's constraint rows (Q1, option A)
+
+Pin the row set of `s(AttdAge)`'s constraint in `bam(discrete=TRUE)` (read `gam.setup` with `modCon=2`,
+`smoothCon` with `sparse.cons=0` on `mf0`, and the padding in `discrete.mf`), port it into `unique_row_constraint`
+(ADR-260 amendment 9 chose not to; this reopens it, so write the ADR amendment), and lift the strict xfail. It should
+also move the ti sp gap in `docs/DEFERRED.md`. Re-check every bam fixture's gates afterwards.
+
+Then: the smooth-term table of `summary.gam` on the exit fit, at the Q2 gates above. Every exit smooth
+has `null.space.dim == 0` (select=TRUE), so all go through `reTest` / `recov` (mgcv.r), not `testStat`, and the p-value
+through `psum.chisq` (Davies' algorithm, C code `davies.c`; `liu2` is only its fallback). Section 16's fixture already
+holds `s_table` (edf, Ref.df, Chi.sq, p-value). Ref.df here is 12, 5, 60, 11, 7, 6, 5, 13.
 
 ## Open items for Jonathan
 
 None.
+
+Decided on PR #21 (2026-11-16): Q1 option (A): port mgcv's constraint rows for discrete bam, held to the
+"Deterministic pieces ... constraints" gate, so the intercept meets the estimate gate. The strict xfail
+`test_intercept_meets_the_estimate_gate` stays until that port lifts it. Q2 option (a): smooth-term tests are gated
+at Ref.df exact; Chi.sq 1% relative; p-value 1e-3 absolute or 1% relative, whichever is larger. The matching
+`docs/PRIORITIES.md` row is Jonathan's change (a routine slice does not edit that file).
 
 Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a fitted quantity at
 estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at the unchanged gate.

@@ -1,13 +1,14 @@
 """``GamFit.summary()`` — the fit report (preview epic Slice P4, ADR-253).
 
 Mirrors the parts of ``mgcv``'s ``summary.gam`` that the verified engine produces
-independently: per-smooth ``edf``, the smoothing parameters, the scale, the REML score,
-the deviance explained and ``n`` — plus the Newton search's own convergence report
-(iterations, the final relative projected gradient against ``epsilon_rel = 1e-6``,
-ADR-248).
+independently: the parametric coefficient table (``p.table``, :func:`parametric_table`),
+per-smooth ``edf``, the smoothing parameters, the scale, the REML score, the deviance
+explained and ``n`` — plus the Newton search's own convergence report (iterations, the final
+relative projected gradient against ``epsilon_rel = 1e-6``, ADR-248).
 
-**There are no p-values.** ``summary.gam``'s smooth-term tests are Wood (2013) and are
-a separate method (PLAN §2, out of scope); the printed footer says so.
+**The smooth-term tests are not ported yet.** ``summary.gam``'s ``Ref.df``, ``Chi.sq`` and
+p-value columns (``testStat`` and ``reTest`` / ``recov``, mgcv.r, Wood 2013) are not computed;
+the printed footer says so.
 
 ``deviance_explained`` follows ``mgcv``: ``(null.deviance - deviance) / null.deviance``,
 the null model being the intercept-only fit **with the offset** when there is one
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import brentq
+from scipy.stats import norm
 
 from hgam.engine.gam_family import Family
 from hgam.engine.gam_model import EngineGAMFit, resolve_family
@@ -28,9 +30,11 @@ __all__ = [
     "EPSILON_REL",
     "SATURATION_THRESHOLD",
     "GamSummary",
+    "ParametricRow",
     "SmoothSummary",
     "build_summary",
     "null_deviance",
+    "parametric_table",
 ]
 
 EPSILON_REL: float = MGCV_NEWTON_CONV_TOL
@@ -61,6 +65,20 @@ class SmoothSummary:
 
 
 @dataclass(frozen=True)
+class ParametricRow:
+    """One row of ``summary.gam``'s ``p.table``: a parametric coefficient."""
+
+    name: str
+    """``mgcv``'s coefficient name: ``(Intercept)``, ``FaceSizeHigh``, ``FaceSizeHigh:SmokeS``."""
+    estimate: float
+    std_error: float
+    """From the Bayesian covariance ``Vp`` (``summary.gam``'s default ``freq = FALSE``)."""
+    z: float
+    p_value: float
+    """``2 * pnorm(-|z|)``: the scale is fixed by the family."""
+
+
+@dataclass(frozen=True)
 class GamSummary:
     """What :meth:`hgam.frontend.api.GamFit.summary` returns. Plain data; ``str()`` prints
     the report. Field meanings follow ``summary.gam`` where it has the counterpart."""
@@ -71,6 +89,9 @@ class GamSummary:
     n: int
     n_parametric: int
     smooths: tuple[SmoothSummary, ...]
+    parametric: tuple[ParametricRow, ...] | None
+    """``summary.gam``'s ``p.table``; ``None`` when the scale is estimated (that branch, t values
+    on ``residual.df``, is not ported)."""
     edf_total: float
     scale: float
     scale_estimated: bool
@@ -92,7 +113,20 @@ class GamSummary:
             f"Family: {self.family}  Link function: {self.link}",
             f"Formula: {self.formula}",
             "",
-            f"Parametric coefficients: {self.n_parametric} (intercept included)",
+            "Parametric coefficients:",
+        ]
+        if self.parametric is None:
+            lines.append(
+                f"  {self.n_parametric} (intercept included); the table for an estimated scale "
+                "(t on residual.df) is not ported"
+            )
+        else:
+            lines.append(f"  {'':<28}{'Estimate':>12}{'Std. Error':>12}{'z value':>10}{'Pr(>|z|)':>12}")
+            for r in self.parametric:
+                lines.append(
+                    f"  {r.name:<28}{r.estimate:>12.5g}{r.std_error:>12.5g}{r.z:>10.3f}{r.p_value:>12.3g}"
+                )
+        lines += [
             "",
             "Smooth terms:",
             f"  {'term':<28}{'coef':>6}{'edf':>10}   log10(sp)",
@@ -104,7 +138,11 @@ class GamSummary:
             "",
             f"n = {self.n}   total edf = {self.edf_total:.4f}",
             f"scale est. = {self.scale:.6g}" + ("" if self.scale_estimated else "  (fixed by the family)"),
-            f"REML score = {self.reml_score:.6f}",
+            (
+                f"REML score = {self.reml_score:.6f}"
+                if np.isfinite(self.reml_score)
+                else "REML score: not computed (bam's fREML score is not ported)"
+            ),
             f"Deviance explained = {100.0 * self.deviance_explained:.3f}%"
             f"  (deviance {self.deviance:.6g}, null {self.null_deviance:.6g})",
         ]
@@ -132,8 +170,8 @@ class GamSummary:
             )
         lines += [
             "",
-            "No p-values are reported: the smooth-term tests of summary.gam (Wood 2013) are "
-            "not in the verified preview subset.",
+            "No smooth-term tests are reported: summary.gam's Ref.df, Chi.sq and p-value "
+            "(testStat / reTest, Wood 2013) are not ported yet.",
         ]
         return "\n".join(lines)
 
@@ -169,12 +207,42 @@ def null_deviance(
     return family.deviance(y, mu0, w)
 
 
+def parametric_table(
+    coef: np.ndarray, vp: np.ndarray, names: tuple[str, ...], scale_estimated: bool
+) -> tuple[ParametricRow, ...] | None:
+    """mgcv counterpart: the parametric coefficient table of ``summary.gam`` (mgcv.r), mgcv 1.9-4.
+
+    ``p.coeff <- coefficients[1:nsdf]``, ``p.se <- sqrt(diag(Vp))[1:nsdf]`` (``freq = FALSE``),
+    ``p.t <- p.coeff / p.se`` and, for a fixed scale, ``p.pv <- 2 * pnorm(abs(p.t), lower.tail =
+    FALSE)``. ``coef`` and ``vp`` are the full coefficient vector and ``Vp``; the first
+    ``len(names)`` entries are the parametric block. Returns ``None`` for an estimated scale:
+    that branch (``pt`` on ``residual.df``, column "t value") is not ported, and the report says so.
+    A coefficient pivoted out of a rank-deficient design has zero estimate and variance, so its
+    z and p are NaN."""
+    if scale_estimated:
+        return None
+    n = len(names)
+    est = np.asarray(coef[:n], dtype=np.float64)
+    se = np.sqrt(np.diag(vp)[:n])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        z = est / se
+    p = 2.0 * norm.sf(np.abs(z))
+    return tuple(
+        ParametricRow(name=nm, estimate=float(e), std_error=float(s), z=float(t), p_value=float(pv))
+        for nm, e, s, t, pv in zip(names, est, se, z, p, strict=True)
+    )
+
+
 def build_summary(
-    fit: EngineGAMFit, formula: str, smooth_labels: tuple[str, ...], n_parametric: int
+    fit: EngineGAMFit,
+    formula: str,
+    smooth_labels: tuple[str, ...],
+    n_parametric: int,
+    parametric_names: tuple[str, ...] = (),
 ) -> GamSummary:
     """Assemble the :class:`GamSummary` of ``fit``. ``smooth_labels`` are the smooth
-    terms (the parametric block is counted as ``n_parametric`` = ``m$nsdf``, not listed,
-    as in ``summary.gam``)."""
+    terms; the parametric block (``n_parametric`` = ``m$nsdf`` columns) is tabulated under
+    ``parametric_names`` (mgcv's coefficient names) as ``summary.gam``'s ``p.table``."""
     if fit.y is None:
         raise HgamValidationError("summary(): this fit carries no training response.")
     family = resolve_family(fit.model.family, fit.model.link)
@@ -184,6 +252,13 @@ def build_summary(
     null_dev = null_deviance(fit.y, family, fit.prior_weights, fit.offset)
     explained = (null_dev - deviance) / null_dev if np.isfinite(null_dev) and null_dev > 0 else (float("nan"))
     scale = 1.0 if family.dispersion_fixed else float(fit.dispersion.fletcher)
+
+    if len(parametric_names) != n_parametric:
+        raise HgamValidationError(
+            f"summary(): {len(parametric_names)} parametric coefficient name(s) for {n_parametric} "
+            "parametric coefficients."
+        )
+    parametric = parametric_table(fit.coef_full, fit.vcov(), parametric_names, not family.dispersion_fixed)
 
     blocks = {b["label"]: b for b in fit.design["term_blocks"]}
     offsets = {}
@@ -215,6 +290,7 @@ def build_summary(
         n=int(fit.y.size),
         n_parametric=n_parametric,
         smooths=smooths,
+        parametric=parametric,
         edf_total=float(fit.edf_total),
         scale=scale,
         scale_estimated=not family.dispersion_fixed,
@@ -223,7 +299,13 @@ def build_summary(
         null_deviance=float(null_dev),
         deviance_explained=float(explained),
         converged=bool(fit.converged),
-        outer="newton" if fit.n_iterations is not None else "lbfgsb",
+        outer=(
+            "fREML performance iteration"
+            if fit.fit_method == "fREML-discrete"
+            else "newton"
+            if fit.n_iterations is not None
+            else "lbfgsb"
+        ),
         n_iterations=fit.n_iterations,
         max_abs_projected_gradient=fit.max_abs_projected_gradient,
         rel_projected_gradient=rel_grad,

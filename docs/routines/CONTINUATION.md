@@ -151,7 +151,9 @@ from `fs_basis`; `TermState.fs_p` keeps `P` for `fs_predict_design`; k.check giv
 null-space penalties identify the fit; mgcv rank 19 of 19, hgam pivots nothing): eta 1.1e-4, se 4.3e-4
 relative, edf 1.3e-3 of the gate width, predict on new data 1.1e-4 eta and 3.8e-4 se; names exact. sp agree to 1.4e-2
 relative, not gated. Refused by name: `discrete=True`, `select=True`, `by=`, `m=`, other bases and no `xt`.
-Tests: 780 pass, no xfail.
+Beside terms in its null space (section 24c, PR #37 review question, option a): `s(x, bs="cr") + s(x, f, bs="fs")` and
+`f + s(x, f, bs="fs")` meet every gate (eta 9.1e-5 and 6.5e-7, se 4.4e-4, edf within 8.1e-2 of the gate width, rank and
+names exact); the two null-space sp come out swapped against mgcv, as DEFERRED expects. Tests: 783 pass, no xfail.
 
 ## Next slice: `fs` in discrete bam
 

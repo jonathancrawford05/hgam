@@ -72,6 +72,59 @@ def test_fs_fit_meets_the_gates(formula: str, load_fixture, margin) -> None:
     assert d_se_new < 1e-2
 
 
+BESIDE = {
+    "gam_binomial_cloglog_cr_fs_reml": 'p ~ s(x, bs="cr", k=6) + s(x, f, bs="fs", xt="cr", k=6)',
+    "gam_binomial_cloglog_factor_fs_reml": 'p ~ f + s(x, f, bs="fs", xt="cr", k=6)',
+}
+
+
+@pytest.mark.parametrize("name", list(BESIDE))
+def test_fs_beside_its_null_space_meets_the_gates(name: str, load_fixture, margin) -> None:
+    """Section 24c: a cr smooth of the same covariate (the global-plus-group-curves form) or a factor main effect
+    beside the fs term. Both lie in the span of the fs null-space columns and fs has ``side.constrain = FALSE``,
+    so only the penalties identify the fit; mgcv's rank is the full column count. The two null-space smoothing
+    parameters come out swapped against mgcv here, as DEFERRED records; they are not gated."""
+    fx = load_fixture(name)
+    data = _columns(fx["data"])
+    fit = gam(BESIDE[name], data, FAMILY, weights="n", method="REML", knots=fx["knots"])
+    assert fit.converged
+    labels = fx["labels"] if isinstance(fx["labels"], list) else [fx["labels"]]
+    assert list(fit.smooth_labels) == labels
+    assert fit.coef.size == fx["n_coef"] == fx["rank"]
+    assert not fit.pivoted_columns
+    assert list(fit.coefficient_names) == fx["coef_names"]
+
+    eta, se = fit.predict(data, se_fit=True)
+    d_eta = float(np.max(np.abs(eta - np.asarray(fx["eta"]))))
+    d_se = float(np.max(np.abs(se / np.asarray(fx["se"]) - 1.0)))
+    ref_edf = np.atleast_1d(np.asarray(fx["edf"], dtype=np.float64))
+    got_edf = np.array([fit.edf_per_term[label] for label in labels])
+    d_edf = float(np.max(np.abs(got_edf - ref_edf) / np.maximum(0.05, 0.01 * ref_edf)))
+    margin("fs beside its null space", "eta, max abs", d_eta, "1e-3 abs", name)
+    margin("fs beside its null space", "se, max rel", d_se, "1e-2 rel", name)
+    margin("fs beside its null space", "edf, fraction of gate", d_edf, "0.05 abs or 1%", name)
+    assert d_eta < 1e-3
+    assert d_se < 1e-2
+    assert d_edf <= 1.0, (got_edf, ref_edf)
+
+
+def test_fs_k_check_row_and_null_space_dim(load_fixture) -> None:
+    """mgcv's ``k.check`` (plots.r) gives NA for a smooth with a factor covariate, and
+    ``smooth.construct.fs.smooth.spec`` sets ``null.space.dim <- 0``. Not key results; read from the source."""
+    fx = load_fixture(NAME)
+    data = _columns(fx["data"])
+    fit = gam(FORMULA, data, FAMILY, weights="n", method="REML", knots=fx["knots"])
+    (row,) = fit.k_check(data, seed=1)
+    assert (row.label, row.k_prime, row.k_index, row.p_value, row.status) == (
+        "s(x,f)",
+        18,
+        None,
+        None,
+        "factor",
+    )
+    assert [(sm.label, sm.null_space_dim) for sm in fit.summary().smooths] == [("s(x,f)", 0)]
+
+
 @pytest.fixture(scope="module")
 def small() -> dict[str, np.ndarray]:
     rng = np.random.default_rng(24)

@@ -181,8 +181,9 @@ class GamFit(EngineGAMFit):
 
         The parametric table (``p.table``), per-smooth edf and ``log10(sp)``, scale, REML score
         (not for a ``discrete=True`` fit: bam's fREML score is not ported), deviance explained,
-        ``n`` and the outer search's convergence report. The smooth-term tests (``Ref.df``,
-        ``Chi.sq``, p-value) are not ported yet. ``print(fit.summary())`` renders it."""
+        ``n`` and the outer search's convergence report. For a ``discrete=True`` fit, fully penalised
+        smooths carry ``reTest``'s ``Chi.sq`` and ``Ref.df``; the p-value (``psum.chisq``) and
+        ``testStat`` are not ported. ``print(fit.summary())`` renders it."""
         return build_summary(self, self.formula, self.smooth_labels, self.n_parametric, self.parametric_names)
 
     def encode(self, newdata: Mapping[str, object]) -> dict[str, np.ndarray]:

@@ -572,6 +572,10 @@ class EngineGAMFit:
     Set only by the ``bam`` path: ``bgam.fitd``'s ``Vp = PP * scale`` uses the EXPECTED (Fisher)
     working weights, which differ from the observed-information weights :meth:`vcov` otherwise
     rebuilds for a non-canonical link (cloglog). ``None`` everywhere else."""
+    xwx: np.ndarray | None = None
+    """``X'WX`` at the fitter's last working weights (``crossprod(object$R)``), in the fit's
+    (pivoted) column layout. Set only by the ``bam`` path; ``summary()``'s smooth-term tests
+    (``reTest``) read it. ``None`` everywhere else."""
     fit_method: str = "REML"
     """``"REML"`` for :func:`fit_engine_gam`'s Laplace-REML search; ``"fREML-discrete"`` for
     the ``gam`` package's ``fit_engine_bam`` (``bam(method="fREML", discrete=TRUE)``'s

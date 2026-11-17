@@ -6,16 +6,18 @@ per-smooth ``edf``, the smoothing parameters, the scale, the REML score, the dev
 explained and ``n`` — plus the Newton search's own convergence report (iterations, the final
 relative projected gradient against ``epsilon_rel = 1e-6``, ADR-248).
 
-**The smooth-term tests are not ported yet.** ``summary.gam``'s ``Ref.df``, ``Chi.sq`` and
-p-value columns (``testStat`` and ``reTest`` / ``recov``, mgcv.r, Wood 2013) are not computed;
-the printed footer says so.
+**The smooth-term tests, in part.** For a ``discrete=True`` fit (fixed scale, no pivoted
+coefficients), every fully penalised smooth (``null.space.dim == 0``, as under ``select=TRUE``) gets
+``reTest``'s ``Chi.sq`` and ``Ref.df`` (:mod:`hgam.frontend.smooth_tests`). The p-value
+(``psum.chisq``), ``testStat`` (smooths with a null space) and the ``gam()`` path are not ported;
+those entries are ``None`` and the printed report says so.
 
 ``deviance_explained`` follows ``mgcv``: ``(null.deviance - deviance) / null.deviance``,
 the null model being the intercept-only fit **with the offset** when there is one
 (:func:`null_deviance`).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy.optimize import brentq
@@ -25,6 +27,7 @@ from hgam.engine.gam_family import Family
 from hgam.engine.gam_model import EngineGAMFit, resolve_family
 from hgam.engine.gam_reml_newton import MGCV_NEWTON_CONV_TOL
 from hgam.errors import HgamValidationError
+from hgam.frontend.smooth_tests import re_test
 
 __all__ = [
     "EPSILON_REL",
@@ -57,6 +60,14 @@ class SmoothSummary:
     """``log10`` of each of the term's smoothing parameters (``ti`` and ``select=TRUE``
     terms carry more than one), in penalty-block order."""
     n_coef: int
+    null_space_dim: int | None = None
+    """``smooth$null.space.dim``; ``None`` where the constructor's value is not ported."""
+    ref_df: int | None = None
+    """``summary.gam``'s ``Ref.df`` (``reTest``'s rank); ``None`` where not ported."""
+    chi_sq: float | None = None
+    """``summary.gam``'s ``Chi.sq`` (``reTest``'s statistic); ``None`` where not ported."""
+    p_value: float | None = None
+    """``summary.gam``'s p-value; ``psum.chisq`` is not ported, so always ``None`` for now."""
 
     @property
     def saturated(self) -> bool:
@@ -129,11 +140,13 @@ class GamSummary:
         lines += [
             "",
             "Smooth terms:",
-            f"  {'term':<28}{'coef':>6}{'edf':>10}   log10(sp)",
+            f"  {'term':<28}{'coef':>6}{'edf':>10}{'Ref.df':>8}{'Chi.sq':>12}   log10(sp)",
         ]
         for s in self.smooths:
             sps = ", ".join(f"{v:.3f}" for v in s.log10_sp) or "—"
-            lines.append(f"  {s.label:<28}{s.n_coef:>6}{s.edf:>10.4f}   {sps}")
+            ref_df = "—" if s.ref_df is None else str(s.ref_df)
+            chi = "—" if s.chi_sq is None else f"{s.chi_sq:.5g}"
+            lines.append(f"  {s.label:<28}{s.n_coef:>6}{s.edf:>10.4f}{ref_df:>8}{chi:>12}   {sps}")
         lines += [
             "",
             f"n = {self.n}   total edf = {self.edf_total:.4f}",
@@ -170,8 +183,8 @@ class GamSummary:
             )
         lines += [
             "",
-            "No smooth-term tests are reported: summary.gam's Ref.df, Chi.sq and p-value "
-            "(testStat / reTest, Wood 2013) are not ported yet.",
+            "Smooth-term p-values are not reported (psum.chisq is not ported). Ref.df and Chi.sq "
+            "are reTest's for fully penalised smooths of a discrete fit; '—' where not ported.",
         ]
         return "\n".join(lines)
 
@@ -275,9 +288,11 @@ def build_summary(
                 for v in fit.log_lambda[offsets[label] : offsets[label] + blocks[label]["n_penalties"]]
             ),
             n_coef=int(blocks[label]["end"] - blocks[label]["start"]),
+            null_space_dim=_null_space_dim(fit, label),
         )
         for label in smooth_labels
     )
+    smooths = _with_smooth_tests(fit, smooths, blocks, family)
     rel_grad = (
         None
         if fit.max_abs_projected_gradient is None
@@ -313,3 +328,40 @@ def build_summary(
         n_function_evals=int(fit.n_function_evals),
         at_bound_blocks=fit.at_bound_blocks,
     )
+
+
+def _null_space_dim(fit: EngineGAMFit, label: str) -> int | None:
+    """mgcv counterpart: ``smooth$null.space.dim`` as ``smoothCon`` (smooth.r) leaves it, mgcv 1.9-1,
+    where it is known without the constructors' own values: 0 under ``select=TRUE`` (``gam.setup``
+    passes ``null.space.penalty = select``; ``smoothCon`` adds a penalty on any unpenalised space and
+    sets the field to 0) and 0 for a ``bs="re"`` term (``smooth.construct.re.smooth.spec``). Other
+    terms carry their constructor's value, which is not ported: ``None``."""
+    term = next(t for t in fit.model.terms if t.label == label)
+    if fit.model.select or term.basis == "re":
+        return 0
+    return None
+
+
+def _with_smooth_tests(
+    fit: EngineGAMFit, smooths: tuple[SmoothSummary, ...], blocks: dict, family: Family
+) -> tuple[SmoothSummary, ...]:
+    """mgcv counterpart: the smooth loop of ``summary.gam`` (mgcv.r), mgcv 1.9-1: a term with
+    ``null.space.dim == 0`` goes to ``reTest``. Ported only where ``X'WX`` is carried (the bam
+    path), the scale is fixed and no coefficient was pivoted out, and only for a term with no
+    random-effect smooth beside it: ``reTest`` collects every other smooth with ``$random`` set
+    (``bs="re"``, ``smooth.construct.re.smooth.spec``) and then takes ``recov``'s ``re`` branch,
+    which is not ported. Those terms keep ``None`` (PR #23 review, blocking 1)."""
+    if fit.xwx is None or fit.vp_override is None or not family.dispersion_fixed or fit.pivoted_columns:
+        return smooths
+    s_total = np.zeros_like(fit.xwx)
+    for lam, s_j in zip(fit.lambda_, fit.design["penalty_blocks"], strict=True):
+        s_total += lam * s_j
+    random = {t.label for t in fit.model.terms if t.basis == "re"}
+    out = []
+    for sm in smooths:
+        if sm.null_space_dim == 0 and not (random - {sm.label}):
+            b = blocks[sm.label]
+            stat, rank = re_test(fit.coef, fit.xwx, s_total, fit.vp_override, slice(b["start"], b["end"]))
+            sm = replace(sm, ref_df=rank, chi_sq=stat)
+        out.append(sm)
+    return tuple(out)

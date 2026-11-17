@@ -86,4 +86,29 @@ def test_the_text_report_names_what_it_omits_and_what_it_found() -> None:
     text = str(gam('y ~ s(x, k=8, bs="cr")', _frame(), "gaussian").summary())
     assert "Deviance explained" in text and "log10(sp)" in text
     assert "converged" in text and "epsilon_rel" in text
-    assert "No smooth-term tests" in text and "Pr(>|z|)" not in text
+    assert "p-values are not reported" in text and "Pr(>|z|)" not in text
+
+
+def test_smooth_tests_are_left_out_beside_a_random_effect() -> None:
+    """reTest takes recov's random-effect branch for any smooth with a bs="re" term beside it (not
+    ported): those rows stay None. The re term alone has no other random smooth, so it is tested."""
+    import hgam
+
+    rng = np.random.default_rng(23)
+    n = 2000
+    g = np.array(list("abcdefgh"))[rng.integers(0, 8, n)]
+    x = rng.uniform(0, 1, n)
+    effect = dict(zip("abcdefgh", rng.normal(0, 0.3, 8), strict=True))
+    y = rng.poisson(np.exp(1.0 + np.sin(2 * np.pi * x) + np.array([effect[v] for v in g]))).astype(float)
+    fit = hgam.bam(
+        'y ~ s(x, bs="cr", k=8) + s(g, bs="re")',
+        data={"y": y, "x": x, "g": g},
+        family="poisson",
+        method="fREML",
+        discrete=True,
+        select=True,
+    )
+    rows = {t.label: t for t in fit.summary().smooths}
+    assert rows["s(x)"].null_space_dim == 0
+    assert rows["s(x)"].chi_sq is None and rows["s(x)"].ref_df is None
+    assert rows["s(g)"].chi_sq is not None and rows["s(g)"].ref_df is not None

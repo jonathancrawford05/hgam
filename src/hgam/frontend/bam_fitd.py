@@ -165,6 +165,8 @@ class BamFitdResult:
     """``diag(PP %*% X'WX)``, per coefficient (``object$edf``)."""
     vp: np.ndarray
     """``PP * scale`` (scale 1 for the supported families)."""
+    xwx: np.ndarray
+    """``X'WX`` at the last working weights, ``crossprod(object$R)`` (``summary.gam``'s tests)."""
     trace: tuple[BamFitdIteration, ...] = field(default_factory=tuple)
 
 
@@ -467,5 +469,6 @@ def bam_fitd(
         deviance=float(dev),
         edf=np.diag(f_mat).copy(),
         vp=prop.pp.copy(),
+        xwx=xx.copy(),
         trace=tuple(trace),
     )

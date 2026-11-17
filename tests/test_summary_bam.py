@@ -4,7 +4,9 @@ The fit is the exit test's (``tests/test_exit.py``, fixture ``bam_discrete_exit_
 factors given mgcv's level order (``Low, High``; R would sort the strings ``High, Low``).
 ``make_fixtures.R`` section 16 exports ``summary(b14)``. Gates: names exact (structure); Estimate 1e-3
 absolute (the eta gate); Std. Error 1% relative (the se gate); per-term edf 0.05 absolute or 1%.
-z and p are functions of those two and are not gated. The smooth-term tests are not ported yet.
+z and p are functions of those two and are not gated. Smooth-term tests (reTest, Jonathan's PR #21 gates):
+Chi.sq 1% relative, Ref.df exact except on three sz terms where mgcv's rank is set by rounding (option a,
+PR #23); the p-value (psum.chisq) is not ported.
 
 The intercept is the level of ``s(AttdAge)``, so it meets the estimate gate only because each
 sum-to-zero constraint is taken over ``discrete.mf``'s padded frame, as bam(discrete = TRUE) takes it
@@ -102,7 +104,7 @@ def test_smooth_rows_and_scalars(exit_fit, ref):
     assert s.outer == "fREML performance iteration"
     text = str(s)
     assert "FaceSizeHigh:SmokeS" in text and "Pr(>|z|)" in text
-    assert "not ported yet" in text and "fREML score is not ported" in text
+    assert "psum.chisq is not ported" in text and "fREML score is not ported" in text
 
 
 def test_coefficient_names_follow_model_matrix():
@@ -114,3 +116,35 @@ def test_coefficient_names_follow_model_matrix():
     names = parametric_coefficient_names(terms, {"A": ("a0", "a1", "a2"), "B": ("b0", "b1")})
     # colnames(model.matrix(~A + B + A:B)) in R (gam_basis_parametric's docstring)
     assert names == ("(Intercept)", "Aa1", "Aa2", "Bb1", "Aa1:Bb1", "Aa2:Bb1")
+
+
+# Jonathan's decision on PR #23 (option a): Ref.df is gated exact only where mgcv's rank is not set
+# by rounding.
+# On these three sz terms it counts eigenvalues of crossprod(Rm B), and B = mroot(Ve[m, m]) takes its rank
+# from dpstrf stopping at the first non-positive pivot of a matrix whose spectrum falls to 1e-17. Their Ref.df
+# is reported, not gated; Chi.sq (below) and, once ported, the p-value are gated for them.
+SZ_REF_DF = ("s(FaceSize,AttdAge)", "s(Smoke,AttdAge)", "s(FaceSize,PolYear)")
+S_NAMES = json.loads((FIXTURES / "bam_discrete_exit_summary.json").read_text())["s_names"]
+
+
+def test_smooth_null_space_and_chi_sq(exit_fit, ref):
+    """Every exit smooth is fully penalised (select=TRUE), so summary.gam tests it by reTest."""
+    s = exit_fit.summary()
+    assert [t.null_space_dim for t in s.smooths] == ref["null_space_dim"]
+    chi = np.array([t.chi_sq for t in s.smooths])
+    np.testing.assert_allclose(chi, np.asarray(ref["s_table"])[:, 2], rtol=1e-2)
+    assert all(t.p_value is None for t in s.smooths)
+
+
+@pytest.mark.parametrize("label", [lab for lab in S_NAMES if lab not in SZ_REF_DF])
+def test_smooth_ref_df_is_exact(exit_fit, ref, label):
+    s = exit_fit.summary()
+    row = next(t for t in s.smooths if t.label == label)
+    assert row.ref_df == np.asarray(ref["s_table"])[ref["s_names"].index(label), 1]
+
+
+@pytest.mark.parametrize("label", SZ_REF_DF)
+def test_sz_ref_df_is_reported_not_gated(exit_fit, label):
+    """Option (a): a rank in 1..n_coef is reported; its value is not compared with mgcv's."""
+    row = next(t for t in exit_fit.summary().smooths if t.label == label)
+    assert row.ref_df is not None and 1 <= row.ref_df <= row.n_coef

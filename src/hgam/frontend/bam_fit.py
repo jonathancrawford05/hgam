@@ -119,5 +119,6 @@ def fit_engine_bam(model: ModelSpec, data: Mapping[str, np.ndarray], y: np.ndarr
         offset=offset,
         n_iterations=res.n_iter,
         vp_override=res.vp,
+        xwx=res.xwx,
         fit_method="fREML-discrete",
     )

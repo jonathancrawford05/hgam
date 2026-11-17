@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-17 (sixteenth slice): summary.gam's smooth-term table, Chi.sq and Ref.df
+
+PR #22 auto-merged (all six SETTINGS conditions checked and posted). Ported `reTest`, `recov` (no random terms) and `mroot` (mgcv.r) into `hgam.frontend.smooth_tests`; `summary()` of a discrete fit reports Chi.sq and Ref.df for fully penalised smooths; `bam_fitd` now carries X'WX. New fixture section 18 (`mroot_chol`); `tests/test_smooth_tests.py`; smooth-table tests in `tests/test_summary_bam.py`. PR #22's review nit (r_rng docstring) fixed.
+Tests: 665 pass before; 678 pass, no xfail after (Jonathan's option (a): sz Ref.df reported, not gated) (review fix: smooths beside a `bs="re"` term keep None, `recov`'s re branch not ported; null.space.dim by mgcv's select/re rule). `make lint` is clean.
+Tier 1, mgcv 1.9-1: Chi.sq 1.7e-6 relative on all eight exit smooths; null.space.dim exact; Ref.df exact on five, the three sz terms 7/6/5 vs 11/7/6 (rounding-set rank; p with hgam's eigenvalues 3e-6 from mgcv's): not gated, option (a). mroot 5.8e-15.
+Deferred: p-value (`psum.chisq`, Davies), `testStat`, random-effect terms in `recov`, the `gam()` path.
+
 ## 2026-11-17 (fifteenth slice): discrete bam's constraint rows
 
 Ported R's RNG (`set.seed`, Mersenne-Twister, `sample.int` Rejection: RNG.c, random.c) and `discrete.mf`'s padded frame `mf0` (bam.r, `discrete_model_frame`); cr and ti-margin constraints in `fit_engine_bam` are `colMeans` over it, as `smoothCon` takes them (ADR 0002). New fixture section 17, `tests/test_discrete_constraint_rows.py`; strict xfail lifted.

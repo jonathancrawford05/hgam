@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-17 (twenty-first slice): k.check's tensor branch
+
+No open development PR (PR #28 merged). Ported k.check's ti branch (plots.r): `gr.f` finite-difference rescaling through `predict_term_design`, then 3 nearest neighbours via SciPy `cKDTree` in place of `k_nn`; ties at the third neighbour refused. `tests/test_ti_is_not_ported` replaced by `test_ti_tensor_branch` (fixture-backed) plus `test_ti_neighbour_tie_is_refused`.
+Tests: 746 pass before; 747 pass, no xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1 (section 21, unchanged): ti(PolYear,AttdAge) k-index 1.3e-10 relative, p-value exact (0.7875; subsample branch 0.88).
+Deferred: mgcv's kd-tree tie order (refused). Next: gam.check's printed report.
+
 ## 2026-11-17 (twentieth slice): k.check, gam.check's first step
 
 PR #27 (vcov) auto-merged after both reviews (six SETTINGS conditions posted); its branch delete was refused by the proxy (403). Ported `k.check` (plots.r) as `GamFit.k_check(data, seed=)` with `deviance_residuals` (residuals.gam) and `Family.dev_resids`; section 21, `tests/test_k_check_bam.py`.

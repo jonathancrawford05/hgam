@@ -3,8 +3,9 @@
 ``make_fixtures.R`` section 21. Gates: labels and k' exact (structure); edf at the per-term edf gate. The
 deviance residuals the test is built on are held at the eta gate (1e-3 absolute; they are a function of eta).
 The k-index and p-value are not key results in ``docs/PRIORITIES.md`` (no gate); they are asserted at what was
-measured here (k-index 6.8e-10 relative, p-value exact under the seed) so a change is seen. The ti term's
-k-index and p-value are not ported (kd-tree ``nearest``); the three sz terms are NA in mgcv as here."""
+measured here (k-index 6.8e-10 relative, p-value exact under the seed) so a change is seen. The ti term goes
+through the tensor branch (finite-difference rescaling, then ``nearest``'s 3 nearest neighbours): k-index
+1.3e-10 relative, p-value exact. The three sz terms are NA in mgcv as here."""
 
 import json
 from pathlib import Path
@@ -95,13 +96,18 @@ def test_na_where_mgcv_has_na(table, ref):
         if row[2] == "NA":
             assert r.status == "factor" and r.k_index is None and r.p_value is None
         else:
-            assert r.status in ("tested", "not_ported")
+            assert r.status == "tested"
 
 
 def test_k_index_and_p_value(table, ref):
     """Not key results: asserted at what was measured (k-index 6.8e-10 relative; p exact, R's draws)."""
     tested = [(r, row) for r, row in zip(table, ref["k_table"], strict=True) if r.status == "tested"]
-    assert [r.label for r, _ in tested] == ["s(AttdAge)", "s(PolYear)", "s(AttdAge):StudyYear_C"]
+    assert [r.label for r, _ in tested] == [
+        "s(AttdAge)",
+        "s(PolYear)",
+        "ti(PolYear,AttdAge)",
+        "s(AttdAge):StudyYear_C",
+    ]
     for r, row in tested:
         print(f"{r.label}: k-index {r.k_index:.6f} vs {row[2]:.6f}; p {r.p_value} vs {row[3]}")
         assert r.k_index is not None and r.p_value is not None
@@ -109,9 +115,28 @@ def test_k_index_and_p_value(table, ref):
         assert r.p_value == row[3]
 
 
-def test_ti_is_not_ported(table):
-    ti = [r for r in table if r.label.startswith("ti(")]
-    assert len(ti) == 1 and ti[0].status == "not_ported" and ti[0].k_index is None
+def test_ti_tensor_branch(table, ref):
+    """The ti row (plots.r's tensor branch): k-index 1.3e-10 relative, p-value exact under the seed."""
+    ((i, r),) = [(i, r) for i, r in enumerate(table) if r.label.startswith("ti(")]
+    row = ref["k_table"][i]
+    assert r.status == "tested" and r.k_index is not None
+    np.testing.assert_allclose(r.k_index, row[2], rtol=1e-6)
+    assert r.p_value == row[3]
+
+
+def test_ti_neighbour_tie_is_refused():
+    """Rows on a grid tie at the third nearest neighbour; mgcv's kd-tree order is not ported."""
+    rng = np.random.default_rng(5)
+    a, b = np.meshgrid(np.arange(12.0), np.arange(12.0))
+    x, z = a.ravel(), b.ravel()
+    y = np.sin(x / 3) + np.cos(z / 4) + rng.normal(scale=0.3, size=x.size)
+    fit = hgam.gam(
+        "y ~ s(x, k=5, bs='cr') + s(z, k=5, bs='cr') + ti(x, z, k=c(5, 5), bs='cr')",
+        data={"x": x, "z": z, "y": y},
+        method="REML",
+    )
+    with pytest.raises(hgam.errors.HgamNotImplementedError, match="tie"):
+        fit.k_check({"x": x, "z": z}, seed=1)
 
 
 def test_factor_by_is_refused():

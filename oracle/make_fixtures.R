@@ -533,4 +533,35 @@ nd24 <- data.frame(x = c(0.5, runif(30, 1, 21), 22), f = factor(sample(c("a", "b
 put("smoothcon_fs_cr", list(x = d24$x, group = as.integer(d24$f) - 1L, n_levels = 3L, knots = sz_knots, label = sm24$label,
   X = sm24$X, S = sm24$S, rank = sm24$rank, P = sm24$P, C_rows = nrow(sm24$C), null_space_dim = sm24$null.space.dim,
   new_x = nd24$x, new_group = as.integer(nd24$f) - 1L, X_new = PredictMat(sm24, nd24)))
+# 24b. a REML gam fit with the fs term (no factor main effect, as mgcv's fs examples write it): fs smooths are not
+# centred and side.constrain is FALSE, so the intercept lies in the span of the per-level null-space columns and only
+# the null-space penalties make the fit identifiable; mgcv's rank is the full column count. predict.gam on new data
+# (Predict.matrix.fs.interaction) with se.
+set.seed(241); n <- 1500
+d24b <- data.frame(x = runif(n, 1, 21), f = factor(sample(c("a", "b", "c"), n, TRUE), levels = c("a", "b", "c")),
+                   n = sample(20:200, n, TRUE))
+d24b$p <- rbinom(n, d24b$n, 1 - exp(-exp(-4 + 0.08 * (d24b$x - 10) + c(0, 0.3, -0.2)[as.integer(d24b$f)] +
+                                         c(0.2, -0.1, 0.4)[as.integer(d24b$f)] * sin(d24b$x / 3)))) / d24b$n
+f24b <- "p ~ s(x, f, bs='fs', xt='cr', k=6)"
+m24b <- gam(as.formula(f24b), family = binomial(link = "cloglog"), weights = n, data = d24b,
+            knots = list(x = sz_knots), method = "REML")
+set.seed(242); nd24b <- data.frame(x = c(0.5, runif(60, 1, 21), 22),
+                                   f = factor(sample(c("a", "b", "c"), 62, TRUE), levels = c("a", "b", "c")))
+pr24b <- predict(m24b, nd24b, se.fit = TRUE)
+put("gam_binomial_cloglog_fs_reml", c(gam_case(m24b, d24b, f24b, "binomial(link='cloglog')"),
+  list(knots = list(x = sz_knots), rank = m24b$rank, coef_names = names(coef(m24b)), newdata = nd24b,
+       fit_new = as.numeric(pr24b$fit), se_new = as.numeric(pr24b$se.fit))))
+# 24c. fs beside terms in the span of its null-space columns, on 24b's data, REML: (i) the global-plus-group-curves form
+# s(x) + s(x, f, bs = "fs"), (ii) a factor main effect beside the fs term. side.constrain is FALSE for fs, so gam.side adds
+# no constraint; only the penalties identify the fit. mgcv's rank is recorded.
+f24c1 <- "p ~ s(x, bs='cr', k=6) + s(x, f, bs='fs', xt='cr', k=6)"
+m24c1 <- gam(as.formula(f24c1), family = binomial(link = "cloglog"), weights = n, data = d24b,
+             knots = list(x = sz_knots), method = "REML")
+put("gam_binomial_cloglog_cr_fs_reml", c(gam_case(m24c1, d24b, f24c1, "binomial(link='cloglog')"),
+  list(knots = list(x = sz_knots), rank = m24c1$rank, coef_names = names(coef(m24c1)))))
+f24c2 <- "p ~ f + s(x, f, bs='fs', xt='cr', k=6)"
+m24c2 <- gam(as.formula(f24c2), family = binomial(link = "cloglog"), weights = n, data = d24b,
+             knots = list(x = sz_knots), method = "REML")
+put("gam_binomial_cloglog_factor_fs_reml", c(gam_case(m24c2, d24b, f24c2, "binomial(link='cloglog')"),
+  list(knots = list(x = sz_knots), rank = m24c2$rank, coef_names = names(coef(m24c2)))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

@@ -303,6 +303,8 @@ def test_every_supported_basis_constructs_a_minimal_term() -> None:
             TermSpec(label=f"term-{basis}", variables=("x",), basis=basis)
         elif basis == "sz":
             TermSpec(label=f"term-{basis}", variables=("id", "x"), basis=basis, k=(8,))
+        elif basis == "fs":
+            TermSpec(label=f"term-{basis}", variables=("id", "x"), basis=basis, k=(8,), n_levels=3)
         elif basis == "re":
             TermSpec(label=f"term-{basis}", variables=("id",), basis=basis, n_levels=3)
         elif basis == "parametric":

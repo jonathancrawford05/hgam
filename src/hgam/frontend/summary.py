@@ -339,10 +339,11 @@ def _null_space_dim(fit: EngineGAMFit, label: str) -> int | None:
     """mgcv counterpart: ``smooth$null.space.dim`` as ``smoothCon`` (smooth.r) leaves it, mgcv 1.9-1,
     where it is known without the constructors' own values: 0 under ``select=TRUE`` (``gam.setup``
     passes ``null.space.penalty = select``; ``smoothCon`` adds a penalty on any unpenalised space and
-    sets the field to 0) and 0 for a ``bs="re"`` term (``smooth.construct.re.smooth.spec``). Other
+    sets the field to 0), and 0 for a ``bs="re"`` term (``smooth.construct.re.smooth.spec``) and a
+    ``bs="fs"`` term (``smooth.construct.fs.smooth.spec``). Other
     terms carry their constructor's value, which is not ported: ``None``."""
     term = next(t for t in fit.model.terms if t.label == label)
-    if fit.model.select or term.basis == "re":
+    if fit.model.select or term.basis in ("re", "fs"):
         return 0
     return None
 

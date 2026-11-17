@@ -11,6 +11,7 @@ later by :mod:`hgam.frontend.api`, which holds the DataFrame.
     response ~ term (+ term)*          response := column | column / column
     term     := s(x [, bs="tp"] [, k=K])  |  s(x, bs="cr", k=K [, by=z])  |  s(f, bs="re")
               | s(f, x, bs="sz", k=K, xt=list(bs="cr"))
+              | s(x, f, bs="fs", k=K, xt="cr")
               | ti(x, z, bs="cr" [, k=K | c(K1, K2)])
               | offset(column) | factor | factor:factor
 
@@ -28,6 +29,7 @@ from dataclasses import dataclass, field
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 __all__ = [
+    "FsCall",
     "ParametricCall",
     "ParsedFormula",
     "SmoothCall",
@@ -61,11 +63,14 @@ _REFUSED_BASES: dict[str, str] = {
     "mrf": f"{_COVERAGE} §2.1 (Markov random field; not in the target form)",
     "so": f"{_COVERAGE} §2.1 (soap film; not in the target form)",
     "sos": f"{_COVERAGE} §2.1 (sphere; not in the target form)",
-    "fs": f"{_COVERAGE} §2.1 / ladder rung L6 (factor-smooth interaction)",
 }
 
 _SZ_XT = re.compile(r"""^list\(\s*bs\s*=\s*(["'])cr\1\s*\)$""")
 """The one ``xt`` an ``sz`` smooth accepts: ``list(bs="cr")``, a cr base smooth (the exit test's form)."""
+
+_FS_XT = re.compile(r"""^(?:(["'])cr\1|list\(\s*bs\s*=\s*(["'])cr\2\s*\))$""")
+"""The ``xt`` an ``fs`` smooth accepts: ``"cr"`` or ``list(bs="cr")``, a cr base smooth
+(``smooth.construct.fs.smooth.spec`` reads either form)."""
 
 
 @dataclass(frozen=True)
@@ -86,6 +91,20 @@ class SmoothCall:
 class SzCall:
     """A parsed ``s(f, x, bs="sz", k=K, xt=list(bs="cr"))`` call: a factor and the smoothed covariate, in
     written order. Which name is the factor is checked against the data by :mod:`hgam.frontend.api`."""
+
+    variables: tuple[str, str]
+    k: int
+
+    @property
+    def text(self) -> str:
+        return f"s({','.join(self.variables)})"
+
+
+@dataclass(frozen=True)
+class FsCall:
+    """A parsed ``s(x, f, bs="fs", k=K, xt="cr")`` call: two variables in written order, one of which is a
+    factor. mgcv finds the factor by type (``smooth.construct.fs.smooth.spec``), so
+    :mod:`hgam.frontend.api` decides which against the data."""
 
     variables: tuple[str, str]
     k: int
@@ -119,7 +138,7 @@ class ParametricCall:
         return ":".join(self.variables)
 
 
-type TermCall = SmoothCall | SzCall | TensorCall | ParametricCall
+type TermCall = SmoothCall | SzCall | FsCall | TensorCall | ParametricCall
 
 
 @dataclass(frozen=True)
@@ -265,18 +284,53 @@ def _parse_sz(text: str, positional: list[str], keyword: dict[str, str]) -> SzCa
     return SzCall(variables=variables, k=k)
 
 
-def _parse_smooth(text: str, positional: list[str], keyword: dict[str, str]) -> SmoothCall | SzCall:
+def _parse_fs(text: str, positional: list[str], keyword: dict[str, str]) -> FsCall:
+    """``s(x, f, bs="fs", ...)`` (mgcv ``smooth.construct.fs.smooth.spec``, smooth.r, mgcv 1.9-4). Only a cr
+    base smooth of one covariate is ported: mgcv's default base (no ``xt``) is ``tp``, which is refused."""
+    for key in keyword:
+        if key not in ("bs", "k", "xt"):
+            raise _refuse(
+                f"argument {key!r} in {text}",
+                f'only k= and xt="cr" are ported for bs="fs" ({_COVERAGE} §2.1)',
+            )
+    if "xt" not in keyword:
+        raise _refuse(
+            f"{text} without xt=",
+            'mgcv\'s default fs base smooth is tp, which is not ported for fs; write xt="cr"',
+        )
+    if not _FS_XT.match(keyword["xt"].strip()):
+        raise _refuse(
+            f"xt={keyword['xt']} in {text}", 'only xt="cr" (or xt=list(bs="cr")) is ported for bs="fs"'
+        )
+    if len(positional) != 2:
+        raise _refuse(
+            f"{text} with {len(positional)} variable(s)",
+            "fs is ported for one factor and one smoothed covariate, s(x, f, ...)",
+        )
+    variables = (
+        _identifier(positional[0], "variable", text),
+        _identifier(positional[1], "variable", text),
+    )
+    if variables[0] == variables[1]:
+        raise HgamValidationError(f"gam(): {text} names the same variable twice.")
+    k = _int_k(keyword["k"], text) if "k" in keyword else _CR_DEFAULT_K
+    return FsCall(variables=variables, k=k)
+
+
+def _parse_smooth(text: str, positional: list[str], keyword: dict[str, str]) -> SmoothCall | SzCall | FsCall:
     if "bs" in keyword:
         early = _string(keyword["bs"], "bs", text)
         if early in _REFUSED_BASES:
             raise _refuse(f"bs={early!r} in {text}", _REFUSED_BASES[early])
         if early == "sz":
             return _parse_sz(text, positional, keyword)
+        if early == "fs":
+            return _parse_fs(text, positional, keyword)
     allowed = {"bs", "k", "by"}
     for key in keyword:
         if key not in allowed:
             hint = {
-                "xt": 'xt= is supported only as xt=list(bs="cr") on a bs="sz" smooth',
+                "xt": 'xt= is supported only as xt=list(bs="cr") on a bs="sz" or bs="fs" smooth',
                 "sp": "a fixed smoothing parameter (sp=) is not supported",
                 "fx": "fixed-df smooths (fx=) are not supported",
                 "m": "a non-default penalty order (m=) is not supported",

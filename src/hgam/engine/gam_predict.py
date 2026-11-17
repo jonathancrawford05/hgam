@@ -41,6 +41,7 @@ from hgam.engine.gam_basis_cr import (
     sum_to_zero_null_space,
     sz_basis,
 )
+from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
 from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
 from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
@@ -73,6 +74,9 @@ class TermState:
     tp: TprsState | None = None
     """A ``tp`` term's shift, distinct covariate values and ``UZ`` (``smooth$shift``,
     ``$Xu``, ``$UZ``); ``None`` for every other basis."""
+    fs_p: np.ndarray | None = None
+    """An ``fs`` term's ``nat.param`` re-parameterisation ``P`` (``smooth$P``), which
+    ``Predict.matrix.fs.interaction`` applies to the base cr matrix; ``None`` for every other basis."""
 
 
 def _knots_for(term: TermSpec, variable: str, k: int, x: np.ndarray) -> np.ndarray:
@@ -127,11 +131,18 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         smoothed = term.variables[1]
         x = np.asarray(_column(data, smoothed, term), dtype=np.float64)
         return TermState(term=term, knots=(_knots_for(term, smoothed, term.k[0], x),))
+    if term.basis == "fs":
+        assert term.n_levels is not None
+        factor_name, smoothed = term.variables
+        x = np.asarray(_column(data, smoothed, term), dtype=np.float64)
+        knots = _knots_for(term, smoothed, term.k[0], x)
+        group = _codes(data, factor_name, term.n_levels, term)
+        return TermState(term=term, knots=(knots,), fs_p=fs_basis(x, group, term.n_levels, knots).p_mat)
     if term.basis in ("re", "parametric"):
         return TermState(term=term)
     raise HgamValidationError(
         f"fit_term_state: TermSpec {term.label!r} has basis={term.basis!r}, which "
-        "predict does not support — only 'cr', 'tp', 'ti', 'sz', 're' and 'parametric'."
+        "predict does not support — only 'cr', 'tp', 'ti', 'sz', 'fs', 're' and 'parametric'."
     )
 
 
@@ -179,6 +190,14 @@ def predict_term_design(state: TermState, data: Mapping[str, np.ndarray]) -> np.
         x = np.asarray(_column(data, smoothed_name, term), dtype=np.float64)
         group = _codes(data, factor_name, term.n_levels, term)
         return sz_basis(x, group, term.n_levels, state.knots[0])[0]
+    if term.basis == "fs":
+        assert term.n_levels is not None
+        if state.fs_p is None:
+            raise HgamValidationError(f"predict_term_design: fs term {term.label!r} has no stored P.")
+        factor_name, smoothed_name = term.variables
+        x = np.asarray(_column(data, smoothed_name, term), dtype=np.float64)
+        group = _codes(data, factor_name, term.n_levels, term)
+        return fs_predict_design(x, group, term.n_levels, state.knots[0], state.fs_p)
     if term.basis == "re":
         assert term.n_levels is not None
         group = _codes(data, term.variables[0], term.n_levels, term)

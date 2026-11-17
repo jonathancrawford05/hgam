@@ -104,6 +104,7 @@ from hgam.engine.gam_term_build import (
     TermExtract,
     build_python_cr_by_factor_term,
     build_python_cr_term,
+    build_python_fs_term,
     build_python_parametric_term,
     build_python_re_term,
     build_python_sz_term,
@@ -280,6 +281,13 @@ def _build_term_extract(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermE
                 "codes. Set TermSpec.n_levels explicitly."
             )
         return build_python_sz_term(x, group, term.n_levels, term)
+    if term.basis == "fs":
+        factor_name, smoothed_name = term.variables
+        return build_python_fs_term(
+            np.asarray(data[smoothed_name], dtype=np.float64),
+            np.asarray(data[factor_name], dtype=np.int64),
+            term,
+        )
     if term.basis == "re":
         factor_name = term.variables[0]
         group = np.asarray(data[factor_name], dtype=np.int64)
@@ -296,7 +304,7 @@ def _build_term_extract(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermE
         return build_python_parametric_term(groups, term)
     raise HgamNotImplementedError(
         f"assemble_model_design: TermSpec {term.label!r} has basis={term.basis!r}, "
-        "which the hgam engine does not build yet — only 'cr', 'ti', 'sz', 're' and "
+        "which the hgam engine does not build yet — only 'cr', 'tp', 'ti', 'sz', 'fs', 're' and "
         "'parametric' are wired. 'raw' supplies its own design/penalty directly "
         "and has no recipe for this function to build from."
     )

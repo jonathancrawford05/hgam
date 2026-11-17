@@ -1,8 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-eighth slice: the `fs` basis, the first step of `fs`
-(`dev/2026-11-17-fs-basis`, PLAN step 3). PR #35 (factor `by`) auto-merged earlier in this run. Read
-`docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-17, by the development run's twenty-ninth slice: the `fs` REML fit, the second step of `fs`
+(PLAN step 3). PR #36 (the fs basis) had merged before this run. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -136,30 +135,41 @@ gam (eta 5.7e-7, se 5.6e-4), discrete bam (eta 5.6e-14) and discrete bam with `s
 new data 1.2e-13); structure, coefficient names and full rank exact; edf well inside the gate. An ordered categorical
 column is refused (`contr.poly`, and the dropped first level of an ordered by, are not ported). Tests: 767 pass, no xfail.
 
-The `fs` basis (section 24, `tests/test_fs_basis.py`, this run's second PR): `hgam.engine.gam_basis_fs` ports
+The `fs` basis (section 24, `tests/test_fs_basis.py`, PR #36, merged): `hgam.engine.gam_basis_fs` ports
 `nat.param` (type 1, QR branch, unit.fnorm), `smooth.construct.fs.smooth.spec` on a cr base (non-gamm branch) with
 `smoothCon`'s penalty scaling, and `Predict.matrix.fs.interaction`. X, P, the three penalties and PredictMat (with points
 outside the knot range) agree to 2.4e-14 under one column map: a sign per column, and the order of the two null-space
 columns, which rounding sets (their eigenvalues are about 1e-19). `scipy.linalg.eigh(driver="evr")` is required; it is
 `dsyevr`, R's `eigen` routine. Measured in R: refitting mgcv's own `G` with the null columns swapped leaves eta at
-2.8e-14 (the two null smoothing parameters swap), while NumPy's default `dsyevd` rotates the pair. `gam()` still refuses
-`bs="fs"` (`test_fs_is_still_refused`). Tests: 769 pass, no xfail.
+2.8e-14 (the two null smoothing parameters swap), while NumPy's default `dsyevd` rotates the pair.
 
-## Next slice: `fs`, the fit
+The `fs` fit (section 24b, `tests/test_fs_fit.py`, this run's PR): `s(x, f, bs="fs", xt="cr", k=)` (also
+`xt=list(bs="cr")`, and `s(f, x, ...)`: the factor is found by type, the label keeps the written order) is accepted by
+`gam(method="REML")`. `TermSpec(basis="fs")` is `(factor, smoothed)` with `n_levels`; `build_python_fs_term` builds it
+from `fs_basis`; `TermState.fs_p` keeps `P` for `fs_predict_design`; k.check gives NA (a factor covariate) and summary
+`null_space_dim` is 0, as mgcv. On `p ~ s(x, f, bs="fs", xt="cr", k=6)` (the term is uncentred, so beside the intercept only its
+null-space penalties identify the fit; mgcv rank 19 of 19, hgam pivots nothing): eta 1.1e-4, se 4.3e-4
+relative, edf 1.3e-3 of the gate width, predict on new data 1.1e-4 eta and 3.8e-4 se; names exact. sp agree to 1.4e-2
+relative, not gated. Refused by name: `discrete=True`, `select=True`, `by=`, `m=`, other bases and no `xt`.
+Beside terms in its null space (section 24c, PR #37 review question, option a): `s(x, bs="cr") + s(x, f, bs="fs")` and
+`f + s(x, f, bs="fs")` meet every gate (eta 9.1e-5 and 6.5e-7, se 4.4e-4, edf within 8.1e-2 of the gate width, rank and
+names exact); the two null-space sp come out swapped against mgcv, as DEFERRED expects. Tests: 783 pass, no xfail.
 
-Wire `s(x, f, bs="fs", xt="cr", k=)` (and `s(f, x, ...)`: mgcv finds the factor by type) into a REML `gam` fit:
-- `hgam.frontend.formula`: accept `bs="fs"` with `xt="cr"` (or `xt=list(bs="cr")`) and `k=`; keep refusing other `xt`,
-  `by=`, `m=`, and the default `xt` (tp base, not ported for fs).
-- `hgam.engine.gam_term_spec`: a `basis="fs"` TermSpec (`n_levels`, knots); `gam_term_build`: a builder from
-  `fs_basis` (three penalties, mgcv's rank vector, no constraint; keep `p_mat` in the term state for predict);
-  `gam_model` and `gam_predict`: the `fs` branch (`fs_predict_design`), as `sz` has; `gam_check.k_check`: NA, as sz.
-- `api.py`: `smooth_meta` bs.dim is `k * n_levels`; mgcv's label is `s(x,f)`; coefficient names `s(x,f).1` ... .
-- Refuse `fs` in `discrete=True` (`bam` gives fs a tensor-like margin set, `smooth.construct.fs.smooth.spec`'s
-  `tensor.smooth.spec` branch, not ported) and with `select=TRUE` until measured.
-- Fixture: section 24b, `gam(p ~ s(x, f, bs="fs", xt="cr", k=6), binomial(cloglog), weights = n, method = "REML")` on
-  a frame like d23 (n = 1500), with `knots = list(x = sz_knots)`; gate structure, eta, se and per-term edf. Smoothing
-  parameters are not gated (the two null ones may come out swapped).
-If that goes past about 600 lines, stop after the REML fit and leave predict on new data for the next step.
+## Next slice: `fs` in discrete bam
+
+`bam(method="fREML", discrete=TRUE)` with `s(x, f, bs="fs", xt="cr", k=)`:
+- Read `smooth.construct.fs.smooth.spec`'s `tensor.smooth.spec` branch (smooth.r 1.9-4: the term gets two margins, an
+  `re`-like factor model matrix and the `nat.param`-ed base with `margin.only`) and how `discrete.mf` and `bgam.fitd`
+  (bam.r) treat a term with `tensor.possible`; `ExtractData`, and the `te.ok`/`margin` handling in `gam.setup`.
+- Measure first: the existing discrete path (`hgam.frontend.discrete`, `_smooth_margins`) bins the smoothed covariate
+  one variable at a time; if the binned design times the same penalties reproduces mgcv, the port is only the frame
+  and the refusal in `api._build_model` (`if tero:`) goes. Constraint rows: fs has none (C has no rows), so ADR 0002's
+  `mf0` constraint step does not apply to it, but check that the fs covariate still enters `discrete.mf`'s padded frame.
+- Fixture: section 24c, `bam(p ~ s(x, f, bs="fs", xt="cr", k=6), binomial(cloglog), weights = n, data = d24b,
+  knots = list(x = sz_knots), method = "fREML", discrete = TRUE)` with predict on section 24b's new data; gate
+  structure, eta, se, per-term edf and predict.
+If that goes past about 600 lines, stop after the fit and leave predict for the next step. After it: `select=TRUE` with
+fs (measure on 24b and 24c), then `re` per PLAN step 3.
 
 Carried review nit (PR #35, optional): an unused factor level fails as `HgamComputationError` where mgcv drops it
 (`drop.unused.levels`); recorded in DEFERRED. A clear refusal naming unused levels is a small later slice.

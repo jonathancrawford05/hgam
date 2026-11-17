@@ -9,17 +9,14 @@ null-space directions of the cr base have eigenvalues at rounding level, so thei
 well. The test finds one column map (a sign per column, and the order of the two null columns) from the first
 level's block, and holds the design of every level, ``P``, the prediction matrix and the penalty list to mgcv
 under that one map. An mgcv fit is unchanged by such a map: its two null-space smoothing parameters swap. The
-``fs`` term is not yet accepted by ``gam()``; ``test_fs_is_still_refused`` holds that.
+fitted term is held to a REML gam fit in ``tests/test_fs_fit.py`` (section 24b).
 """
 
 import itertools
 
 import numpy as np
-import pytest
 
 from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
-from hgam.errors import HgamNotImplementedError
-from hgam.frontend.api import gam
 
 GATE = 1e-8
 
@@ -81,17 +78,3 @@ def test_fs_basis_matches_smoothcon(load_fixture, margin) -> None:
     assert rel_p < GATE
     assert rel_s < GATE
     assert rel_new < GATE
-
-
-def test_fs_is_still_refused() -> None:
-    rng = np.random.default_rng(24)
-    data = {
-        "x": rng.uniform(1, 21, 200),
-        "f": rng.choice(["a", "b"], 200),
-        "p": rng.uniform(0.01, 0.1, 200),
-        "n": np.full(200, 50.0),
-    }
-    with pytest.raises(HgamNotImplementedError, match="fs"):
-        gam(
-            'p ~ s(x, f, bs="fs", xt="cr", k=6)', data, 'binomial(link="cloglog")', weights="n", method="REML"
-        )

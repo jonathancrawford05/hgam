@@ -6,16 +6,14 @@ The fit is the exit test's (``tests/test_exit.py``, fixture ``bam_discrete_exit_
 se 1% relative."""
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import FIXTURES  # honours HGAM_FIXTURE_DIR
 
 import hgam
 from hgam.errors import HgamValidationError
 from hgam.frontend.api import GamFit
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 HGAM_FORMULA = (
     "DthCnt / ExposCnt ~ FaceSize + Smoke + FaceSize:Smoke"
@@ -60,9 +58,14 @@ def exit_fit() -> GamFit:
 
 
 @pytest.mark.parametrize("case", ["a", "b"])
-def test_predict_new_data_rebins_as_predict_bamd(exit_fit, case):
+def test_predict_new_data_rebins_as_predict_bamd(exit_fit, case, margin):
     ref = _load(f"bam_discrete_exit_predict_{case}")
     eta, se = exit_fit.predict(_columns(ref["newdata"]), se_fit=True)
+    name = f"bam_discrete_exit_predict_{case}"
+    margin(
+        f"predict 15{case}", "eta, max abs", np.max(np.abs(eta - np.asarray(ref["eta"]))), "1e-3 abs", name
+    )
+    margin(f"predict 15{case}", "se, max rel", np.max(np.abs(se / np.asarray(ref["se"]) - 1)), "1% rel", name)
     assert np.max(np.abs(eta - np.asarray(ref["eta"]))) < 1e-3
     np.testing.assert_allclose(se, ref["se"], rtol=1e-2)
 

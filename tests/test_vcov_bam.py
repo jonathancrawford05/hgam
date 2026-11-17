@@ -10,16 +10,14 @@ Section 20b holds the names and ``dispersion`` on a gaussian REML ``gam`` fit, w
 smoothing-parameter correction (bam.r), not ported, and is up to 4.07 times Vp on the diagonal."""
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import FIXTURES  # honours HGAM_FIXTURE_DIR
 
 import hgam
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 from hgam.frontend.api import Factor, GamFit
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 HGAM_FORMULA = (
     "DthCnt / ExposCnt ~ FaceSize + Smoke + FaceSize:Smoke"
@@ -65,21 +63,27 @@ def exit_fit() -> GamFit:
     )
 
 
-def test_names_are_mgcvs(exit_fit, ref):
+def test_names_are_mgcvs(exit_fit, ref, margin):
+    mismatched = sum(a != b for a, b in zip(exit_fit.coefficient_names, ref["names"], strict=False))
+    margin("vcov", "names, count differing", mismatched, "exact (0)", "bam_discrete_exit_vcov")
     assert list(exit_fit.coefficient_names) == ref["names"]
     assert len(ref["names"]) == exit_fit.coef_full.size == 132
 
 
-def test_vp_diagonal_meets_the_se_gate(exit_fit, ref):
+def test_vp_diagonal_meets_the_se_gate(exit_fit, ref, margin):
     vp = exit_fit.vcov()
     expected = np.asarray(ref["Vp"])
     assert vp.shape == expected.shape
+    rel = np.max(np.abs(np.diag(vp) / np.diag(expected) - 1))
+    margin("vcov", "Vp diagonal, max rel", rel, "1% rel", "bam_discrete_exit_vcov")
     np.testing.assert_allclose(np.diag(vp), np.diag(expected), rtol=1e-2)
     np.testing.assert_allclose(vp, vp.T, rtol=0, atol=1e-14)  # symmetric to rounding
 
 
-def test_ve_diagonal_meets_the_se_gate(exit_fit, ref):
+def test_ve_diagonal_meets_the_se_gate(exit_fit, ref, margin):
     ve = exit_fit.vcov(freq=True)
+    rel = np.max(np.abs(np.diag(ve) / np.diag(np.asarray(ref["Ve"])) - 1))
+    margin("vcov", "Ve diagonal, max rel", rel, "1% rel", "bam_discrete_exit_vcov")
     np.testing.assert_allclose(np.diag(ve), np.diag(np.asarray(ref["Ve"])), rtol=1e-2)
     # Ve is no larger than Vp on the diagonal (penalisation only shrinks it).
     assert np.all(np.diag(ve) <= np.diag(exit_fit.vcov()) * (1 + 1e-12))

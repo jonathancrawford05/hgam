@@ -1,8 +1,8 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-third slice (run time: profile, README note, a question). M4 is
-done for the exit fit. Read `docs/PRIORITIES.md` before
-choosing work.
+Last updated: 2026-11-17, by the development run's twenty-fourth slice: the initial-scope confirmation PR that PLAN.md's
+"Order of work" step 2 asks for (`dev/2026-11-17-confirm-initial-scope`). Read `docs/PRIORITIES.md` before choosing
+work.
 
 ## State
 
@@ -129,10 +129,34 @@ grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `E
 draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
 are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-## Next slice: BLAS thread setting (Priorities item 3)
+## Next slice: the unseen-level refusal, then nthreads, then widening
 
-Jonathan decided on PR #31 (2026-11-17): option (A), as a setting. If PR #24 has merged first, follow its order instead
-(its step 2 is to confirm the initial scope with Jonathan), and do this slice when that order reaches run time.
+Jonathan confirmed the initial scope on PR #32 (2026-11-17, option (a)). `docs/PLAN.md`'s "Order of work" step 2 is
+done, and step 3 (widening) is open. Order: (0) the unseen-level refusal below; (1) the BLAS thread setting below
+(PR #31); (2) step 3's widening, starting with factor `by`. Start (0) only after PR #32 has merged. It changes
+`.github/` and `tests/`, so Jonathan merges it.
+
+### Found while adding the margin report (this PR)
+
+Eight test modules (`test_predict_bam`, `test_summary_bam`, `test_vcov_bam`, `test_k_check_bam`, `test_gam_check_bam`,
+`test_discrete_constraint_rows`, `test_psum_chisq`, `test_smooth_tests`) read `tests/fixtures` by their own path, so
+CI's `oracle` job held them to the committed tier 1 copies and not to the pinned image. This PR makes them read
+`conftest.FIXTURES`, which honours `HGAM_FIXTURE_DIR`. The new rule is in `tests/conftest.py`'s docstring: every module
+reads fixtures through `FIXTURES` or `load_fixture`. The `oracle` job prints each key result's margin
+(`HGAM_REPORT_MARGINS`, the `margin` fixture). A new test that holds a key result should call `margin(...)`.
+
+### First: name the unseen-level refusal (PR #32 review b087411, should-fix 1)
+
+`_FactorCoding.encode` (`src/hgam/frontend/api.py:147`) raises `HgamValidationError` for a factor level the fit did
+not see. Its message says "mgcv refuses an unseen level too", which is wrong. `predict.gam` (mgcv.r) warns "factor
+levels ... not in original fit", and `predict.bamd` zeroes that factor's dummies. At predict time, raise
+`HgamNotImplementedError` naming mgcv's behaviour, and fix the message. Update the tests that expect the validation
+error (`tests/test_predict_bam.py:82`, `tests/frontend/test_api.py:89`, `tests/engine/test_gam_predict.py:148`) to
+expect the refusal. A refusal needs no fixture.
+
+### Then: BLAS thread setting (Priorities item 3)
+
+Jonathan decided on PR #31 (2026-11-17): option (A), as a setting.
 
 1. Read `bam` in bam.r (mgcv 1.9-4) for `nthreads`: its default (1), its two-element form, and where it is used.
 2. Add `threadpoolctl` as an optional extra (`hgam[threads]`; Jonathan approved it on PR #31, so the extra itself is
@@ -151,6 +175,9 @@ Jonathan decided on PR #31 (2026-11-17): option (A), as a setting. If PR #24 has
 Large data (about 30 million rows) is deferred: see `docs/DEFERRED.md`.
 
 ## Open items for Jonathan
+
+Decided on PR #32 (2026-11-17): option (a). The initial scope is confirmed against the pinned image (every checklist
+item inside its gate, largest margin Ve's diagonal 8.1e-5 against 1e-2). The next slices are in the order above.
 
 Decided on PR #31 (2026-11-17): option (A) as a setting, `nthreads` with default 1 (next slice above); optimise for
 large data (about 30m rows) later (DEFERRED).

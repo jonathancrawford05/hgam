@@ -8,16 +8,14 @@ through the tensor branch (finite-difference rescaling, then ``nearest``'s 3 nea
 1.3e-10 relative, p-value exact. The three sz terms are NA in mgcv as here."""
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import FIXTURES  # honours HGAM_FIXTURE_DIR
 
 import hgam
 from hgam.frontend.api import Factor, GamFit
 from hgam.frontend.gam_check import deviance_residuals
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 HGAM_FORMULA = (
     "DthCnt / ExposCnt ~ FaceSize + Smoke + FaceSize:Smoke"
@@ -99,7 +97,7 @@ def test_na_where_mgcv_has_na(table, ref):
             assert r.status == "tested"
 
 
-def test_k_index_and_p_value(table, ref):
+def test_k_index_and_p_value(table, ref, margin):
     """Not key results: asserted at what was measured (k-index 6.8e-10 relative; p exact, R's draws)."""
     tested = [(r, row) for r, row in zip(table, ref["k_table"], strict=True) if r.status == "tested"]
     assert [r.label for r, _ in tested] == [
@@ -111,6 +109,9 @@ def test_k_index_and_p_value(table, ref):
     for r, row in tested:
         print(f"{r.label}: k-index {r.k_index:.6f} vs {row[2]:.6f}; p {r.p_value} vs {row[3]}")
         assert r.k_index is not None and r.p_value is not None
+        name = "bam_discrete_exit_k_check"
+        margin("k.check", "k-index, max rel", abs(r.k_index / row[2] - 1), "none (measured 1e-6 rel)", name)
+        margin("k.check", "p-value, max abs", abs(r.p_value - row[3]), "none (measured exact)", name)
         np.testing.assert_allclose(r.k_index, row[2], rtol=1e-6)
         assert r.p_value == row[3]
 

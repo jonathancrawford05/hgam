@@ -11,6 +11,23 @@ About 40 pull-request-sized slices. The slice counts are rough estimates.
 | M4 Inference | `predict`, `vcov`, `summary`, `gam.check` (done for the exit fit, 2026-11-17) | 5 |
 | Packaging | Documentation, first release | 3 |
 
+## Order of work from here (Jonathan, 2026-11-17)
+
+1. **Finish the initial scope.** That is the exit model end to end: the exit test (done) and M4 on that fit,
+   namely `predict` (done), `summary` (parametric table done; smooth-term table and its p-values), `vcov` and
+   `gam.check`.
+2. **Confirm it.** When the last M4 item merges, the next development run starts no new work. It opens a pull
+   request that changes only the routine files and lists, under "Questions for Jonathan", each item of step 1 with
+   its test, fixture and measured numbers against its gate in the pinned image, what is still in
+   `docs/DEFERRED.md`, and any strict xfail or refusal the exit model can reach. Widening starts only after
+   Jonathan confirms on that pull request.
+3. **Widen to the rest of `docs/SCOPE.md`**, one construct per slice, each held to an mgcv fixture as before.
+   Default order, by what hierarchical models reach for first: factor `by`, `fs`, `re`, `te` and `t2`; then the
+   bases `tp`, `ts`, `cs`, `ps`, `cc`; then the families gaussian, poisson, Gamma and the quasi families on `gam`
+   and on discrete `bam`. For each, first measure what the moved engine already does against a fixture; port only
+   what misses a gate.
+4. **Packaging** (documentation, first release) comes after the widening, unless Jonathan asks for it sooner.
+
 ## M0, second slice: move the engine (done 2026-11-15)
 
 The starting point is the engine in `jonathancrawford05/polaris-re`: about 9,700 lines in 27 files

@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's sixteenth slice (M4: `summary.gam`'s smooth-term table, Chi.sq and Ref.df). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's seventeenth slice (M4: `psum.chisq` and Davies' algorithm). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -83,7 +83,7 @@ exit fit: intercept 4.8e-7 (was 3.6e-3), every coefficient 9.8e-7, se 4.1e-6, et
 beside prior weights is refused in a discrete fit (its order in the parametric frame is not carried). Tests: 665 pass,
 no xfail.
 
-Smooth-term table, first step (section 16 and 18, `hgam.frontend.smooth_tests`, PR open): `summary()` of a discrete fit
+Smooth-term table, first step (section 16 and 18, `hgam.frontend.smooth_tests`, PR #23): `summary()` of a discrete fit
 gives every fully penalised smooth (`null.space.dim == 0`) `reTest`'s Chi.sq and Ref.df (`reTest`, `recov` with no
 random terms, `mroot` via SciPy's `dpstrf`); `bam_fitd` carries X'WX (`EngineGAMFit.xwx`). Exit fit: Chi.sq 1.7e-6
 relative on all eight; Ref.df exact on five; the three sz terms give 7, 6, 5 vs mgcv's 11, 7, 6, reported and not gated
@@ -91,15 +91,24 @@ relative on all eight; Ref.df exact on five; the three sz terms give 7, 6, 5 vs 
 `re` branch, not ported; PR #23 review). `null_space_dim` is mgcv's rule where it is known without the constructors (0
 under select=TRUE and for re), else `None`. Tests: 678 pass, no xfail.
 
-## Next slice: the smooth-term p-value, `psum.chisq` (M4)
+The smooth-term p-value's distribution, first step (section 19, `tests/test_psum_chisq.py`, PR open): `davies.c` is ported
+line for line in `hgam.frontend.davies` (with R's `revsort` and `log1pmx`); `psum_chisq` and `liu2` (mgcv.r) are in
+`hgam.frontend.smooth_tests`. Against `psum.chisq(..., trace = TRUE)` on 15 cases: p to 4.4e-16, `trace` to 4.3e-15
+relative, ifault and every count exact. Not yet called by `summary()`. Tests: 718 pass, no xfail.
 
-Port `psum.chisq` (mgcv.r
-~3487): Davies' algorithm (mgcv's C `davies.c`, `qfc`), falling back to `liu2` (~3521) on `ifault` other than 0 and 2.
-Gate (Q2): p-value 1e-3 absolute or 1% relative, whichever is larger; section 16's `s_table[:, 3]` holds mgcv's. Measured
-this run: mgcv's own `psum.chisq` on hgam's eigenvalues gives mgcv's p to 3e-6, so the sz Ref.df gap does not move p.
-Five exit p-values are 0 (Chi.sq far in the tail); the three non-zero are 0.0886, 0.111, 0.223. `reTest` must return
-its eigenvalues for this (it computes them already). Over 600 lines: port `davies.c`'s `qf` first, test it against
-`psum.chisq` on a new small fixture, and wire it after.
+## In review: PR #25, `psum.chisq` and Davies' algorithm (M4)
+
+`hgam.frontend.davies` ports `davies.c` line for line; `psum_chisq` and `liu2` live in `smooth_tests`. Section 19
+(`psum_chisq_davies`, 19 cases plus liu2) holds p to 4.4e-16 and Davies' trace counts exactly. Review b892122's
+should-fix (unreached branches: four cases added, ifault 3 among them) and nit (liu2 DEFERRED wording) are addressed on the branch
+`claude/dazzling-fermi-xjcoko`. Tests: 726 pass, no xfail. Waiting for a review of the new head.
+
+## Next slice (after PR #25 merges): wire the p-value into `summary()` (M4)
+
+`re_test` returns its eigenvalues; `summary()` of a discrete fit fills each fully penalised smooth's p-value with
+`psum_chisq(Chi.sq, eigenvalues)` as `reTest` does (mgcv.r). Gate (Q2): p-value 1e-3 absolute or 1% relative,
+whichever is larger, against section 16's `s_table[:, 3]`. Exit fit: five p-values are 0, three are 0.0886, 0.111,
+0.223; mgcv's own `psum.chisq` on hgam's eigenvalues gives mgcv's p to 3e-6, so the sz Ref.df gap does not move p.
 
 ## Open items for Jonathan
 

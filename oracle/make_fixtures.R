@@ -412,4 +412,43 @@ A18b <- matrix(c(4, 0, 2, 0,  0, 0, 0, 0,  2, 0, 5, 0,  0, 0, 0, 0), 4, 4)
 put("mroot_chol", list(cases = lapply(list(full = A18a, deficient = A18b), function(A) {
   B <- mroot(A); list(A = A, B = B, rank = ncol(B))
 })))
+# 19. psum.chisq (mgcv.r) and Davies' algorithm (davies.c), the distribution summary.gam's smooth-term p-values come from
+# (reTest: psum.chisq(stat, ev), or psum.chisq(0, c(ev, -stat/k), df = c(rep(1, length(ev)), k)) for an estimated scale).
+# Each case records p, and davies' trace and ifault (trace = TRUE), so the port is held to mgcv's path as well as its
+# value. The cases reach: both range exits (far_tail, zero_q), the convergence factor (multi_q, far_tail, skew), the
+# auxiliary integration (dominant), ties in |lb| (ties), non-central terms with a normal term, df rounding, and the
+# liu2 fallback (nlim = 5: ifault 1). liu2 is also recorded on its own.
+set.seed(19)
+psum19 <- list(
+  central = list(q = 12, lb = c(3.1, 1.7, 0.9, 0.4, 0.05)),
+  multi_q_a = list(q = 0.5, lb = c(2, 1, 0.5)), multi_q_b = list(q = 5, lb = c(2, 1, 0.5)),
+  multi_q_c = list(q = 20, lb = c(2, 1, 0.5)), multi_q_d = list(q = 60, lb = c(2, 1, 0.5)),
+  far_tail = list(q = 500, lb = c(2, 1, 0.5)), zero_q = list(q = 0, lb = c(2, 1, 0.5)),
+  scale_est = list(q = 0, lb = c(2.5, 1.2, 0.3, -9.4 / 40), df = c(1, 1, 1, 40)),
+  noncentral = list(q = 15, lb = c(1.5, -0.7, 2), df = c(2, 3, 1), nc = c(0.5, 1, 2), sigz = 0.8),
+  ties = list(q = 1.5, lb = c(1, -1, 1, -1, 0.5)),
+  dominant = list(q = 3, lb = c(10, rep(0.01, 30))),
+  many_small = list(q = 1.2, lb = c(1, runif(40, 0, 0.02))),
+  skew = list(q = 25, lb = c(1, 0.999, 1e-3), df = c(1, 1, 50)),
+  df_round = list(q = 9, lb = c(1.2, 0.6), df = c(2.5, 3.4)),
+  fallback = list(q = 12, lb = c(3.1, 1.7, 0.9), nlim = 5),
+  # davies.c branches reached only here (PR #25 review): the auxiliary loop's `ntm > lim` exit, which
+  # returns c = -1 with ifault = 0 so psum.chisq reports p = 2 without a warning; cfe's `fail` return;
+  # cfe's `axl = axl2` clamp
+  aux_lim = list(q = 3, lb = c(10, rep(0.01, 30)), nlim = 5),
+  cfe_fail = list(q = 3, lb = c(10, rep(0.5, 200))),
+  cfe_clamp = list(q = 12, lb = c(1, 0.05)),
+  # a negative nc: davies.c's ifault = 3 exit; psum.chisq's fallback needs nc = 0, so p = NA
+  negative_nc = list(q = 4, lb = c(2, 1), nc = c(-1, 0)))
+put("psum_chisq_davies", list(
+  cases = lapply(psum19, function(a) {
+    a$df <- if (is.null(a$df)) rep(1, length(a$lb)) else a$df
+    a$nc <- if (is.null(a$nc)) rep(0, length(a$lb)) else a$nc
+    a$sigz <- if (is.null(a$sigz)) 0 else a$sigz
+    a$nlim <- if (is.null(a$nlim)) 100000 else a$nlim
+    p <- suppressWarnings(psum.chisq(a$q, a$lb, df = a$df, nc = a$nc, sigz = a$sigz, nlim = a$nlim, trace = TRUE))
+    c(lapply(a, I), list(p = as.numeric(p), trace = attr(p, "trace"), ifault = attr(p, "ifault")))
+  }),
+  liu2 = list(x = c(-1, 0.5, 5, 30), lambda = c(2, 1, 0.5), h = c(1, 2, 1),
+              p = mgcv:::liu2(c(-1, 0.5, 5, 30), c(2, 1, 0.5), h = c(1, 2, 1)))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

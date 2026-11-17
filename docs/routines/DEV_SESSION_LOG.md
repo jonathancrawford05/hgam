@@ -1,5 +1,19 @@
 # Development session log
 
+## 2026-11-17 (seventeenth slice, review follow-up): PR #25 review b892122
+
+Should-fix 1: three section 19 cases (`aux_lim`, `cfe_fail`, `cfe_clamp`) hold davies.c's auxiliary-loop `lim` exit (p = 2, ifault 0, as mgcv), `cfe`'s fail return and `axl` clamp to mgcv. Nit 1: DEFERRED's liu2 line says chi2 only and lists the remaining unreached branches.
+Tests: 718 pass before; 724 pass, no xfail after (+6, the new cases in two parametrised tests). `make lint` is clean. Only `psum_chisq_davies.json` changed on regeneration.
+Tier 1, mgcv 1.9-1: the new cases meet the existing assertions (p 1e-8, trace counts exact).
+Merged with this run's own fix of the same review: a fourth case, `negative_nc` (davies.c's ifault = 3, p = NA as mgcv). Tests: 726 pass, no xfail.
+
+## 2026-11-17 (seventeenth slice): psum.chisq and Davies' algorithm
+
+Ported mgcv's `davies.c` (`hgam.frontend.davies`: errbd, ctff, truncation, findu, integrate, cfe, davies, with R's `revsort` and `log1pmx`) and `psum.chisq` / `liu2` (mgcv.r) into `smooth_tests`. New fixture section 19 (`psum_chisq_davies`, 15 cases plus liu2), `tests/test_psum_chisq.py`. Not yet wired into `summary()`.
+Tests: 678 pass before; 718 pass, no xfail after (+40, all in `tests/test_psum_chisq.py`). `make lint` is clean.
+Tier 1, mgcv 1.9-1: p-value 4.4e-16 absolute at most (gate 1e-3 or 1%); davies' trace 4.3e-15 relative, its term, integration and call counts and ifault exact on every case (aux integration, convergence factor, range exits, ties, liu2 fallback).
+Deferred: Davies' ifault 2 branch has no fixture; liu2 uses SciPy's ncx2 for pnchisq.
+
 ## 2026-11-17 (sixteenth slice): summary.gam's smooth-term table, Chi.sq and Ref.df
 
 PR #22 auto-merged (all six SETTINGS conditions checked and posted). Ported `reTest`, `recov` (no random terms) and `mroot` (mgcv.r) into `hgam.frontend.smooth_tests`; `summary()` of a discrete fit reports Chi.sq and Ref.df for fully penalised smooths; `bam_fitd` now carries X'WX. New fixture section 18 (`mroot_chol`); `tests/test_smooth_tests.py`; smooth-table tests in `tests/test_summary_bam.py`. PR #22's review nit (r_rng docstring) fixed.

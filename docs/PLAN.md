@@ -68,5 +68,7 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - M4, discrete bam's constraint rows (done 2026-11-17, Q1 option A of PR #21): R's RNG and `discrete.mf`'s padded
   frame ported (`hgam.frontend.r_rng`, `discrete_model_frame`, ADR 0002, section 17); the intercept meets its gate
   (4.8e-7) and the strict xfail is lifted. Next: the smooth-term table of `summary.gam`.
-- M4, `summary` smooth-term table, first step (2026-11-17, open): `reTest` / `recov` / `mroot` give Chi.sq (all eight
-  exit smooths, 1.7e-6) and Ref.df (exact on five; three sz terms reported, not gated: option (a)). p-value (`psum.chisq`) next.
+- M4, `summary` smooth-term table, first step (done 2026-11-17, PR #23): `reTest` / `recov` / `mroot` give Chi.sq (all
+  eight exit smooths, 1.7e-6) and Ref.df (exact on five; three sz terms reported, not gated: option (a)).
+- M4, `summary` smooth-term p-value, first step (2026-11-17, open): `psum.chisq`, Davies' `davies.c` and `liu2` ported
+  (`hgam.frontend.davies`, `tests/test_psum_chisq.py`, section 19). Next: wire `reTest`'s eigenvalues into `summary()`.

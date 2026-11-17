@@ -7,10 +7,10 @@ last (``recov``), and the reference distribution is a weighted sum of chi-square
 weights are the eigenvalues of ``crossprod(Rm B) / sig2`` with ``B B' = Ve[m, m]``. ``Ref.df`` is the
 number of those eigenvalues above ``max * eps^0.8``.
 
-Ported here: the statistic (``Chi.sq``), ``Ref.df`` and the p-value's distribution function
-(``psum.chisq``, Davies' algorithm in ``hgam.frontend.davies``, with the ``liu2`` fallback). ``reTest``
-does not yet hand its eigenvalues to ``psum_chisq``, so ``summary()`` still reports no p-value; terms
-with a null space (``testStat``) and random-effect terms (``recov``'s ``re`` branch) are not ported.
+Ported here: the statistic (``Chi.sq``), ``Ref.df`` and the p-value (``psum.chisq(stat, ev)``, Davies'
+algorithm in ``hgam.frontend.davies``, with the ``liu2`` fallback). Terms with a null space
+(``testStat``), random-effect terms (``recov``'s ``re`` branch) and the estimated-scale p-value are not
+ported.
 """
 
 import warnings
@@ -76,9 +76,11 @@ def re_test(
     vp: np.ndarray,
     block: slice,
     sig2: float = 1.0,
-) -> tuple[float, int]:
-    """mgcv counterpart: ``reTest(b, m)`` (mgcv.r), mgcv 1.9-1, with no random-effect terms
-    beside ``m``: returns ``(stat, rank)``, ``summary.gam``'s ``Chi.sq`` and ``Ref.df``.
+) -> tuple[float, int, float]:
+    """mgcv counterpart: ``reTest(b, m)`` (mgcv.r), mgcv 1.9-4 (unchanged from 1.9-1), with no
+    random-effect terms beside ``m``: returns ``(stat, rank, pval)``, ``summary.gam``'s ``Chi.sq``,
+    ``Ref.df`` and p-value. For a fixed scale ``pval = psum.chisq(stat, ev)``; the estimated-scale
+    branch (``psum.chisq(0, c(ev, -stat/k), ...)``) is refused with ``sig2 != 1``.
 
     Args:
         coef: all coefficients (``coef(b)``).
@@ -102,7 +104,8 @@ def re_test(
     ev = np.linalg.eigvalsh(rb.T @ rb / sig2)
     ev[ev < 0.0] = 0.0
     rank = int(np.sum(ev > np.max(ev) * _EPS**0.8)) if ev.size else 0
-    return stat, rank
+    pval = float(psum_chisq(stat, ev)[0])
+    return stat, rank, pval
 
 
 def psum_chisq(

@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's seventeenth slice (M4: `psum.chisq` and Davies' algorithm). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's eighteenth slice (M4: the smooth-term p-value in `summary()`). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -91,24 +91,23 @@ relative on all eight; Ref.df exact on five; the three sz terms give 7, 6, 5 vs 
 `re` branch, not ported; PR #23 review). `null_space_dim` is mgcv's rule where it is known without the constructors (0
 under select=TRUE and for re), else `None`. Tests: 678 pass, no xfail.
 
-The smooth-term p-value's distribution, first step (section 19, `tests/test_psum_chisq.py`, PR open): `davies.c` is ported
-line for line in `hgam.frontend.davies` (with R's `revsort` and `log1pmx`); `psum_chisq` and `liu2` (mgcv.r) are in
-`hgam.frontend.smooth_tests`. Against `psum.chisq(..., trace = TRUE)` on 15 cases: p to 4.4e-16, `trace` to 4.3e-15
-relative, ifault and every count exact. Not yet called by `summary()`. Tests: 718 pass, no xfail.
+The smooth-term p-value (PR #25, then this run's PR): `davies.c` is ported line for line in `hgam.frontend.davies` (with
+R's `revsort` and `log1pmx`); `psum_chisq` and `liu2` (mgcv.r) are in `hgam.frontend.smooth_tests`, held to
+`psum.chisq(..., trace = TRUE)` on 19 cases (section 19, `tests/test_psum_chisq.py`: p to 4.4e-16, trace counts exact).
+`re_test` returns `reTest`'s p-value (`psum_chisq(stat, ev)`, fixed scale) and `summary()` reports it: exit fit 3.2e-7 at
+most against section 16's `s_table[:, 3]` (five of eight are 0), all eight terms including the three sz terms whose Ref.df
+is not gated. `summary` is done for the exit fit. Tests: 727 pass, no xfail.
 
-## In review: PR #25, `psum.chisq` and Davies' algorithm (M4)
+## Next slice: `vcov` on the exit fit (M4)
 
-`hgam.frontend.davies` ports `davies.c` line for line; `psum_chisq` and `liu2` live in `smooth_tests`. Section 19
-(`psum_chisq_davies`, 19 cases plus liu2) holds p to 4.4e-16 and Davies' trace counts exactly. Review b892122's
-should-fix (unreached branches: four cases added, ifault 3 among them) and nit (liu2 DEFERRED wording) are addressed on the branch
-`claude/dazzling-fermi-xjcoko`. Tests: 726 pass, no xfail. Waiting for a review of the new head.
-
-## Next slice (after PR #25 merges): wire the p-value into `summary()` (M4)
-
-`re_test` returns its eigenvalues; `summary()` of a discrete fit fills each fully penalised smooth's p-value with
-`psum_chisq(Chi.sq, eigenvalues)` as `reTest` does (mgcv.r). Gate (Q2): p-value 1e-3 absolute or 1% relative,
-whichever is larger, against section 16's `s_table[:, 3]`. Exit fit: five p-values are 0, three are 0.0886, 0.111,
-0.223; mgcv's own `psum.chisq` on hgam's eigenvalues gives mgcv's p to 3e-6, so the sz Ref.df gap does not move p.
+Port `vcov.gam` (mgcv.r, 1.9-4): `Vp` by default, `Ve` with `freq = TRUE`, `Vc` with `unconditional = TRUE`
+where it exists, `dispersion` rescaling, dimnames from `names(object$edf)`; `sandwich = TRUE` refused. The engine
+already has `GAMFitResult.vcov` and `bam_fitd` carries `vp` (`vp_override`) and `xwx`; expose `GamFit.vcov(freq=,
+unconditional=, dispersion=)` with mgcv's coefficient names (`parametric_names` plus the smooth labels' `.1`, `.2`, ...).
+Fixture: a new section exporting `vcov(b14)`, `vcov(b14, freq = TRUE)` and whether `b14$Vc` is NULL (discrete bam may
+not set it; then `unconditional = TRUE` returns Vp, as mgcv does). Gate: 1% relative on the diagonal (the se gate) and
+names exact; report the off-diagonal. After `vcov`, `gam.check` finishes M4, then PLAN's step 2 (confirm with
+Jonathan) if PR #24 has merged.
 
 ## Open items for Jonathan
 
@@ -116,7 +115,7 @@ None.
 
 Decided on PR #23 (2026-11-17): option (a). Ref.df is gated exact only where mgcv's rank is not set by rounding; on the
 exit fit's s(FaceSize,AttdAge), s(Smoke,AttdAge) and s(FaceSize,PolYear) it is reported, not gated, and those terms are
-gated through Chi.sq and (when ported) the p-value. The matching `docs/PRIORITIES.md` row (with Q2's smooth-term gates)
+gated through Chi.sq and the p-value. The matching `docs/PRIORITIES.md` row (with Q2's smooth-term gates)
 is Jonathan's change.
 
 Decided on PR #21 (2026-11-16): Q1 option (A): port mgcv's constraint rows for discrete bam, held to the

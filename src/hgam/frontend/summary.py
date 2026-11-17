@@ -67,7 +67,7 @@ class SmoothSummary:
     chi_sq: float | None = None
     """``summary.gam``'s ``Chi.sq`` (``reTest``'s statistic); ``None`` where not ported."""
     p_value: float | None = None
-    """``summary.gam``'s p-value; ``psum.chisq`` is not ported, so always ``None`` for now."""
+    """``summary.gam``'s p-value (``reTest``: ``psum.chisq(Chi.sq, ev)``); ``None`` where not ported."""
 
     @property
     def saturated(self) -> bool:
@@ -140,13 +140,14 @@ class GamSummary:
         lines += [
             "",
             "Smooth terms:",
-            f"  {'term':<28}{'coef':>6}{'edf':>10}{'Ref.df':>8}{'Chi.sq':>12}   log10(sp)",
+            f"  {'term':<28}{'coef':>6}{'edf':>10}{'Ref.df':>8}{'Chi.sq':>12}{'p-value':>12}   log10(sp)",
         ]
         for s in self.smooths:
             sps = ", ".join(f"{v:.3f}" for v in s.log10_sp) or "—"
             ref_df = "—" if s.ref_df is None else str(s.ref_df)
             chi = "—" if s.chi_sq is None else f"{s.chi_sq:.5g}"
-            lines.append(f"  {s.label:<28}{s.n_coef:>6}{s.edf:>10.4f}{ref_df:>8}{chi:>12}   {sps}")
+            pv = "—" if s.p_value is None else f"{s.p_value:.3g}"
+            lines.append(f"  {s.label:<28}{s.n_coef:>6}{s.edf:>10.4f}{ref_df:>8}{chi:>12}{pv:>12}   {sps}")
         lines += [
             "",
             f"n = {self.n}   total edf = {self.edf_total:.4f}",
@@ -361,7 +362,9 @@ def _with_smooth_tests(
     for sm in smooths:
         if sm.null_space_dim == 0 and not (random - {sm.label}):
             b = blocks[sm.label]
-            stat, rank = re_test(fit.coef, fit.xwx, s_total, fit.vp_override, slice(b["start"], b["end"]))
-            sm = replace(sm, ref_df=rank, chi_sq=stat)
+            stat, rank, pval = re_test(
+                fit.coef, fit.xwx, s_total, fit.vp_override, slice(b["start"], b["end"])
+            )
+            sm = replace(sm, ref_df=rank, chi_sq=stat, p_value=pval)
         out.append(sm)
     return tuple(out)

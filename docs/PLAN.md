@@ -76,5 +76,5 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   `summary()` reports it; exit fit 3.2e-7 at most (`tests/test_summary_bam.py`, section 16). `summary` is done for the
   exit fit.
 - M4, `vcov` (2026-11-17, open): `GamFit.vcov(freq=, dispersion=)` and `GamFit.coefficient_names` port `vcov.gam`;
-  exit fit Vp diagonal 8.3e-6, Ve 8.7e-5 relative, names exact (`tests/test_vcov_bam.py`, section 20). `vcov` is done
+  exit fit Vp diagonal 8.3e-6, Ve 8.7e-5 relative, names exact (`tests/test_vcov_bam.py`, sections 20 and 20b). `vcov` is done
   for the exit fit (Vc refused for a discrete fit). Next: `gam.check`.

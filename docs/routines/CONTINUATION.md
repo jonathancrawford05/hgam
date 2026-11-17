@@ -102,8 +102,9 @@ is not gated. `summary` is done for the exit fit. Tests: 727 pass, no xfail.
 sandwich=)` ports `vcov.gam` (mgcv.r): Vp by default, Ve with `freq=True` (`Sl.postproc`'s `F %*% Vp`, i.e.
 `Vp X'WX Vp / sig2`; only for a discrete fit, which carries X'WX), `dispersion * vc / sig2`. `GamFit.coefficient_names` is
 `names(b14$edf)`. Exit fit: Vp diagonal 8.3e-6 relative, Ve 8.7e-5 (gate 1%), names exact on 132. `unconditional=True`
-on a discrete fit stays refused (mgcv's Vc there is Sl.postproc's sp-corrected one, up to 3.1x Vp; DEFERRED; the
-fixture records it). `sandwich=True` refused. Tests: 737 pass, no xfail.
+on a discrete fit stays refused (mgcv's Vc there is Sl.postproc's sp-corrected one, up to 4.07x Vp; DEFERRED; the
+fixture records it). `sandwich=True` refused. Section 20b (a gaussian REML gam fit) holds names and `dispersion = 2` off the
+discrete path (3.1e-6). Tests: 739 pass, no xfail.
 
 ## Next slice: `gam.check` on the exit fit (M4, last item)
 

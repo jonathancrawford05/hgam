@@ -5,8 +5,9 @@ factors given mgcv's level order. ``make_fixtures.R`` section 20 exports ``vcov(
 ``vcov(b14, freq = TRUE)`` (Ve), ``vcov(b14, unconditional = TRUE)`` (Vc), the ``dispersion = 2``
 rescalings and the dimnames. Gates: names exact (structure); the diagonal 1% relative (the se gate:
 the diagonal is the squared se of each coefficient). The off-diagonal is reported, not gated.
+Section 20b holds the names and ``dispersion`` on a gaussian REML ``gam`` fit, where ``sig2`` is estimated.
 ``unconditional=True`` is refused for a discrete fit: mgcv's Vc there comes from ``Sl.postproc``'s
-smoothing-parameter correction (bam.r), not ported, and differs from Vp by up to 3x on the diagonal."""
+smoothing-parameter correction (bam.r), not ported, and is up to 4.07 times Vp on the diagonal."""
 
 import json
 from pathlib import Path
@@ -126,3 +127,38 @@ def test_off_diagonal_is_reported(exit_fit, ref):
         corr_diff = np.max(np.abs(v - expected) / d)
         print(f"{key}: max |difference| / sqrt(v_ii v_jj) = {corr_diff:.2e}")
         assert np.isfinite(corr_diff)
+
+
+@pytest.fixture(scope="module")
+def gaussian_ref() -> dict:
+    return _load("gam_gaussian_vcov_reml")
+
+
+@pytest.fixture(scope="module")
+def gaussian_fit(gaussian_ref) -> GamFit:
+    """Section 20b: a free-scale REML gam fit, where ``sig2`` is estimated (PR #27 review 4003b4e)."""
+    rows = gaussian_ref["data"]
+    data = {
+        "x": np.asarray([r["x"] for r in rows], dtype=np.float64),
+        "y": np.asarray([r["y"] for r in rows], dtype=np.float64),
+        "g": Factor([r["g"] for r in rows], gaussian_ref["levels"]["g"]),
+    }
+    return hgam.gam(gaussian_ref["formula"], data=data, family="gaussian", method="REML")
+
+
+def test_gaussian_names_are_mgcvs(gaussian_fit, gaussian_ref):
+    assert list(gaussian_fit.coefficient_names) == gaussian_ref["names"]
+
+
+def test_gaussian_dispersion_rescales_as_mgcv(gaussian_fit, gaussian_ref):
+    # dispersion * Vp / sig2 = dispersion * (X'WX + S)^-1: the scale estimator cancels, so this is gated at the se
+    # gate although hgam's sig2 (Fletcher) is not mgcv's REML scale estimate.
+    np.testing.assert_allclose(
+        np.diag(gaussian_fit.vcov(dispersion=2.0)),
+        np.diag(np.asarray(gaussian_ref["Vp_dispersion_2"])),
+        rtol=1e-2,
+    )
+    expected = np.asarray(gaussian_ref["Vp"])
+    print(
+        f"gaussian Vp diagonal: max relative difference {np.max(np.abs(np.diag(gaussian_fit.vcov()) / np.diag(expected) - 1)):.2e}"
+    )

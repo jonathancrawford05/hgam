@@ -522,4 +522,15 @@ pr23 <- predict(b23s, nd23, se.fit = TRUE)
 put("bam_discrete_binomial_cloglog_by_factor_select", bam_disc_case(b23s, d23, f23, "binomial(link='cloglog')",
   c(list(knots = list(x = sz_knots), select = TRUE, newdata = nd23, fit_new = as.numeric(pr23$fit),
          se_new = as.numeric(pr23$se.fit)), bam_rank(b23s))))
+# 24. the fs factor-smooth interaction on a cr base (smooth.construct.fs.smooth.spec and nat.param, smooth.r): the base
+# smooth re-parameterised by nat.param(type = 1), one uncentred copy per level, a range penalty and one penalty per
+# null-space direction, each scaled by smoothCon. 24a: smoothCon's X, S list, rank and P at supplied knots, and
+# PredictMat at new covariate values (Predict.matrix.fs.interaction), including values outside the knot range.
+set.seed(24); n <- 400
+d24 <- data.frame(x = runif(n, 1, 21), f = factor(sample(c("a", "b", "c"), n, TRUE), levels = c("a", "b", "c")))
+sm24 <- smoothCon(s(x, f, bs = "fs", xt = "cr", k = 6), d24, knots = list(x = sz_knots))[[1]]
+nd24 <- data.frame(x = c(0.5, runif(30, 1, 21), 22), f = factor(sample(c("a", "b", "c"), 32, TRUE), levels = c("a", "b", "c")))
+put("smoothcon_fs_cr", list(x = d24$x, group = as.integer(d24$f) - 1L, n_levels = 3L, knots = sz_knots, label = sm24$label,
+  X = sm24$X, S = sm24$S, rank = sm24$rank, P = sm24$P, C_rows = nrow(sm24$C), null_space_dim = sm24$null.space.dim,
+  new_x = nd24$x, new_group = as.integer(nd24$f) - 1L, X_new = PredictMat(sm24, nd24)))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

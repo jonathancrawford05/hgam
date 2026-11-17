@@ -1,8 +1,8 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-seventh slice: factor `by` on cr, the first widening
-slice (`dev/2026-11-17-factor-by`, PLAN step 3). PR #34 (`nthreads`) has merged. Read `docs/PRIORITIES.md` before
-choosing work.
+Last updated: 2026-11-17, by the development run's twenty-eighth slice: the `fs` basis, the first step of `fs`
+(`dev/2026-11-17-fs-basis`, PLAN step 3). PR #35 (factor `by`) auto-merged earlier in this run. Read
+`docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -129,24 +129,40 @@ grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `E
 draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
 are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-Factor `by` on cr (section 23, `tests/test_cr_by_factor.py`, this run's PR): `s(x, by=f, bs="cr")` already agreed with
+Factor `by` on cr (section 23, `tests/test_cr_by_factor.py`, PR #35, merged): `s(x, by=f, bs="cr")` already agreed with
 mgcv, no engine change. `smoothCon`'s factor-by branch (smooth.r 1.9-4) keeps the sum-to-zero constraint taken on the
 whole un-multiplied X and makes one copy per level, labelled `s(x):f<level>`. Basis 1.7e-14; `f + s(x, by=f)` as a REML
 gam (eta 5.7e-7, se 5.6e-4), discrete bam (eta 5.6e-14) and discrete bam with `select=TRUE` (eta 1.3e-13, predict on
 new data 1.2e-13); structure, coefficient names and full rank exact; edf well inside the gate. An ordered categorical
 column is refused (`contr.poly`, and the dropped first level of an ordered by, are not ported). Tests: 767 pass, no xfail.
 
-## Next slice: widening, `fs`
+The `fs` basis (section 24, `tests/test_fs_basis.py`, this run's second PR): `hgam.engine.gam_basis_fs` ports
+`nat.param` (type 1, QR branch, unit.fnorm), `smooth.construct.fs.smooth.spec` on a cr base (non-gamm branch) with
+`smoothCon`'s penalty scaling, and `Predict.matrix.fs.interaction`. X, P, the three penalties and PredictMat (with points
+outside the knot range) agree to 2.4e-14 under one column map: a sign per column, and the order of the two null-space
+columns, which rounding sets (their eigenvalues are about 1e-19). `scipy.linalg.eigh(driver="evr")` is required; it is
+`dsyevr`, R's `eigen` routine. Measured in R: refitting mgcv's own `G` with the null columns swapped leaves eta at
+2.8e-14 (the two null smoothing parameters swap), while NumPy's default `dsyevd` rotates the pair. `gam()` still refuses
+`bs="fs"` (`test_fs_is_still_refused`). Tests: 769 pass, no xfail.
 
-`docs/PLAN.md` step 3's next construct is `fs` (factor smooth interaction). First step: read
-`smooth.construct.fs.smooth.spec` and `Predict.matrix.fs.interaction` (smooth.r, mgcv 1.9-4): the base smooth
-(`xt`, default tp; take `xt="cr"` first, as the exit formula's bases are cr), its penalty split into the range-space
-penalty and the null-space penalties repeated per level, no identifiability constraint (`C` zero rows), and the
-`gamm`-only side conditions. Check what `hgam.frontend.formula` does with `bs="fs"` today (it should refuse by name).
-Add section 24 of `oracle/make_fixtures.R`: `smoothCon(s(x, f, bs="fs", xt="cr", k=6), ...)` at `sz_knots` (X, S list,
-rank, labels), a REML gam fit and a discrete bam fit of `y ~ s(x, f, bs="fs", xt="cr", k=6)` on a frame like d23.
-Hold basis, structure, eta, se and per-term edf to their gates; port the constructor if hgam has none. If the
-constructor plus fixture exceeds about 600 lines, do the basis (with its fixture) first and leave the fit refusing.
+## Next slice: `fs`, the fit
+
+Wire `s(x, f, bs="fs", xt="cr", k=)` (and `s(f, x, ...)`: mgcv finds the factor by type) into a REML `gam` fit:
+- `hgam.frontend.formula`: accept `bs="fs"` with `xt="cr"` (or `xt=list(bs="cr")`) and `k=`; keep refusing other `xt`,
+  `by=`, `m=`, and the default `xt` (tp base, not ported for fs).
+- `hgam.engine.gam_term_spec`: a `basis="fs"` TermSpec (`n_levels`, knots); `gam_term_build`: a builder from
+  `fs_basis` (three penalties, mgcv's rank vector, no constraint; keep `p_mat` in the term state for predict);
+  `gam_model` and `gam_predict`: the `fs` branch (`fs_predict_design`), as `sz` has; `gam_check.k_check`: NA, as sz.
+- `api.py`: `smooth_meta` bs.dim is `k * n_levels`; mgcv's label is `s(x,f)`; coefficient names `s(x,f).1` ... .
+- Refuse `fs` in `discrete=True` (`bam` gives fs a tensor-like margin set, `smooth.construct.fs.smooth.spec`'s
+  `tensor.smooth.spec` branch, not ported) and with `select=TRUE` until measured.
+- Fixture: section 24b, `gam(p ~ s(x, f, bs="fs", xt="cr", k=6), binomial(cloglog), weights = n, method = "REML")` on
+  a frame like d23 (n = 1500), with `knots = list(x = sz_knots)`; gate structure, eta, se and per-term edf. Smoothing
+  parameters are not gated (the two null ones may come out swapped).
+If that goes past about 600 lines, stop after the REML fit and leave predict on new data for the next step.
+
+Carried review nit (PR #35, optional): an unused factor level fails as `HgamComputationError` where mgcv drops it
+(`drop.unused.levels`); recorded in DEFERRED. A clear refusal naming unused levels is a small later slice.
 
 Fixture rule (from PR #32): every test module reads fixtures through `conftest.FIXTURES` or `load_fixture`, and a new
 test that holds a key result calls `margin(...)` so CI's `oracle` job prints it.

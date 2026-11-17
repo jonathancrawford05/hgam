@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-17 (twenty-fifth slice): the unseen-level refusal (PR #32 review b087411, should-fix 1)
+
+A factor level the fit did not see is now refused at predict time as not ported (`HgamNotImplementedError`, in `_FactorCoding.encode(at_predict=True)` and the engine's `_codes`), naming mgcv's behaviour (`predict.gam` warns and recodes to NA; `predict.bamd` zeroes the dummies, read in mgcv 1.9-4). The fit-time message for a `Factor` value outside its stated levels no longer claims mgcv refuses it.
+Tests: 756 pass before and after, no xfail (assertions added inside existing tests: discrete=False predict and the fit-time `Factor` case). `make lint` clean. No key result changes; no fixture needed for a refusal.
+Deferred: unseen-level handling itself (DEFERRED line updated).
+
 ## 2026-11-17 (twenty-fourth slice): initial-scope confirmation PR
 
 PR #31 auto-merged (six SETTINGS conditions posted; the branch delete was refused by the proxy). PR #24 has merged, so I followed PLAN.md step 2: a PR that changes only routine files and asks Jonathan to confirm the initial scope, with a checklist of each item, its test, fixture and numbers.

@@ -22,8 +22,9 @@ second implementation.
 Out-of-range numeric covariates: ``mgcv`` extrapolates a ``cr`` smooth
 LINEARLY along the end slope of the natural spline, in the training design and
 in ``predict.gam`` alike. :func:`~hgam.engine.gam_basis_cr._cr_basis_raw`
-does the same (ADR-249). A factor code outside ``[0, n_levels)`` raises, as
-``predict.gam`` raises on an unseen level.
+does the same (ADR-249). A factor code outside ``[0, n_levels)`` is an unseen
+level and is refused as not ported (``HgamNotImplementedError``): ``predict.gam``
+warns and recodes it to ``NA``, and ``predict.bamd`` sets its dummies to zero.
 """
 
 from collections.abc import Mapping
@@ -44,7 +45,7 @@ from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
 from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 __all__ = [
     "TermState",
@@ -137,10 +138,11 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
 def _codes(data: Mapping[str, np.ndarray], name: str, n_levels: int, term: TermSpec) -> np.ndarray:
     codes = np.asarray(_column(data, name, term), dtype=np.int64)
     if codes.size and (codes.min() < 0 or codes.max() >= n_levels):
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             f"predict: factor {name!r} (term {term.label!r}) has codes in "
             f"[{int(codes.min())}, {int(codes.max())}] but the fitted factor has "
-            f"{n_levels} level(s) (codes 0..{n_levels - 1}); mgcv refuses an unseen level."
+            f"{n_levels} level(s) (codes 0..{n_levels - 1}). An unseen level is not ported: "
+            "mgcv's predict.gam warns and recodes it to NA, and predict.bamd sets its dummies to zero."
         )
     return codes
 

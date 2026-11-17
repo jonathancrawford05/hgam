@@ -12,7 +12,7 @@ import pytest
 from conftest import FIXTURES  # honours HGAM_FIXTURE_DIR
 
 import hgam
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError
 from hgam.frontend.api import GamFit
 
 HGAM_FORMULA = (
@@ -84,5 +84,7 @@ def test_predict_unseen_factor_level_is_refused(exit_fit):
     newdata = _columns(_load("bam_discrete_exit_predict_b")["newdata"])
     newdata["Smoke"] = newdata["Smoke"].astype(object)
     newdata["Smoke"][0] = "Unknown"
-    with pytest.raises(HgamValidationError):
+    with pytest.raises(HgamNotImplementedError, match="not in original fit"):
         exit_fit.predict(newdata)
+    with pytest.raises(HgamNotImplementedError, match="'Unknown'"):
+        exit_fit.predict(newdata, discrete=False)

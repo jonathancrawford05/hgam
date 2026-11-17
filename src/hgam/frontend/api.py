@@ -144,13 +144,29 @@ def _strings(col: Column, name: str) -> list[str]:
 class _FactorCoding:
     levels: tuple[str, ...]
 
-    def encode(self, column: Column, name: str) -> np.ndarray:
+    def encode(self, column: Column, name: str, *, at_predict: bool = False) -> np.ndarray:
+        """Integer codes of ``column`` under the fitted levels.
+
+        At fit time a value outside a :class:`Factor`'s stated levels is a data error (R's
+        ``factor(values, levels=)`` would make it ``NA``, and missing values are refused).
+        At predict time (``at_predict=True``) a level the fit did not see is refused as not ported:
+        ``predict.gam`` (mgcv.r, mgcv 1.9-4) warns "factor levels ... not in original fit" and
+        recodes the value to ``NA``, and ``predict.bamd`` (bam.r) then sets that factor's dummies
+        to zero. Neither is followed here."""
         text = _strings(column, name)
         unseen = sorted(set(text) - set(self.levels))
+        if unseen and at_predict:
+            raise HgamNotImplementedError(
+                f"predict: column {name!r} has level {unseen[0]!r}, not seen when the model was "
+                f"fitted ({list(self.levels)}). mgcv does not refuse it: predict.gam warns "
+                '"factor levels ... not in original fit" and recodes it to NA, and predict.bamd '
+                "sets that factor's dummies to zero. That handling is not ported."
+            )
         if unseen:
             raise HgamValidationError(
-                f"gam(): column {name!r} has level {unseen[0]!r}, not seen when the model "
-                f"was fitted ({list(self.levels)}); mgcv refuses an unseen level too."
+                f"gam(): column {name!r} has value {unseen[0]!r}, which is not one of its stated "
+                f"levels ({list(self.levels)}); R's factor() would make it NA, and missing values "
+                "are refused."
             )
         index = {lv: i for i, lv in enumerate(self.levels)}
         return np.array([index[v] for v in text], dtype=np.int64)
@@ -304,7 +320,7 @@ class GamFit(EngineGAMFit):
         for name in self.numeric_columns:
             out[name] = _numeric(newdata, name)
         for name, levels in self.factor_levels.items():
-            out[name] = _FactorCoding(levels).encode(_column(newdata, name), name)
+            out[name] = _FactorCoding(levels).encode(_column(newdata, name), name, at_predict=True)
         return out
 
     @overload
@@ -357,7 +373,8 @@ class GamFit(EngineGAMFit):
         the discretised rows, which gives the same eta and se. ``discrete=False`` predicts at the
         covariates as given (``predict.bam`` falling through to ``predict.gam``). Parametric covariates
         need no binning: only factors are accepted there. A factor level the fit did not see is refused
-        (``predict.bamd`` sets its dummies to zero with a warning)."""
+        as not ported (``predict.gam`` warns and recodes it to ``NA``; ``predict.bamd`` sets its
+        dummies to zero)."""
         data = newdata if encoded else self.encode(newdata)
         if discrete and self.fit_method == "fREML-discrete":
             data = discretise_frame(self.model, data)

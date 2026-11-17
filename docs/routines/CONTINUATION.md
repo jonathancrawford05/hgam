@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-fourth slice: the initial-scope confirmation PR that PLAN.md's
-"Order of work" step 2 asks for (`dev/2026-11-17-confirm-initial-scope`). Read `docs/PRIORITIES.md` before choosing
+Last updated: 2026-11-17, by the development run's twenty-fifth slice: the unseen-level refusal
+(`dev/2026-11-17-unseen-level-refusal`, PR #32 review b087411 should-fix 1). Read `docs/PRIORITIES.md` before choosing
 work.
 
 ## State
@@ -129,30 +129,20 @@ grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `E
 draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
 are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-## Next slice: the unseen-level refusal, then nthreads, then widening
+## Next slice: nthreads, then widening
 
 Jonathan confirmed the initial scope on PR #32 (2026-11-17, option (a)). `docs/PLAN.md`'s "Order of work" step 2 is
-done, and step 3 (widening) is open. Order: (0) the unseen-level refusal below; (1) the BLAS thread setting below
-(PR #31); (2) step 3's widening, starting with factor `by`. Start (0) only after PR #32 has merged. It changes
-`.github/` and `tests/`, so Jonathan merges it.
+done, and step 3 (widening) is open. Order: (1) the BLAS thread setting below (PR #31); (2) step 3's widening, starting
+with factor `by`. The unseen-level refusal (step 0) is this run's PR: start (1) only after it has merged.
 
-### Found while adding the margin report (this PR)
+The unseen-level refusal (done in this run's PR): at predict time, a factor level the fit did not see raises
+`HgamNotImplementedError` naming mgcv's behaviour (`predict.gam` warns and recodes to NA, `predict.bamd` zeroes the
+dummies), from `_FactorCoding.encode(..., at_predict=True)` (`src/hgam/frontend/api.py`) and the engine's `_codes`
+(`src/hgam/engine/gam_predict.py`). At fit time a `Factor` value outside its stated levels stays an
+`HgamValidationError`, with a corrected message.
 
-Eight test modules (`test_predict_bam`, `test_summary_bam`, `test_vcov_bam`, `test_k_check_bam`, `test_gam_check_bam`,
-`test_discrete_constraint_rows`, `test_psum_chisq`, `test_smooth_tests`) read `tests/fixtures` by their own path, so
-CI's `oracle` job held them to the committed tier 1 copies and not to the pinned image. This PR makes them read
-`conftest.FIXTURES`, which honours `HGAM_FIXTURE_DIR`. The new rule is in `tests/conftest.py`'s docstring: every module
-reads fixtures through `FIXTURES` or `load_fixture`. The `oracle` job prints each key result's margin
-(`HGAM_REPORT_MARGINS`, the `margin` fixture). A new test that holds a key result should call `margin(...)`.
-
-### First: name the unseen-level refusal (PR #32 review b087411, should-fix 1)
-
-`_FactorCoding.encode` (`src/hgam/frontend/api.py:147`) raises `HgamValidationError` for a factor level the fit did
-not see. Its message says "mgcv refuses an unseen level too", which is wrong. `predict.gam` (mgcv.r) warns "factor
-levels ... not in original fit", and `predict.bamd` zeroes that factor's dummies. At predict time, raise
-`HgamNotImplementedError` naming mgcv's behaviour, and fix the message. Update the tests that expect the validation
-error (`tests/test_predict_bam.py:82`, `tests/frontend/test_api.py:89`, `tests/engine/test_gam_predict.py:148`) to
-expect the refusal. A refusal needs no fixture.
+Fixture rule (from PR #32): every test module reads fixtures through `conftest.FIXTURES` or `load_fixture`, and a new
+test that holds a key result calls `margin(...)` so CI's `oracle` job prints it.
 
 ### Then: BLAS thread setting (Priorities item 3)
 

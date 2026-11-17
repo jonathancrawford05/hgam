@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-17 (twenty-third slice): run time, profile and a question
+
+No open development PR (PR #30 merged). Started Priorities item 3. The profile shows that on four threads OpenBLAS makes X'WX 4.5x slower and the penalty `eigh` 20x slower inside `bam_fitd`. A scoped cap needs a decision (threadpoolctl is "Always ask"), so this PR asks and adds only the README note and a finding addendum. The PR #15 sz nit was already handled.
+Tests: 756 pass before and after (docs only), no xfail. `make lint` is clean.
+Run time, this machine: default threads median 3.07 s (7 fits), `OPENBLAS_NUM_THREADS=1` 0.57 s; mgcv 0.98 s (finding 0002).
+Deferred: nothing new.
+
 ## 2026-11-17 (twenty-second slice): gam.check's report
 
 PR #29 (k.check's ti branch) auto-merged (six SETTINGS conditions posted); its branch delete was refused by the proxy. Ported `gam.check` (plots.r) without plots as `GamFit.gam_check(data, seed=)`: `outer.info` grad/hess carried from `bam_fitd`, model rank, `qq.gam`'s ten draws, then k.check; section 22, `tests/test_gam_check_bam.py`. PR #29 nit: tie test at relative 1e-12. Fixed a garbled heading in CONTINUATION from the previous slice.

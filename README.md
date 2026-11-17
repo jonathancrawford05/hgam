@@ -8,6 +8,17 @@ Hierarchical generalized additive models in Python: a GPL port of the hierarchic
 family or option is refused by name with `NotImplementedError`. The exit test, the target model fitted through
 `hgam.bam`, meets every gate against mgcv. What is still to come is in [docs/PLAN.md](docs/PLAN.md).
 
+## Run time
+
+On the exit model, `hgam.bam` is faster than mgcv's `bam` when OpenBLAS runs on one thread and slower on its
+default of one thread per core, because the products inside the fit are small
+([docs/findings/0002-exit-benchmark.md](docs/findings/0002-exit-benchmark.md)). Until hgam caps the threads itself,
+set the variable before Python starts:
+
+```bash
+OPENBLAS_NUM_THREADS=1 python your_script.py
+```
+
 ## What it is for
 
 Models of the form mgcv users write as `s(x) + s(x, by = f) + ti(x, z) + s(f, x, bs = "sz")`: smooths
@@ -23,7 +34,7 @@ hgam is a port of mgcv, which is licensed GPL (>= 2), so hgam is distributed und
 
 ```bash
 uv sync --extra dev
-make test      # pytest; the exit test is a strict xfail until the port reaches it
+make test      # pytest, including the exit test (tests/test_exit.py)
 make lint
 make fixtures  # regenerate mgcv reference fixtures (needs R with mgcv)
 ```

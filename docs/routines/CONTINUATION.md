@@ -1,6 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-second slice (M4: `gam.check`'s report). M4 is done for the exit fit. Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's twenty-third slice (run time: profile, README note, a question). M4 is
+done for the exit fit. Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -132,13 +133,22 @@ are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 
 
 M4 is done for the exit fit. The order of work after the exit test is Jonathan's PR #24 (open, not a development PR).
 If PR #24 has merged, follow its order (its step 2 is to confirm the initial scope with Jonathan). If it has not merged,
-the candidate in the meantime is Priorities item 3, run time: `hgam.bam` on the exit model is 2.3x slower than mgcv with
-OpenBLAS's four default threads and 2.3x faster on one (`docs/findings/0002-exit-benchmark.md`). Capping threads through an
-environment variable needs no dependency; `threadpoolctl` would be a new optional extra, which is an "Always ask" item.
+the candidate is Priorities item 3, run time, and it waits on the question below (this run's PR,
+`dev/2026-11-17-blas-threads`). The profile is in `docs/findings/0002-exit-benchmark.md`: on four threads X'WX costs 23 ms
+a call in the fit (5 ms on one) and the penalty-block `eigh` 2.0 ms (0.10 ms), so a thread cap scoped to `bam_fitd` is
+the fix. Once answered: under (A) add `threadpoolctl` as an optional extra and wrap `bam_fitd` in
+`threadpool_limits(1)` when it imports (no-op otherwise); under (B) the same with a ctypes call to the loaded OpenBLAS's
+`set_num_threads`; under (C) nothing more; under (D) port `XWXd` (discrete.c) for the exit fit's terms. Then rerun
+`time_hgam.py` on default threads and add one row to finding 0002.
 
 ## Open items for Jonathan
 
-None.
+Run time (this run's PR). How should hgam stop OpenBLAS's default threads slowing the fit (2.2 to 3.1 s against
+mgcv's 0.98 s; 0.42 to 0.57 s on one thread)? (A) `threadpoolctl` as an optional extra, cap at one thread inside
+`bam_fitd` when it is installed; (B) no dependency, a ctypes call into the loaded OpenBLAS, which works only for
+OpenBLAS builds and changes a process-wide setting for the length of the fit; (C) document `OPENBLAS_NUM_THREADS=1`
+only (done in this PR's README); (D) port mgcv's `XWXd` so X'WX is formed from the binned values, which is mgcv's own
+path but does not fix the `eigh` cost. Recommendation: (A), with (C) kept for users without the extra.
 
 Decided on PR #23 (2026-11-17): option (a). Ref.df is gated exact only where mgcv's rank is not set by rounding; on the
 exit fit's s(FaceSize,AttdAge), s(Smoke,AttdAge) and s(FaceSize,PolYear) it is reported, not gated, and those terms are
@@ -163,5 +173,5 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 None.
 
-PR #15 review nit (not done, predates it): an sz term's factor is assumed to be `variables[0]`; `s(x, f, bs="sz")`
-would fail with a bare `ValueError`, not a named refusal. Add the refusal when the sz parser is next touched.
+(PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
+the refusal. Removed from this list on 2026-11-17.)

@@ -164,8 +164,13 @@ Large data (about 30 million rows) is deferred: see `docs/DEFERRED.md`.
 
 ## Open items for Jonathan
 
-Open on PR #34 (`nthreads`): `threadpoolctl` was also put in the `dev` extra so CI runs the cap. Options: (a) keep
-it; (b) drop it from `dev` and add `--extra threads` to CI (touches `.github/`); (c) stub-only tests. Recommendation (a).
+Decided on PR #34 (2026-11-17): option (a), `threadpoolctl` stays in the `dev` extra so CI runs the cap. To remove it
+later: drop it from `dev` in `pyproject.toml`, run `uv lock`, and make `tests/test_nthreads.py` skip the tests that need
+the real package (it imports `threadpoolctl` at module level), or add `--extra threads` to CI.
+
+PR #34 review nits, for the next push to `hgam.frontend.threads`: `resolve_nthreads(0.5)` should become 1 (bam sends
+any value below 1 to 1; the whole-number check runs first today), and a length-1 sequence should be unwrapped as R
+treats it as a scalar, not refused as the two-element form.
 
 Decided on PR #32 (2026-11-17): option (a). The initial scope is confirmed against the pinned image (every checklist
 item inside its gate, largest margin Ve's diagonal 8.1e-5 against 1e-2). The next slices are in the order above.

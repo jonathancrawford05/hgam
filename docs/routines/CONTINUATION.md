@@ -1,6 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-second slice (M4: `gam.check`'s report). M4 is done for the exit fit. Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's twenty-third slice (run time: profile, README note, a question). M4 is
+done for the exit fit. Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -128,17 +129,31 @@ grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `E
 draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
 are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-## Next slice: after M4
+## Next slice: BLAS thread setting (Priorities item 3)
 
-M4 is done for the exit fit. The order of work after the exit test is Jonathan's PR #24 (open, not a development PR).
-If PR #24 has merged, follow its order (its step 2 is to confirm the initial scope with Jonathan). If it has not merged,
-the candidate in the meantime is Priorities item 3, run time: `hgam.bam` on the exit model is 2.3x slower than mgcv with
-OpenBLAS's four default threads and 2.3x faster on one (`docs/findings/0002-exit-benchmark.md`). Capping threads through an
-environment variable needs no dependency; `threadpoolctl` would be a new optional extra, which is an "Always ask" item.
+Jonathan decided on PR #31 (2026-11-17): option (A), as a setting. If PR #24 has merged first, follow its order instead
+(its step 2 is to confirm the initial scope with Jonathan), and do this slice when that order reaches run time.
+
+1. Read `bam` in bam.r (mgcv 1.9-4) for `nthreads`: its default (1), its two-element form, and where it is used.
+2. Add `threadpoolctl` as an optional extra (`hgam[threads]`; Jonathan approved it on PR #31, so the extra itself is
+   decided, but the PR still waits for his merge under SETTINGS condition 4).
+3. `hgam.bam(..., nthreads=1)`: inside `bam_fitd`, `threadpool_limits(nthreads, user_api="blas")` when
+   `threadpoolctl` imports. Without it, `nthreads=1` leaves BLAS as the process set it (the README note on
+   `OPENBLAS_NUM_THREADS=1` stays), and `nthreads > 1` raises naming the missing extra, so the argument is never
+   accepted and ignored. Forms of `nthreads` the port does not follow (for example the two-element vector) are refused.
+   The docstring says the limit is process-wide for the length of the fit, and that mgcv's `nthreads` drives its own
+   OpenMP code rather than BLAS, so this is a mapping onto mgcv's argument name, not a port of its threading.
+4. Test: the fit's key results are unchanged with and without the cap (the exit test), and the limit is restored
+   after the fit, including when the fit raises.
+5. Rerun `docs/findings/exit_benchmark/time_hgam.py` with default threads and the extra installed; add one row to
+   finding 0002.
+
+Large data (about 30 million rows) is deferred: see `docs/DEFERRED.md`.
 
 ## Open items for Jonathan
 
-None.
+Decided on PR #31 (2026-11-17): option (A) as a setting, `nthreads` with default 1 (next slice above); optimise for
+large data (about 30m rows) later (DEFERRED).
 
 Decided on PR #23 (2026-11-17): option (a). Ref.df is gated exact only where mgcv's rank is not set by rounding; on the
 exit fit's s(FaceSize,AttdAge), s(Smoke,AttdAge) and s(FaceSize,PolYear) it is reported, not gated, and those terms are
@@ -163,5 +178,5 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 None.
 
-PR #15 review nit (not done, predates it): an sz term's factor is assumed to be `variables[0]`; `s(x, f, bs="sz")`
-would fail with a bare `ValueError`, not a named refusal. Add the refusal when the sz parser is next touched.
+(PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
+the refusal. Removed from this list on 2026-11-17.)

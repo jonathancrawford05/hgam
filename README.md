@@ -12,8 +12,10 @@ family or option is refused by name with `NotImplementedError`. The exit test, t
 
 On the exit model, `hgam.bam` is faster than mgcv's `bam` when OpenBLAS runs on one thread and slower on its
 default of one thread per core, because the products inside the fit are small
-([docs/findings/0002-exit-benchmark.md](docs/findings/0002-exit-benchmark.md)). Until hgam caps the threads itself,
-set the variable before Python starts:
+([docs/findings/0002-exit-benchmark.md](docs/findings/0002-exit-benchmark.md)). With the optional extra
+`hgam[threads]` (threadpoolctl), `hgam.bam(..., nthreads=1)`, the default as in mgcv, caps BLAS at one thread for
+the length of the fit. The cap is process-wide while the fit runs. Without the extra, BLAS keeps its own thread
+count; set the variable before Python starts:
 
 ```bash
 OPENBLAS_NUM_THREADS=1 python your_script.py

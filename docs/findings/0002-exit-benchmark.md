@@ -12,8 +12,10 @@ more (a review rerun of 15 fits gave medians of 2.69 s and 3.28 s, 2.7 to 3.4 ti
 | mgcv `bam` | 0.97 to 0.98 | 0.92 | 1.12 | 1 |
 | hgam, OpenBLAS default threads (4) | 2.19 to 2.40 | 0.98 | 4.01 | about 2.3 times slower |
 | hgam, `OPENBLAS_NUM_THREADS=1` | 0.42 | 0.41 | 0.52 | about 2.3 times faster |
+| hgam, `nthreads=1` (default) with `hgam[threads]`, 2026-11-17 | 0.49 | 0.41 | 0.55 | about 2 times faster |
+| hgam, `nthreads=4` with `hgam[threads]`, 2026-11-17 | 1.98 | 0.94 | 3.97 | about 2 times slower |
 
-hgam is inside the ten-times rule, so nothing is tuned now. The default-threads row is slower and erratic because
+hgam is inside the ten-times rule. Since 2026-11-17 `hgam.bam`'s `nthreads` (default 1, as in mgcv) caps BLAS for the length of the fit when the optional extra `hgam[threads]` is installed; the last two rows are that setting, with no environment variable. The default-threads row is slower and erratic because
 OpenBLAS spreads small matrix products (a few hundred columns) over four threads; on one thread hgam is faster than
 mgcv. mgcv here runs on reference BLAS, so the single-thread comparison is not like for like on BLAS either.
 

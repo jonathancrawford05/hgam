@@ -20,7 +20,8 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "threadpoolctl>=3.1"]
+threads = ["threadpoolctl>=3.1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hgam"]

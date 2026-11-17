@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's fifteenth slice (M4: discrete bam's constraint rows). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's sixteenth slice (M4: `summary.gam`'s smooth-term table, Chi.sq and Ref.df). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -83,18 +83,30 @@ exit fit: intercept 4.8e-7 (was 3.6e-3), every coefficient 9.8e-7, se 4.1e-6, et
 beside prior weights is refused in a discrete fit (its order in the parametric frame is not carried). Tests: 665 pass,
 no xfail.
 
-## Next slice: the smooth-term table of `summary.gam` (M4)
+Smooth-term table, first step (section 16 and 18, `hgam.frontend.smooth_tests`, PR open): `summary()` of a discrete fit
+gives every fully penalised smooth (`null.space.dim == 0`) `reTest`'s Chi.sq and Ref.df (`reTest`, `recov` with no
+random terms, `mroot` via SciPy's `dpstrf`); `bam_fitd` carries X'WX (`EngineGAMFit.xwx`). Exit fit: Chi.sq 1.7e-6
+relative on all eight; Ref.df exact on five; the three sz terms give 7, 6, 5 vs mgcv's 11, 7, 6 (strict xfail, question
+on the PR). p-values are `None`. Tests: 674 pass, 3 strict xfail.
 
-Port `summary.gam`'s `s.table` for the exit fit at the Q2 gates: Ref.df exact; Chi.sq 1% relative; p-value 1e-3 absolute
-or 1% relative, whichever is larger. Every exit smooth has `null.space.dim == 0` (select=TRUE), so all go through
-`reTest` (mgcv.r ~3737) and `recov` (~3620), not `testStat`; the p-value is `psum.chisq` (~3487), which calls Davies'
-algorithm (C code `davies.c`) and falls back to `liu2` (~3521). Section 16's fixture already holds `s_table` (edf,
-Ref.df, Chi.sq, p-value); Ref.df there is 12, 5, 60, 11, 7, 6, 5, 13. If that is over 600 lines, do `recov` + `reTest`
-(Chi.sq and Ref.df) first and leave p refused. The Q2 row in `docs/PRIORITIES.md` is Jonathan's change; check it is there.
+## Next slice: the smooth-term p-value, `psum.chisq` (M4)
+
+If the PR's question is answered first, apply the answer to the three sz Ref.df tests. Then port `psum.chisq` (mgcv.r
+~3487): Davies' algorithm (mgcv's C `davies.c`, `qfc`), falling back to `liu2` (~3521) on `ifault` other than 0 and 2.
+Gate (Q2): p-value 1e-3 absolute or 1% relative, whichever is larger; section 16's `s_table[:, 3]` holds mgcv's. Measured
+this run: mgcv's own `psum.chisq` on hgam's eigenvalues gives mgcv's p to 3e-6, so the sz Ref.df gap does not move p.
+Five exit p-values are 0 (Chi.sq far in the tail); the three non-zero are 0.0886, 0.111, 0.223. `reTest` must return
+its eigenvalues for this (it computes them already). Over 600 lines: port `davies.c`'s `qf` first, test it against
+`psum.chisq` on a new small fixture, and wire it after.
 
 ## Open items for Jonathan
 
-None.
+Q (PR for slice sixteen): Ref.df of the three sz terms on the exit fit (7, 6, 5 vs mgcv's 11, 7, 6). Ref.df counts
+eigenvalues above `max * eps^0.8`, and `mroot(Ve[m, m])`'s rank comes from `dpstrf` stopping at the first non-positive
+pivot of a matrix whose spectrum runs to 1e-17, so the count is set by rounding (one honest attempt: the port follows
+mgcv's path with the same LAPACK routine). Options: (a) gate Ref.df exact only where mgcv's rank is not set by rounding,
+and gate the sz terms through Chi.sq and the p-value; (b) keep exact for all and leave the three strict xfails; (c) port
+something other than mgcv's rule. Recommendation: (a).
 
 Decided on PR #21 (2026-11-16): Q1 option (A): port mgcv's constraint rows for discrete bam, held to the
 "Deterministic pieces ... constraints" gate (done 2026-11-17, ADR 0002; the strict xfail is lifted). Q2 option (a): smooth-term tests are gated

@@ -404,4 +404,12 @@ put("bam_discrete_constraint_rows", list(
   constraint = list(s_AttdAge = con_dir(b17$smooth[[1]]), s_PolYear = con_dir(b17$smooth[[2]]),
                     ti_PolYear = con_dir(ti17$margin[[1]]), ti_AttdAge = con_dir(ti17$margin[[2]])),
   margin_terms = sapply(ti17$margin, function(m) m$term)))
+# 18. mroot (mgcv.r, method = "chol": chol(A, pivot = TRUE, tol = 0), LAPACK dpstrf), the square root reTest takes of
+# Ve[m, m] and recov of the total penalty (summary.gam's smooth-term tests, section 16's s_table). Two cases: a full-rank
+# positive definite 5 x 5 and a 4 x 4 with exact zero pivots (rank 2).
+set.seed(18); M18 <- matrix(rnorm(25), 5, 5); A18a <- crossprod(M18) + diag(5) * 0.1
+A18b <- matrix(c(4, 0, 2, 0,  0, 0, 0, 0,  2, 0, 5, 0,  0, 0, 0, 0), 4, 4)
+put("mroot_chol", list(cases = lapply(list(full = A18a, deficient = A18b), function(A) {
+  B <- mroot(A); list(A = A, B = B, rank = ncol(B))
+})))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

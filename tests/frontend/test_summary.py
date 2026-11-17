@@ -86,4 +86,4 @@ def test_the_text_report_names_what_it_omits_and_what_it_found() -> None:
     text = str(gam('y ~ s(x, k=8, bs="cr")', _frame(), "gaussian").summary())
     assert "Deviance explained" in text and "log10(sp)" in text
     assert "converged" in text and "epsilon_rel" in text
-    assert "No smooth-term tests" in text and "Pr(>|z|)" not in text
+    assert "p-values are not reported" in text and "Pr(>|z|)" not in text

@@ -576,6 +576,11 @@ class EngineGAMFit:
     """``X'WX`` at the fitter's last working weights (``crossprod(object$R)``), in the fit's
     (pivoted) column layout. Set only by the ``bam`` path; ``summary()``'s smooth-term tests
     (``reTest``) read it. ``None`` everywhere else."""
+    outer_grad: np.ndarray | None = None
+    """``bgam.fitd``'s ``object$outer.info$grad`` (the fREML gradient in ``log(sp)`` at the last
+    update). Set only by the ``bam`` path; ``gam_check`` prints it. ``None`` everywhere else."""
+    outer_hess: np.ndarray | None = None
+    """``bgam.fitd``'s ``object$outer.info$hess``, beside :attr:`outer_grad`."""
     fit_method: str = "REML"
     """``"REML"`` for :func:`fit_engine_gam`'s Laplace-REML search; ``"fREML-discrete"`` for
     the ``gam`` package's ``fit_engine_bam`` (``bam(method="fREML", discrete=TRUE)``'s

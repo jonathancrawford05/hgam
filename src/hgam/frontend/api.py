@@ -57,7 +57,7 @@ from hgam.frontend.formula import (
     TensorCall,
     parse_formula,
 )
-from hgam.frontend.gam_check import KCheckRow, k_check
+from hgam.frontend.gam_check import GamCheckReport, KCheckRow, gam_check, k_check
 from hgam.frontend.summary import GamSummary, build_summary
 
 __all__ = [
@@ -283,6 +283,20 @@ class GamFit(EngineGAMFit):
         """mgcv counterpart: ``k.check`` (plots.r), mgcv 1.9-4, after ``set.seed(seed)``; see
         :func:`hgam.frontend.gam_check.k_check`. ``data`` is the training frame."""
         return k_check(self, data, seed=seed, subsample=subsample, n_rep=n_rep)
+
+    def gam_check(
+        self,
+        data: Mapping[str, object],
+        *,
+        seed: int,
+        type: str = "deviance",
+        k_sample: int = 5000,
+        k_rep: int = 200,
+    ) -> GamCheckReport:
+        """mgcv counterpart: ``gam.check`` (plots.r), mgcv 1.9-4, without the plots, after
+        ``set.seed(seed)``; see :func:`hgam.frontend.gam_check.gam_check`. ``print()`` the result for
+        the text report."""
+        return gam_check(self, data, seed=seed, type=type, k_sample=k_sample, k_rep=k_rep)
 
     def encode(self, newdata: Mapping[str, object]) -> dict[str, np.ndarray]:
         """``newdata`` as the arrays :meth:`EngineGAMFit.predict` reads."""

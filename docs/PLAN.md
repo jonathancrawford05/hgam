@@ -8,7 +8,7 @@ About 40 pull-request-sized slices. The slice counts are rough estimates.
 | M1 gam core | `gam.setup`, `gam.fit3`, `newton`, REML, the derivative code (`gdi.c`) | 12 |
 | M2 Bases | The remaining bases and constructions, user-supplied knots | 10 |
 | M3 bam | `bgam.fitd` in full, `discrete.mf` with R's random number stream, `XWXd` | 8 |
-| M4 Inference | `predict`, `vcov`, `summary`, `gam.check` | 5 |
+| M4 Inference | `predict`, `vcov`, `summary`, `gam.check` (done for the exit fit, 2026-11-17) | 5 |
 | Packaging | Documentation, first release | 3 |
 
 ## M0, second slice: move the engine (done 2026-11-15)
@@ -81,4 +81,7 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - M4, `gam.check`, first step (2026-11-17, open): `k.check` (plots.r) as `GamFit.k_check(data, seed=)`, one-covariate
   smooths and the factor NA; exit fit k', edf and NA exact or in gate, k-index 6.8e-10, p exact under R's draws
   (`tests/test_k_check_bam.py`, section 21). Second step (2026-11-17): the tensor branch, so the exit fit's ti row has
-  k-index (1.3e-10 relative) and p (exact); `k.check` is done for the exit fit. Next: gam.check's printed report.
+  k-index (1.3e-10 relative) and p (exact); `k.check` is done for the exit fit.
+- M4, `gam.check` report (done 2026-11-17): `GamFit.gam_check(data, seed=)` gives what `gam.check` prints for the discrete
+  fit (method, optimizer, `outer.info` grad and Hessian, model rank, the k table after `qq.gam`'s ten draws), plots not
+  ported; rank 132 / 132 exact, k table exact (`tests/test_gam_check_bam.py`, section 22). **M4 is done for the exit fit.**

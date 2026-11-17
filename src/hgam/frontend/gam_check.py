@@ -27,7 +27,7 @@ from hgam.frontend.r_rng import RRandom
 if TYPE_CHECKING:
     from hgam.frontend.api import GamFit
 
-__all__ = ["KCheckRow", "deviance_residuals", "k_check"]
+__all__ = ["GamCheckReport", "KCheckRow", "deviance_residuals", "gam_check", "k_check"]
 
 
 @dataclass(frozen=True)
@@ -104,7 +104,8 @@ def _ti_neighbours(
     keep = ~is_self
     idx = idx[keep].reshape(-1, nn + 1)
     dist = dist[keep].reshape(-1, nn + 1)
-    if np.any(dist[:, nn - 1] == dist[:, nn]):
+    # A tie in exact arithmetic can differ by an ulp after rounding; treat a relative gap of 1e-12 as a tie.
+    if np.any(dist[:, nn] - dist[:, nn - 1] <= _TIE_RTOL * dist[:, nn]):
         raise HgamNotImplementedError(
             f"k_check: {label} has a distance tie at the third nearest neighbour; mgcv's kd-tree (k_nn) "
             "breaks it in its own order, which is not ported."
@@ -128,9 +129,15 @@ def k_check(
             nearest neighbours tie (see :func:`_ti_neighbours`).
         HgamValidationError: ``data`` does not have the fit's row count, or a covariate is missing.
     """
+    return _k_check(fit, data, RRandom(seed), subsample=subsample, n_rep=n_rep)
+
+
+def _k_check(
+    fit: "GamFit", data: Mapping[str, object], rng: RRandom, *, subsample: int, n_rep: int
+) -> tuple[KCheckRow, ...]:
+    """:func:`k_check` on an RNG stream already in use (``gam.check`` draws before it)."""
     rsd = deviance_residuals(fit)
     n = rsd.size
-    rng = RRandom(seed)
     rows_index = np.arange(n)
     if n > subsample:
         rows_index = rng.sample_int(n, subsample) - 1
@@ -176,3 +183,108 @@ def k_check(
         p_value = float(np.mean(ve < v_obs))
         out.append(KCheckRow(label, k_prime, edf, v_obs / float(np.mean(rsd**2)), p_value, "tested"))
     return tuple(out)
+
+
+_TIE_RTOL = 1e-12
+"""Relative gap between the third and fourth neighbour distances below which ``_ti_neighbours`` refuses."""
+
+_QQ_S_REP = 10
+"""``qq.gam``'s ``s.rep`` default: the number of ``sample(U, n)`` draws it makes at ``rep = 0``."""
+
+_K_FOOTNOTE = (
+    "Basis dimension (k) checking results. Low p-value (k-index<1) may\n"
+    "indicate that k is too low, especially if edf is close to k'."
+)
+
+
+@dataclass(frozen=True)
+class GamCheckReport:
+    """What ``gam.check`` prints for a ``bam(method = "fREML", discrete = TRUE)`` fit (no plots)."""
+
+    method: str
+    """``b$method``: ``"fREML"``."""
+    optimizer: tuple[str, str]
+    """``b$optimizer``: ``("perf", "chol")`` for ``bgam.fitd``."""
+    grad: np.ndarray
+    """``b$outer.info$grad``, printed by ``print(b$outer.info)`` (optimizer[2] is not newton/bfgs)."""
+    hess: np.ndarray
+    """``b$outer.info$hess``."""
+    rank: int
+    """``b$rank``: the rank of the penalised Cholesky factor (``Sl.fitChol``'s ``r``)."""
+    n_coef: int
+    """``length(b$coefficients)``."""
+    k_table: tuple[KCheckRow, ...]
+    """``k.check(b, subsample = k.sample, n.rep = k.rep)``."""
+
+    def __str__(self) -> str:
+        """The text ``gam.check`` prints. The method, rank and footnote lines are mgcv's. ``outer.info``
+        is formatted by NumPy, not R's ``print.default``. The k table uses fixed widths (3 decimals
+        for k' and edf, 2 for k-index and p-value), which is how ``printCoefmat(digits = 3)`` lays out
+        the exit fit's table; ``printCoefmat``'s general digit rules are not ported."""
+        lines = [f"Method: {self.method}   Optimizer: {' '.join(self.optimizer)}", "$grad"]
+        with np.printoptions(precision=6, floatmode="maxprec_equal", linewidth=80):
+            lines += [np.array2string(self.grad, formatter={"float_kind": "{: .6e}".format}), "", "$hess"]
+            lines += [np.array2string(self.hess, formatter={"float_kind": "{: .6e}".format}), ""]
+        lines += [f"Model rank =  {self.rank} / {self.n_coef} ", "", _K_FOOTNOTE, ""]
+        width = max(len(r.label) for r in self.k_table) if self.k_table else 0
+        k_prime = "k'"
+        lines.append(f"{'':<{width}} {k_prime:>6} {'edf':>6} {'k-index':>7} {'p-value':>7}")
+
+        def num(v: float | None, fmt: str, w: int) -> str:
+            return f"{'NA':>{w}}" if v is None else f"{v:{w}{fmt}}"
+
+        for r in self.k_table:
+            lines.append(
+                f"{r.label:<{width}} {r.k_prime:6.3f} {r.edf:6.3f} "
+                f"{num(r.k_index, '.2f', 7)} {num(r.p_value, '.2f', 7)}"
+            )
+        return "\n".join(lines)
+
+
+def gam_check(
+    fit: "GamFit",
+    data: Mapping[str, object],
+    *,
+    seed: int,
+    type: str = "deviance",
+    k_sample: int = 5000,
+    k_rep: int = 200,
+) -> GamCheckReport:
+    """mgcv counterpart: ``gam.check`` (plots.r), mgcv 1.9-4, without its four plots, run after
+    ``set.seed(seed)``, for a ``bam(method = "fREML", discrete = TRUE)`` fit.
+
+    ``bgam.fitd`` sets ``optimizer = c("perf", "chol")`` and ``outer.info = list(grad, hess)``, so
+    ``gam.check`` takes its ``print(b$outer.info)`` branch; then ``Model rank``; then ``k.check`` at
+    ``k.sample`` and ``k.rep``. Before that, ``qq.gam`` (``rep = 0``, the family has a quantile function)
+    draws ``s.rep = 10`` permutations ``sample(U, n)``; the plot is not ported, but the draws are made so
+    ``k.check`` sees R's stream. ``data`` is the training frame (see :func:`k_check`).
+
+    Raises:
+        HgamNotImplementedError: a fit not made by ``discrete=True`` (the REML gam path's ``outer.info``
+            and convergence lines come from mgcv's ``newton``, which hgam does not run), or ``type``
+            other than ``"deviance"`` (``k.check`` always uses deviance residuals; only the plots read
+            ``type``, and they are not ported).
+    """
+    if type != "deviance":
+        raise HgamNotImplementedError(
+            f"gam_check: type={type!r} is not ported; only the plots read it "
+            "(k.check uses deviance residuals)."
+        )
+    if fit.fit_method != "fREML-discrete" or fit.outer_grad is None or fit.outer_hess is None:
+        raise HgamNotImplementedError(
+            "gam_check: only a bam(method='fREML', discrete=True) fit is ported; the REML gam path's "
+            "convergence report (mgcv's newton outer.info) is not."
+        )
+    rng = RRandom(seed)
+    n = int(np.asarray(fit.eta).size)
+    for _ in range(_QQ_S_REP):
+        rng.sample_int(n, n)
+    return GamCheckReport(
+        method="fREML",
+        optimizer=("perf", "chol"),
+        grad=fit.outer_grad.copy(),
+        hess=fit.outer_hess.copy(),
+        rank=int(fit.coef.size),
+        n_coef=int(fit.coef_full.size),
+        k_table=_k_check(fit, data, rng, subsample=k_sample, n_rep=k_rep),
+    )

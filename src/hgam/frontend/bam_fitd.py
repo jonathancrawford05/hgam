@@ -167,6 +167,11 @@ class BamFitdResult:
     """``PP * scale`` (scale 1 for the supported families)."""
     xwx: np.ndarray
     """``X'WX`` at the last working weights, ``crossprod(object$R)`` (``summary.gam``'s tests)."""
+    grad: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    """``object$outer.info$grad``: ``Sl.fitChol``'s REML gradient in ``log(sp)`` at the last
+    smoothing-parameter update (the ``prop`` the loop ends with)."""
+    hess: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))
+    """``object$outer.info$hess``: that ``prop``'s REML Hessian (before the step's eigen-fix)."""
     trace: tuple[BamFitdIteration, ...] = field(default_factory=tuple)
 
 
@@ -211,6 +216,7 @@ def _weighted_cross_products(
 class _FitChol:
     beta: np.ndarray
     grad: np.ndarray
+    hess: np.ndarray
     step: np.ndarray
     pp: np.ndarray
     ldet_s: float
@@ -312,7 +318,7 @@ def _fit_chol(
         if ms > _SP_STEP_CAP:
             step = _SP_STEP_CAP * step / ms
     ldet_xxs = 2.0 * float(np.sum(np.log(np.diag(chol[0])) + np.log(d)))
-    return _FitChol(beta=beta, grad=grad, step=step, pp=pp, ldet_s=ldet_s, ldet_xxs=ldet_xxs)
+    return _FitChol(beta=beta, grad=grad, hess=hess, step=step, pp=pp, ldet_s=ldet_s, ldet_xxs=ldet_xxs)
 
 
 def bam_fitd(
@@ -470,5 +476,7 @@ def bam_fitd(
         edf=np.diag(f_mat).copy(),
         vp=prop.pp.copy(),
         xwx=xx.copy(),
+        grad=prop.grad.copy(),
+        hess=prop.hess.copy(),
         trace=tuple(trace),
     )

@@ -1,8 +1,8 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-third slice (run time: profile, README note, a question). M4 is
-done for the exit fit. Read `docs/PRIORITIES.md` before
-choosing work.
+Last updated: 2026-11-17, by the development run's twenty-fourth slice: the initial-scope confirmation PR that PLAN.md's
+"Order of work" step 2 asks for (`dev/2026-11-17-confirm-initial-scope`). Read `docs/PRIORITIES.md` before choosing
+work.
 
 ## State
 
@@ -129,10 +129,17 @@ grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `E
 draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
 are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-## Next slice: BLAS thread setting (Priorities item 3)
+## Next slice: waiting on Jonathan's confirmation of the initial scope
 
-Jonathan decided on PR #31 (2026-11-17): option (A), as a setting. If PR #24 has merged first, follow its order instead
-(its step 2 is to confirm the initial scope with Jonathan), and do this slice when that order reaches run time.
+PR #24 merged, so `docs/PLAN.md`'s "Order of work from here" applies. Step 2 is open: the confirmation PR
+(`dev/2026-11-17-confirm-initial-scope`) lists every initial-scope item with its test, fixture and numbers. No new
+work starts until Jonathan confirms on it. After he confirms, the order is: (1) the BLAS thread setting below
+(decided on PR #31, Priorities item 3), unless he says otherwise on the confirmation PR; (2) step 3's widening,
+starting with factor `by`.
+
+### Then: BLAS thread setting (Priorities item 3)
+
+Jonathan decided on PR #31 (2026-11-17): option (A), as a setting.
 
 1. Read `bam` in bam.r (mgcv 1.9-4) for `nthreads`: its default (1), its two-element form, and where it is used.
 2. Add `threadpoolctl` as an optional extra (`hgam[threads]`; Jonathan approved it on PR #31, so the extra itself is
@@ -151,6 +158,8 @@ Jonathan decided on PR #31 (2026-11-17): option (A), as a setting. If PR #24 has
 Large data (about 30 million rows) is deferred: see `docs/DEFERRED.md`.
 
 ## Open items for Jonathan
+
+Confirm the initial scope (PLAN.md step 2) on the confirmation PR. That PR's "Questions for Jonathan" holds the checklist.
 
 Decided on PR #31 (2026-11-17): option (A) as a setting, `nthreads` with default 1 (next slice above); optimise for
 large data (about 30m rows) later (DEFERRED).

@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-17 (twenty-fourth slice): initial-scope confirmation PR
+
+PR #31 auto-merged (six SETTINGS conditions posted; the branch delete was refused by the proxy). PR #24 has merged, so I followed PLAN.md step 2: a PR that changes only routine files and asks Jonathan to confirm the initial scope, with a checklist of each item, its test, fixture and numbers.
+Tests: 756 pass before and after, no xfail. `make lint` is clean. Pinned-image run (CI `oracle`, PR #31 head): 756 pass against the tier 3 fixtures.
+The numbers quoted are tier 1 (mgcv 1.9-1). CI does not print the tier 3 margins, and its artifacts are blocked here.
+Deferred: nothing new.
+
 ## 2026-11-17 (twenty-third slice, follow-up): Jonathan's answer on PR #31
 
 Jonathan chose option (A) as a setting: `nthreads` (default 1) caps BLAS through `threadpoolctl` inside `bam_fitd`; large data (about 30m rows) is deferred. Recorded in CONTINUATION (next slice) and DEFERRED; the review nit's timing ranges are added to finding 0002. Docs only.

@@ -21,7 +21,9 @@ mgcv. mgcv here runs on reference BLAS, so the single-thread comparison is not l
 
 `cProfile` over three fits on this machine (median 2.2 s on four threads, 0.69 s on one). In the fit,
 `_weighted_cross_products` (X'WX, 4000 x 132) takes 23 ms a call on four threads and 5 ms on one. `np.linalg.eigh` in
-`_fit_chol` (penalty blocks of at most 24 columns) takes 2.0 ms and 0.10 ms. The same calls timed alone in a loop run
+`_fit_chol` (penalty blocks of at most 24 columns) takes 2.0 ms and 0.10 ms. The four-thread figures vary about twofold
+between runs (the PR #31 review's rerun: X'WX 11 ms against 3.8 ms, `eigh` 0.93 ms against 0.07 ms); across both runs
+X'WX is 11 to 23 ms a call on four threads against 4 to 5 ms on one, and `eigh` 0.9 to 2.0 ms against 0.07 to 0.10 ms. The same calls timed alone in a loop run
 as fast or faster on four threads (X'WX 2.4 ms against 3.6 ms), so the cost is OpenBLAS waking its threads between
 small calls inside the fit, not the products themselves. A thread cap scoped to `bam_fitd` would remove it. NumPy and
 SciPy share one OpenBLAS here (`scipy_openblas64`).

@@ -1,5 +1,10 @@
 # Development session log
 
+## 2026-11-17 (twenty-third slice, follow-up): Jonathan's answer on PR #31
+
+Jonathan chose option (A) as a setting: `nthreads` (default 1) caps BLAS through `threadpoolctl` inside `bam_fitd`; large data (about 30m rows) is deferred. Recorded in CONTINUATION (next slice) and DEFERRED; the review nit's timing ranges are added to finding 0002. Docs only.
+Tests: 756 pass before and after, no xfail. `make lint` is clean.
+
 ## 2026-11-17 (twenty-third slice): run time, profile and a question
 
 No open development PR (PR #30 merged). Started Priorities item 3. The profile shows that on four threads OpenBLAS makes X'WX 4.5x slower and the penalty `eigh` 20x slower inside `bam_fitd`. A scoped cap needs a decision (threadpoolctl is "Always ask"), so this PR asks and adds only the README note and a finding addendum. The PR #15 sz nit was already handled.

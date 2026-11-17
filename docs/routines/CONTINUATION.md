@@ -129,26 +129,31 @@ grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `E
 draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
 are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-## Next slice: after M4
+## Next slice: BLAS thread setting (Priorities item 3)
 
-M4 is done for the exit fit. The order of work after the exit test is Jonathan's PR #24 (open, not a development PR).
-If PR #24 has merged, follow its order (its step 2 is to confirm the initial scope with Jonathan). If it has not merged,
-the candidate is Priorities item 3, run time, and it waits on the question below (this run's PR,
-`dev/2026-11-17-blas-threads`). The profile is in `docs/findings/0002-exit-benchmark.md`: on four threads X'WX costs 23 ms
-a call in the fit (5 ms on one) and the penalty-block `eigh` 2.0 ms (0.10 ms), so a thread cap scoped to `bam_fitd` is
-the fix. Once answered: under (A) add `threadpoolctl` as an optional extra and wrap `bam_fitd` in
-`threadpool_limits(1)` when it imports (no-op otherwise); under (B) the same with a ctypes call to the loaded OpenBLAS's
-`set_num_threads`; under (C) nothing more; under (D) port `XWXd` (discrete.c) for the exit fit's terms. Then rerun
-`time_hgam.py` on default threads and add one row to finding 0002.
+Jonathan decided on PR #31 (2026-11-17): option (A), as a setting. If PR #24 has merged first, follow its order instead
+(its step 2 is to confirm the initial scope with Jonathan), and do this slice when that order reaches run time.
+
+1. Read `bam` in bam.r (mgcv 1.9-4) for `nthreads`: its default (1), its two-element form, and where it is used.
+2. Add `threadpoolctl` as an optional extra (`hgam[threads]`; Jonathan approved it on PR #31, so the extra itself is
+   decided, but the PR still waits for his merge under SETTINGS condition 4).
+3. `hgam.bam(..., nthreads=1)`: inside `bam_fitd`, `threadpool_limits(nthreads, user_api="blas")` when
+   `threadpoolctl` imports. Without it, `nthreads=1` leaves BLAS as the process set it (the README note on
+   `OPENBLAS_NUM_THREADS=1` stays), and `nthreads > 1` raises naming the missing extra, so the argument is never
+   accepted and ignored. Forms of `nthreads` the port does not follow (for example the two-element vector) are refused.
+   The docstring says the limit is process-wide for the length of the fit, and that mgcv's `nthreads` drives its own
+   OpenMP code rather than BLAS, so this is a mapping onto mgcv's argument name, not a port of its threading.
+4. Test: the fit's key results are unchanged with and without the cap (the exit test), and the limit is restored
+   after the fit, including when the fit raises.
+5. Rerun `docs/findings/exit_benchmark/time_hgam.py` with default threads and the extra installed; add one row to
+   finding 0002.
+
+Large data (about 30 million rows) is deferred: see `docs/DEFERRED.md`.
 
 ## Open items for Jonathan
 
-Run time (this run's PR). How should hgam stop OpenBLAS's default threads slowing the fit (2.2 to 3.1 s against
-mgcv's 0.98 s; 0.42 to 0.57 s on one thread)? (A) `threadpoolctl` as an optional extra, cap at one thread inside
-`bam_fitd` when it is installed; (B) no dependency, a ctypes call into the loaded OpenBLAS, which works only for
-OpenBLAS builds and changes a process-wide setting for the length of the fit; (C) document `OPENBLAS_NUM_THREADS=1`
-only (done in this PR's README); (D) port mgcv's `XWXd` so X'WX is formed from the binned values, which is mgcv's own
-path but does not fix the `eigh` cost. Recommendation: (A), with (C) kept for users without the extra.
+Decided on PR #31 (2026-11-17): option (A) as a setting, `nthreads` with default 1 (next slice above); optimise for
+large data (about 30m rows) later (DEFERRED).
 
 Decided on PR #23 (2026-11-17): option (a). Ref.df is gated exact only where mgcv's rank is not set by rounding; on the
 exit fit's s(FaceSize,AttdAge), s(Smoke,AttdAge) and s(FaceSize,PolYear) it is reported, not gated, and those terms are

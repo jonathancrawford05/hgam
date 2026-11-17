@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-17 (twenty-seventh slice): factor `by` on cr, first widening slice (PLAN step 3)
+
+PR #34 had merged (Jonathan). Section 23 holds `s(x, by=f, bs="cr")` to `smoothCon`'s factor-by branch and to `f + s(x, by=f)` as a REML gam, a discrete bam and a discrete bam with `select=TRUE` plus predict on new data; the existing build already agreed, so no engine change. An ordered categorical is now refused by name.
+Tests: 762 → 767 (`tests/test_cr_by_factor.py`, five). `make lint` clean. Basis 1.7e-14; eta 5.7e-7 (gam) and 1.3e-13 (bam); se 5.6e-4 relative; edf diff 2.3e-4 of the gate width; structure, names and rank exact (tier 1, mgcv 1.9-1).
+Deferred: ordered factors (DEFERRED line). Next: `fs`.
+
 ## 2026-11-17 (twenty-sixth slice): `nthreads` as a BLAS cap (Priorities item 3, PR #31 option A)
 
 PR #33 auto-merged (six conditions posted; the branch delete was refused by the proxy again). `hgam.bam(..., nthreads=1)` maps bam's `nthreads` (read in bam.r 1.9-4: scalar expanded to `rep(n, 2)`, non-finite or < 1 becomes 1) onto `threadpool_limits(n, user_api="blas")` for the length of the fit, through the new extra `hgam[threads]`; without it only `nthreads=1` is accepted; the two-element form is refused.

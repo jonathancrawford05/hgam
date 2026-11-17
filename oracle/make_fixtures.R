@@ -491,4 +491,35 @@ untrace(k.check, where = asNamespace("mgcv")); invisible(dev.off())
 put("bam_discrete_exit_gam_check", list(seed = 22, k_sample = 5000, k_rep = 200, method = b14$method,
   optimizer = b14$optimizer, grad = as.numeric(b14$outer.info$grad), hess = unname(b14$outer.info$hess),
   rank = b14$rank, n_coef = length(b14$coefficients), names = rownames(kc22), k_table = unname(kc22), output = gc22))
+# 23. a factor by on a cr smooth (smoothCon, smooth.r): one copy of the smooth per level of f, each X multiplied by
+# that level's dummy and labelled s(x):f<level>. The sum-to-zero constraint is kept and taken on the whole,
+# un-multiplied X (before the by branch), so every copy has k - 1 coefficients. 23a: smoothCon's absorbed X and S
+# per level at supplied knots; 23b: a REML gam fit of f + s(x, by = f); 23c: the same with bam(discrete = TRUE);
+# 23d: 23c with select = TRUE, with predict.bam on new data.
+set.seed(23); n <- 1500
+d23 <- data.frame(x = runif(n, 1, 21), f = factor(sample(c("a", "b", "c"), n, TRUE), levels = c("a", "b", "c")),
+                  n = sample(20:200, n, TRUE))
+d23$p <- rbinom(n, d23$n, 1 - exp(-exp(-4 + 0.08 * (d23$x - 10) + c(0, 0.3, -0.2)[as.integer(d23$f)] +
+                                       c(0.2, -0.1, 0.4)[as.integer(d23$f)] * sin(d23$x / 3)))) / d23$n
+sm23 <- smoothCon(s(x, by = f, bs = "cr", k = 6), d23, knots = list(x = sz_knots), absorb.cons = TRUE)
+put("smoothcon_cr_by_factor", list(x = d23$x, group = as.integer(d23$f) - 1L, knots = sz_knots,
+  labels = sapply(sm23, function(s) s$label), by_levels = sapply(sm23, function(s) s$by.level),
+  X = lapply(sm23, function(s) s$X), S = lapply(sm23, function(s) s$S[[1]]), rank = sapply(sm23, function(s) s$rank)))
+f23 <- "p ~ f + s(x, by=f, bs='cr', k=6)"
+m23 <- gam(as.formula(f23), family = binomial(link = "cloglog"), weights = n, data = d23,
+           knots = list(x = sz_knots), method = "REML")
+put("gam_binomial_cloglog_by_factor_reml", c(gam_case(m23, d23, f23, "binomial(link='cloglog')"),
+  list(knots = list(x = sz_knots), rank = m23$rank, coef_names = names(coef(m23)))))
+b23 <- bam(as.formula(f23), family = binomial(link = "cloglog"), weights = n, data = d23, knots = list(x = sz_knots),
+           method = "fREML", discrete = TRUE)
+put("bam_discrete_binomial_cloglog_by_factor", bam_disc_case(b23, d23, f23, "binomial(link='cloglog')",
+  c(list(knots = list(x = sz_knots)), bam_rank(b23))))
+b23s <- bam(as.formula(f23), family = binomial(link = "cloglog"), weights = n, data = d23, knots = list(x = sz_knots),
+            method = "fREML", discrete = TRUE, select = TRUE)
+set.seed(230); nd23 <- data.frame(x = runif(200, 1, 21),
+                                  f = factor(sample(c("a", "b", "c"), 200, TRUE), levels = c("a", "b", "c")))
+pr23 <- predict(b23s, nd23, se.fit = TRUE)
+put("bam_discrete_binomial_cloglog_by_factor_select", bam_disc_case(b23s, d23, f23, "binomial(link='cloglog')",
+  c(list(knots = list(x = sz_knots), select = TRUE, newdata = nd23, fit_new = as.numeric(pr23$fit),
+         se_new = as.numeric(pr23$se.fit)), bam_rank(b23s))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

@@ -1,9 +1,8 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-sixth slice: `nthreads` as a BLAS cap
-(`dev/2026-11-17-nthreads`, Priorities item 3, Jonathan's option (A) on PR #31). PR #33 (the unseen-level refusal)
-has merged. Read `docs/PRIORITIES.md` before choosing
-work.
+Last updated: 2026-11-17, by the development run's twenty-seventh slice: factor `by` on cr, the first widening
+slice (`dev/2026-11-17-factor-by`, PLAN step 3). PR #34 (`nthreads`) has merged. Read `docs/PRIORITIES.md` before
+choosing work.
 
 ## State
 
@@ -130,32 +129,24 @@ grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `E
 draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
 are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-## Next slice: widening, starting with factor `by`
+Factor `by` on cr (section 23, `tests/test_cr_by_factor.py`, this run's PR): `s(x, by=f, bs="cr")` already agreed with
+mgcv, no engine change. `smoothCon`'s factor-by branch (smooth.r 1.9-4) keeps the sum-to-zero constraint taken on the
+whole un-multiplied X and makes one copy per level, labelled `s(x):f<level>`. Basis 1.7e-14; `f + s(x, by=f)` as a REML
+gam (eta 5.7e-7, se 5.6e-4), discrete bam (eta 5.6e-14) and discrete bam with `select=TRUE` (eta 1.3e-13, predict on
+new data 1.2e-13); structure, coefficient names and full rank exact; edf well inside the gate. An ordered categorical
+column is refused (`contr.poly`, and the dropped first level of an ordered by, are not ported). Tests: 767 pass, no xfail.
 
-Jonathan confirmed the initial scope on PR #32 (2026-11-17, option (a)). `docs/PLAN.md`'s "Order of work" step 3
-(widening) is open. Start it only after the `nthreads` PR has merged: it adds an optional extra, so Jonathan merges it
-(SETTINGS condition 4).
+## Next slice: widening, `fs`
 
-### Done in the last two PRs
-
-- The unseen-level refusal (PR #33, merged): at predict time, a factor level the fit did not see raises
-  `HgamNotImplementedError` naming mgcv's behaviour, from `_FactorCoding.encode(..., at_predict=True)` and the engine's
-  `_codes`. Review nit carried forward: the clause "predict.bamd sets that factor's dummies to zero" rests on
-  `predict.bamd`'s header comment (bam.r 1.9-4, lines 1777-1778); check it in R with a fixture when unseen-level
-  handling is ported.
-- `nthreads` (this run's PR): `hgam.bam(..., nthreads=1)` caps BLAS through `threadpoolctl` for the fit
-  (`hgam.frontend.threads`, `tests/test_nthreads.py`); the extra is `hgam[threads]`, and `threadpoolctl` is also in
-  `dev` so CI runs the cap. Benchmark row added to finding 0002 (0.49 s median at the default).
-
-### Then: factor `by` (PLAN step 3)
-
-`docs/SCOPE.md` lists `by` (numeric and factor); numeric `by` on cr is done (section 10). The front end already builds
-factor-by smooths, `s(x, by=f, bs="cr")` (`factor_by_terms` in `hgam.engine.gam_term_spec`, wired in
-`src/hgam/frontend/api.py`; `select=True` beside a bare smooth of the same variable is refused,
-`_refuse_select_with_bare_and_factor_by`), but no section of `oracle/make_fixtures.R` holds it to mgcv. First step:
-read `smoothCon`'s factor-by branch (smooth.r, mgcv 1.9-4: one copy per level, labels `s(x):fa`, and whether the
-sum-to-zero constraint is kept), add a fixture section with a REML gam fit and a discrete bam fit of
-`y ~ f + s(x, by=f, bs="cr")`, and hold basis, structure, eta, se and per-term edf to their gates. Fix what fails.
+`docs/PLAN.md` step 3's next construct is `fs` (factor smooth interaction). First step: read
+`smooth.construct.fs.smooth.spec` and `Predict.matrix.fs.interaction` (smooth.r, mgcv 1.9-4): the base smooth
+(`xt`, default tp; take `xt="cr"` first, as the exit formula's bases are cr), its penalty split into the range-space
+penalty and the null-space penalties repeated per level, no identifiability constraint (`C` zero rows), and the
+`gamm`-only side conditions. Check what `hgam.frontend.formula` does with `bs="fs"` today (it should refuse by name).
+Add section 24 of `oracle/make_fixtures.R`: `smoothCon(s(x, f, bs="fs", xt="cr", k=6), ...)` at `sz_knots` (X, S list,
+rank, labels), a REML gam fit and a discrete bam fit of `y ~ s(x, f, bs="fs", xt="cr", k=6)` on a frame like d23.
+Hold basis, structure, eta, se and per-term edf to their gates; port the constructor if hgam has none. If the
+constructor plus fixture exceeds about 600 lines, do the basis (with its fixture) first and leave the fit refusing.
 
 Fixture rule (from PR #32): every test module reads fixtures through `conftest.FIXTURES` or `load_fixture`, and a new
 test that holds a key result calls `margin(...)` so CI's `oracle` job prints it.

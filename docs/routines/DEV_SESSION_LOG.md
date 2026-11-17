@@ -1,5 +1,13 @@
 # Development session log
 
+## 2026-11-17 (nineteenth slice): vcov on the exit fit
+
+Ported `vcov.gam` (mgcv.r): `GamFit.vcov(freq=, dispersion=)` gives Vp, Ve (`Sl.postproc`'s `F %*% Vp`) and the dispersion rescaling; `GamFit.coefficient_names` gives `names(b14$edf)`. Section 20, `tests/test_vcov_bam.py`. PR #26 had merged; PR #24 (Jonathan's planning PR) is open and not a development PR.
+Tests: 727 pass before; 737 pass, no xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: Vp diagonal 8.3e-6 relative, Ve diagonal 8.7e-5, dispersion = 2 alike (gate 1%); names exact on 132 coefficients.
+Deferred: `unconditional=True` on a discrete fit is refused (mgcv's Vc is Sl.postproc's sp-corrected one, up to 4.07x Vp); the off-diagonal is reported, not gated.
+Review 4003b4e: should-fix 1, section 20b adds a gaussian REML fit: names exact, `dispersion = 2` diagonal 3.1e-6 (Vp 3.0e-6); should-fix 2, Vc is up to 4.07x Vp, not 3.1x. 739 pass.
+
 ## 2026-11-17 (eighteenth slice): the smooth-term p-value in summary()
 
 PR #25 auto-merged (six SETTINGS conditions checked and posted). `re_test` now returns `reTest`'s p-value, `psum_chisq(stat, ev)` (mgcv.r), and `summary()` of a discrete fit reports it (and prints it). New test in `tests/test_summary_bam.py`; no new fixture (section 16 already holds `s_table[:, 3]`).

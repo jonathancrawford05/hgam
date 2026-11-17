@@ -451,4 +451,21 @@ put("psum_chisq_davies", list(
   }),
   liu2 = list(x = c(-1, 0.5, 5, 30), lambda = c(2, 1, 0.5), h = c(1, 2, 1),
               p = mgcv:::liu2(c(-1, 0.5, 5, 30), c(2, 1, 0.5), h = c(1, 2, 1)))))
+# 20. vcov.gam (mgcv.r) of section 14's discrete fit b14: Vp (the default), Ve (freq = TRUE), Vc (unconditional = TRUE;
+# bgam.fitd's Sl.postproc sets it for a discrete fit), and a dispersion rescaling (dispersion * vc / sig2), under
+# names(b14$edf) as dimnames.
+put("bam_discrete_exit_vcov", list(
+  names = rownames(vcov(b14)), sig2 = b14$sig2, vc_is_null = is.null(b14$Vc),
+  Vp = unname(vcov(b14)), Ve = unname(vcov(b14, freq = TRUE)), Vc = unname(vcov(b14, unconditional = TRUE)),
+  Vp_dispersion_2 = unname(vcov(b14, dispersion = 2)), Ve_dispersion_2 = unname(vcov(b14, freq = TRUE, dispersion = 2))))
+# 20b. vcov.gam on a free-scale REML gam fit (gaussian): sig2 is estimated, so dispersion * Vp / sig2 is
+# dispersion * (X'WX + S)^-1 whatever the scale estimator; the names cover a factor's treatment columns and a cr smooth.
+set.seed(20); n20 <- 300
+d20 <- data.frame(x = runif(n20), g = factor(sample(c("a", "b", "c"), n20, TRUE), levels = c("a", "b", "c")))
+d20$y <- sin(2 * pi * d20$x) + c(a = 0, b = 0.4, c = -0.3)[as.character(d20$g)] + rnorm(n20, sd = 0.3)
+m20 <- gam(y ~ g + s(x, bs = "cr", k = 10), data = d20, method = "REML")
+put("gam_gaussian_vcov_reml", list(data = d20, formula = "y ~ g + s(x, bs='cr', k=10)", family = "gaussian",
+  method = "REML", levels = list(g = levels(d20$g)), names = rownames(vcov(m20)), sig2 = m20$sig2,
+  Vp = unname(vcov(m20)), Vp_dispersion_2 = unname(vcov(m20, dispersion = 2)),
+  se = as.numeric(predict(m20, se.fit = TRUE)$se.fit)))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

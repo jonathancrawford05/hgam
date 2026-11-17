@@ -44,7 +44,7 @@ from typing import Literal, overload
 
 import numpy as np
 
-from hgam.engine.gam_model import EngineGAMFit, fit_engine_gam
+from hgam.engine.gam_model import EngineGAMFit, fit_engine_gam, resolve_family
 from hgam.engine.gam_rank_pivot import unidentified_directions
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec, factor_by_terms
 from hgam.errors import HgamNotImplementedError, HgamValidationError
@@ -185,6 +185,96 @@ class GamFit(EngineGAMFit):
         smooths carry ``reTest``'s ``Chi.sq`` and ``Ref.df``; the p-value (``psum.chisq``) and
         ``testStat`` are not ported. ``print(fit.summary())`` renders it."""
         return build_summary(self, self.formula, self.smooth_labels, self.n_parametric, self.parametric_names)
+
+    @property
+    def coefficient_names(self) -> tuple[str, ...]:
+        """``names(coef(m))``, which ``vcov.gam`` takes as dimnames (``names(object$edf)``): the
+        parametric names, then each smooth's label with ``.1``, ``.2``, ... over its coefficients,
+        as ``gam.setup`` names them (``paste(label, 1:ncol(X), sep = ".")``)."""
+        names = list(self.parametric_names)
+        if len(names) != self.n_parametric:
+            raise HgamValidationError(
+                f"coefficient_names: {len(names)} parametric name(s) for {self.n_parametric} parametric "
+                "coefficients (this fit was not built by gam())."
+            )
+        blocks = {b["label"]: b for b in self.design["term_blocks"]}
+        for label in sorted(self.smooth_labels, key=lambda lab: int(blocks[lab]["start"])):
+            block = blocks[label]
+            if int(block["start"]) != len(names):
+                raise HgamValidationError(
+                    f"coefficient_names: smooth {label!r} starts at column {block['start']}, "
+                    f"not {len(names)}; the smooth blocks do not follow the parametric block in order."
+                )
+            names.extend(f"{label}.{i}" for i in range(1, int(block["end"]) - int(block["start"]) + 1))
+        if len(names) != self.coef_full.size:
+            raise HgamValidationError(
+                f"coefficient_names: {len(names)} names for {self.coef_full.size} coefficients."
+            )
+        return tuple(names)
+
+    def vcov(
+        self,
+        unconditional: bool = False,
+        *,
+        freq: bool = False,
+        dispersion: float | None = None,
+        sandwich: bool = False,
+    ) -> np.ndarray:
+        """mgcv counterpart: ``vcov.gam`` (mgcv.r), mgcv 1.9-4.
+
+        ``Vp`` (the Bayesian posterior covariance) by default; ``freq=True`` gives ``Ve``, the
+        frequentist covariance, which for a ``discrete=True`` fit is ``Sl.postproc``'s (bam.r)
+        ``F %*% Vp`` with ``F = PP %*% X'WX``, i.e. ``Vp X'WX Vp / sig2``; ``unconditional=True``
+        gives ``Vc`` where :meth:`EngineGAMFit.vcov` has it (a REML fit; refused for a
+        ``discrete=True`` fit, whose ``Vc`` comes from ``Sl.postproc``'s smoothing-parameter
+        correction, not ported). ``dispersion`` rescales as ``dispersion * vc / sig2``. Rows and
+        columns follow :attr:`coefficient_names` (``vcov.gam``'s dimnames). ``Ve`` is only ported
+        for a ``discrete=True`` fit, which carries ``X'WX``; ``sandwich=True`` (``gam.sandwich``)
+        is refused.
+
+        Raises:
+            HgamNotImplementedError: ``sandwich=True``; ``freq=True`` on a fit without ``X'WX``;
+                ``unconditional=True`` on a ``discrete=True`` fit; both ``freq`` and ``unconditional``.
+            HgamValidationError: ``dispersion`` not a positive finite number.
+        """
+        if sandwich:
+            raise HgamNotImplementedError("vcov(): sandwich=True (gam.sandwich, mgcv.r) is not ported.")
+        if freq and unconditional:
+            raise HgamNotImplementedError(
+                "vcov(): freq=True with unconditional=True is not ported as a combination "
+                "(vcov.gam ignores unconditional when freq=True); pass one of them."
+            )
+        family = resolve_family(self.model.family, self.model.link)
+        sig2 = 1.0 if family.dispersion_fixed else float(self.dispersion.fletcher)
+        if freq:
+            if self.xwx is None or self.vp_override is None:
+                raise HgamNotImplementedError(
+                    "vcov(): freq=True (Ve) is ported only for a discrete=True fit, which carries X'WX "
+                    "(bgam.fitd's Sl.postproc); the REML gam path's Ve (gam.fit3.post.proc) is not ported."
+                )
+            vp = self.vp_override
+            vc = vp @ self.xwx @ vp / sig2
+            vc = self._expand((vc + vc.T) / 2.0)
+        else:
+            vc = super().vcov(unconditional)
+        if dispersion is not None:
+            d = float(dispersion)
+            if not np.isfinite(d) or d <= 0.0:
+                raise HgamValidationError(
+                    f"vcov(): dispersion must be a positive finite number, got {dispersion!r}."
+                )
+            vc = d * vc / sig2
+        return vc
+
+    def _expand(self, v: np.ndarray) -> np.ndarray:
+        """``v`` from the fit's (pivoted) column layout to the full one, zero at pivoted-out columns."""
+        kept = self.design.get("kept_columns")
+        if kept is None:
+            return v
+        idx = np.asarray(kept, dtype=np.intp)
+        full = np.zeros((self.design["full_width"],) * 2, dtype=np.float64)
+        full[np.ix_(idx, idx)] = v
+        return full
 
     def encode(self, newdata: Mapping[str, object]) -> dict[str, np.ndarray]:
         """``newdata`` as the arrays :meth:`EngineGAMFit.predict` reads."""

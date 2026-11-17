@@ -564,4 +564,19 @@ m24c2 <- gam(as.formula(f24c2), family = binomial(link = "cloglog"), weights = n
              knots = list(x = sz_knots), method = "REML")
 put("gam_binomial_cloglog_factor_fs_reml", c(gam_case(m24c2, d24b, f24c2, "binomial(link='cloglog')"),
   list(knots = list(x = sz_knots), rank = m24c2$rank, coef_names = names(coef(m24c2)))))
+# 24d. fs in bam(method = "fREML", discrete = TRUE) on 24b's data. bam marks fs (tensor.possible) as a tensor.smooth.spec
+# with one margin per written term, so discrete.mf compresses x and f in written order; gam.setup then builds the term on
+# discrete.mf's padded frame mf0, so nat.param's P and smoothCon's penalty scaling are taken over mf0's rows, not the data.
+# Both written orders (the padding draws differ), with P and S recorded, predict.bam on 24b's new data, and summary's
+# s.table (fs has null.space.dim 0, so summary.gam takes reTest).
+for (f24d in c("p ~ s(x, f, bs='fs', xt='cr', k=6)", "p ~ s(f, x, bs='fs', xt='cr', k=6)")) {
+  b24d <- bam(as.formula(f24d), family = binomial(link = "cloglog"), weights = n, data = d24b,
+              knots = list(x = sz_knots), method = "fREML", discrete = TRUE)
+  pr24d <- predict(b24d, nd24b, se.fit = TRUE)
+  put(if (grepl("s\\(x, f", f24d)) "bam_discrete_binomial_cloglog_fs" else "bam_discrete_binomial_cloglog_fs_factor_first",
+      bam_disc_case(b24d, d24b, f24d, "binomial(link='cloglog')",
+        c(list(knots = list(x = sz_knots), P = b24d$smooth[[1]]$P, S = b24d$smooth[[1]]$S, newdata = nd24b,
+               fit_new = as.numeric(pr24d$fit), se_new = as.numeric(pr24d$se.fit),
+               s_table = unname(summary(b24d)$s.table)), bam_rank(b24d))))
+}
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

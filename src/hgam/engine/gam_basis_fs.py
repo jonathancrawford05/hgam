@@ -20,6 +20,10 @@ The construction, as mgcv runs it:
    ``c(rank * nf, rep(nf, null.d))``. No identifiability constraint (``C`` has no rows).
 4. ``smoothCon`` divides each penalty by ``norm(S) / norm(X, "I")^2``.
 
+In ``bam(discrete = TRUE)`` ``gam.setup`` runs all of this on ``discrete.mf``'s padded frame ``mf0``, not on
+the data, so ``P`` and the penalty scaling are taken over ``mf0``'s rows (``frame=`` below); the model matrix
+at the (binned) data rows is then ``Predict.matrix.fs.interaction`` with that ``P``, as ``Xd`` holds it.
+
 What is not reproducible element for element: the null space of ``R^-T S R^-1`` has two eigenvalues at
 rounding level (about 1e-19), so their order and signs are set by rounding. With ``dsyevr`` the two
 directions agree with mgcv's up to order and sign (measured on section 24), and an mgcv fit is unchanged
@@ -123,7 +127,13 @@ def _check_group(x: np.ndarray, group: np.ndarray, n_levels: int) -> None:
         raise HgamValidationError(f"fs basis: group codes must lie in [0, {n_levels}).")
 
 
-def fs_basis(x: np.ndarray, group: np.ndarray, n_levels: int, knots: np.ndarray) -> FsBasis:
+def fs_basis(
+    x: np.ndarray,
+    group: np.ndarray,
+    n_levels: int,
+    knots: np.ndarray,
+    frame: tuple[np.ndarray, np.ndarray] | None = None,
+) -> FsBasis:
     """mgcv counterpart: ``smooth.construct.fs.smooth.spec`` (smooth.r) with ``xt = "cr"``, then
     ``smoothCon``'s penalty scaling, mgcv 1.9-4 (module docstring).
 
@@ -132,10 +142,16 @@ def fs_basis(x: np.ndarray, group: np.ndarray, n_levels: int, knots: np.ndarray)
         group: 0-indexed level code per row (``as.integer(fac) - 1``), ``(n,)``.
         n_levels: ``length(levels(fac))``; every level gets a copy, observed or not, as in mgcv.
         knots: The cr knots, ``(k,)``.
+        frame: ``(x0, group0)``, the rows the smooth is constructed on when they are not the data's
+            (``bam(discrete = TRUE)``'s ``mf0``). ``None``: ``x`` and ``group`` themselves.
     """
     x = np.asarray(x, dtype=np.float64)
     group = np.asarray(group, dtype=np.int64)
     _check_group(x, group, n_levels)
+    if frame is not None:
+        built = fs_basis(frame[0], frame[1], n_levels, knots)
+        design = fs_predict_design(x, group, n_levels, knots, built.p_mat)
+        return FsBasis(design, built.penalties, built.rank, built.p_mat)
     base_x, base_s = _cr_basis_raw(x, np.asarray(knots, dtype=np.float64))
     k = base_x.shape[1]
     base_rank = k - 2  # smooth.construct.cr.smooth.spec: rank = k - 2, null.space.dim = 2

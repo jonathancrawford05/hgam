@@ -722,9 +722,11 @@ def _build_model(
             # mgcv's bs.dim for sz: prod(nf - 1) * the base smooth's bs.dim.
             smooth_meta.append((call.text, call.k * (len(levels) - 1)))
         elif isinstance(call, FsCall):
-            # mgcv counterpart: smooth.construct.fs.smooth.spec (smooth.r, mgcv 1.9-4), cr base, the non-gamm,
-            # non-tensor branch. The factor is found by type, so either written order is accepted; the label
-            # keeps the written order. Only the base term reads knots= (object$term without the factor).
+            # mgcv counterpart: smooth.construct.fs.smooth.spec (smooth.r, mgcv 1.9-4), cr base, the non-gamm
+            # branch. The factor is found by type, so either written order is accepted; the label keeps the
+            # written order. Only the base term reads knots= (object$term without the factor). In a discrete
+            # bam the term is built on discrete.mf's mf0 (fs_frame); the model matrix is the same per-level
+            # copies of Xb as the tensor.smooth.spec branch's two margins give.
             is_factor = [_is_factor(_column(df, v)) for v in call.variables]
             if sum(is_factor) != 1:
                 raise HgamNotImplementedError(
@@ -735,11 +737,6 @@ def _build_model(
             if select:
                 raise HgamNotImplementedError(
                     f"gam(): select=True with the fs term {call.text} is not measured against mgcv yet."
-                )
-            if tero:  # gam() sets tero exactly when discrete=True
-                raise HgamNotImplementedError(
-                    f"gam(): {call.text} in a discrete=True fit: bam builds fs with tensor-like margins "
-                    "(smooth.construct.fs.smooth.spec's tensor.smooth.spec branch), which is not ported."
                 )
             factor_name = call.variables[is_factor.index(True)]
             smoothed = call.variables[is_factor.index(False)]
@@ -753,6 +750,7 @@ def _build_model(
                     k=(call.k,),
                     knots=cr_knots(smoothed, call.k, call.text),
                     n_levels=len(levels),
+                    margin_order=call.variables,
                 )
             )
             # smooth.construct.fs.smooth.spec: bs.dim is ncol(X), the base bs.dim times nf.
@@ -854,7 +852,7 @@ def gam(
             Supported: a bare ``s(x, k=)`` / ``s(x, bs="tp", k=)`` (thin-plate, ``mgcv``'s
             default, ADR-261), ``s(x, bs="cr", k=, by=)`` (numeric or factor ``by``),
             ``s(f, bs="re")``, ``s(f, x, bs="sz", k=, xt=list(bs="cr"))``,
-            ``s(x, f, bs="fs", k=, xt="cr")`` (REML only, no ``select``),
+            ``s(x, f, bs="fs", k=, xt="cr")`` (no ``select``),
             ``ti(x, z, bs="cr", k=)``, factors ``a``, ``a:b``
             (with both main effects), ``offset(col)``. Anything else is refused by
             name (:class:`~hgam.errors.HgamValidationError`).

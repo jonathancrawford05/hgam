@@ -115,3 +115,7 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   smooth of x or a factor main effect, every gate met (section 24c). Refused:
   `discrete=True` (bam's tensor-like fs margins), `select=True`, `by=`, `m=`, the default tp base. Next: fs in
   discrete bam.
+- Widening, `fs` on cr, third step (2026-11-17): discrete bam. The term is built on `discrete.mf`'s `mf0` (`P` and
+  penalty scaling over its rows, margins compressed in written order): eta 6.1e-14, se 3.7e-14, `P` 1.3e-14,
+  predict on new data 6.3e-14, summary's Ref.df exact and Chi.sq 3e-14, both written orders (`tests/test_fs_fit.py`,
+  section 24d). Next: `select=TRUE` with fs.

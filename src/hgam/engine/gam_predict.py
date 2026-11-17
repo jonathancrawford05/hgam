@@ -45,6 +45,7 @@ from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
 from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
 from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
+from hgam.engine.gam_term_build import fs_frame
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 
@@ -137,7 +138,8 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         x = np.asarray(_column(data, smoothed, term), dtype=np.float64)
         knots = _knots_for(term, smoothed, term.k[0], x)
         group = _codes(data, factor_name, term.n_levels, term)
-        return TermState(term=term, knots=(knots,), fs_p=fs_basis(x, group, term.n_levels, knots).p_mat)
+        built = fs_basis(x, group, term.n_levels, knots, frame=fs_frame(term))
+        return TermState(term=term, knots=(knots,), fs_p=built.p_mat)
     if term.basis in ("re", "parametric"):
         return TermState(term=term)
     raise HgamValidationError(

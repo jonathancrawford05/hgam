@@ -21,6 +21,7 @@ from hgam.engine.gam_basis_cr import (
     constraint_rows,
     cr_basis,
     cr_default_knots,
+    frame_column,
     sz_basis,
     ti_basis,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "build_python_re_term",
     "build_python_sz_term",
     "build_python_fs_term",
+    "fs_frame",
     "build_python_ti_term",
     "build_python_tp_term",
 ]
@@ -261,12 +263,27 @@ def build_python_ti_term(x1: np.ndarray, x2: np.ndarray, term: TermSpec) -> Term
     )
 
 
+def fs_frame(term: TermSpec) -> tuple[np.ndarray, np.ndarray] | None:
+    """The ``(x0, group0)`` rows an ``fs`` term is constructed on inside an active
+    :func:`~hgam.engine.gam_basis_cr.constraint_frame` (``discrete.mf``'s ``mf0``), or ``None``."""
+    factor_name, smoothed_name = term.variables
+    x0 = frame_column(smoothed_name)
+    if x0 is None:
+        return None
+    g0 = frame_column(factor_name)
+    if g0 is None:
+        raise HgamValidationError(f"fs_frame: the frame carries {smoothed_name!r} but not {factor_name!r}.")
+    return np.asarray(x0, dtype=np.float64), np.asarray(g0, dtype=np.int64)
+
+
 def build_python_fs_term(x: np.ndarray, group: np.ndarray, term: TermSpec) -> TermExtract:
     """mgcv counterpart: ``smooth.construct.fs.smooth.spec`` with ``xt = "cr"`` and ``smoothCon``'s penalty
     scaling (smooth.r), mgcv 1.9-4, through :func:`~hgam.engine.gam_basis_fs.fs_basis`.
 
     ``term.variables`` is ``(factor_name, smoothed_name)``. The ``1 + null_dim`` penalties keep mgcv's
     ``rank`` vector (``rank * nf``, then ``nf`` per null-space direction). No constraint is absorbed.
+    Inside a :func:`~hgam.engine.gam_basis_cr.constraint_frame` (``bam(discrete = TRUE)``), ``P`` and the
+    penalty scaling are taken over that frame's rows (:func:`fs_frame`).
     """
     if term.basis != "fs" or term.n_levels is None:
         raise HgamValidationError(
@@ -277,7 +294,7 @@ def build_python_fs_term(x: np.ndarray, group: np.ndarray, term: TermSpec) -> Te
     supplied = term.knots_by_variable().get(term.variables[1])
     k = term.k[0]
     knots = np.asarray(supplied, dtype=np.float64) if supplied is not None else cr_default_knots(x, k)
-    basis = fs_basis(x, np.asarray(group, dtype=np.int64), term.n_levels, knots)
+    basis = fs_basis(x, np.asarray(group, dtype=np.int64), term.n_levels, knots, frame=fs_frame(term))
     return TermExtract(
         label=term.label,
         index_start=0,

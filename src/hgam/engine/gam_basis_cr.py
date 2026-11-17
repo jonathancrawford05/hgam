@@ -260,6 +260,7 @@ __all__ = [
     "constraint_frame",
     "constraint_rows",
     "cr_basis",
+    "frame_column",
     "cr_default_knots",
     "sum_to_zero_null_space",
     "sz_basis",
@@ -523,6 +524,23 @@ def constraint_frame(frame: Mapping[str, np.ndarray]) -> Iterator[None]:
         yield
     finally:
         _CONSTRAINT_FRAME.reset(token)
+
+
+def frame_column(variable: str) -> np.ndarray | None:
+    """The active :func:`constraint_frame`'s ``variable`` column, or ``None`` outside one (``gam()``:
+    smooths are built on the data rows). A basis built on the frame (``fs``'s ``nat.param``) reads it.
+
+    Raises:
+        HgamNotImplementedError: a frame is active but does not carry ``variable``.
+    """
+    frame = _CONSTRAINT_FRAME.get()
+    if frame is None:
+        return None
+    if variable not in frame:
+        raise HgamNotImplementedError(
+            f"frame_column: the discrete model frame has no column {variable!r} to build the basis over."
+        )
+    return np.asarray(frame[variable])
 
 
 def constraint_rows(variable: str, knots: np.ndarray) -> np.ndarray | None:

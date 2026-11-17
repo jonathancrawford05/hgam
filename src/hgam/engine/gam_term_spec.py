@@ -155,6 +155,10 @@ class TermSpec:
     by_factor: str | None = None
     by_level: int | None = None
     levels: tuple[int, ...] | None = None
+    margin_order: tuple[str, ...] | None = None
+    """``basis="fs"`` only: :attr:`variables` as written (mgcv's ``object$term``), which is the order
+    ``bam(discrete = TRUE)`` gives the term's margins and so the order ``discrete.mf`` compresses them in.
+    ``None`` means :attr:`variables`' order."""
 
     def knots_by_variable(self) -> dict[str, tuple[float, ...]]:
         """:attr:`knots` as a plain ``dict``, computed on demand.
@@ -241,6 +245,11 @@ class TermSpec:
                 raise HgamValidationError(
                     f"TermSpec {self.label!r} is basis='fs' with n_levels={self.n_levels!r}; fs needs "
                     "n_levels set, >= 2 (mgcv's length(levels(fac)))."
+                )
+            if self.margin_order is not None and sorted(self.margin_order) != sorted(self.variables):
+                raise HgamValidationError(
+                    f"TermSpec {self.label!r}: margin_order {self.margin_order} must reorder "
+                    f"variables {self.variables}."
                 )
         elif self.basis == "re":
             # mgcv's own asymmetry the other way from sz: a "re" term names a
@@ -387,6 +396,11 @@ class TermSpec:
                 f"TermSpec {self.label!r} has basis={self.basis!r} but sets "
                 f"n_levels={self.n_levels!r} — only a basis='sz'/'re' term, or a "
                 f"basis='cr' factor-by term, has a factor-level count."
+            )
+        if self.basis != "fs" and self.margin_order is not None:
+            raise HgamValidationError(
+                f"TermSpec {self.label!r} has basis={self.basis!r} but sets margin_order; "
+                "only an fs term does."
             )
         if self.basis != "parametric" and self.levels is not None:
             raise HgamValidationError(

@@ -1,5 +1,13 @@
 # Development session log
 
+## 2026-11-17 (eighteenth slice): the smooth-term p-value in summary()
+
+PR #25 auto-merged (six SETTINGS conditions checked and posted). `re_test` now returns `reTest`'s p-value, `psum_chisq(stat, ev)` (mgcv.r), and `summary()` of a discrete fit reports it (and prints it). New test in `tests/test_summary_bam.py`; no new fixture (section 16 already holds `s_table[:, 3]`).
+Tests: 726 pass before; 727 pass, no xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: p-value 3.2e-7 absolute at most on the eight exit smooths (gate 1e-3 or 1%); five are 0 in both.
+Deferred: the estimated-scale p-value (`psum.chisq(0, c(ev, -stat/k), ...)`) stays refused with `sig2 != 1`.
+Review 4fb2174 should-fix 1: the text report's footer depends on whether every p-value is filled (it said psum.chisq was not ported); both report tests updated. 727 pass.
+
 ## 2026-11-17 (seventeenth slice, review follow-up): PR #25 review b892122
 
 Should-fix 1: three section 19 cases (`aux_lim`, `cfe_fail`, `cfe_clamp`) hold davies.c's auxiliary-loop `lim` exit (p = 2, ifault 0, as mgcv), `cfe`'s fail return and `axl` clamp to mgcv. Nit 1: DEFERRED's liu2 line says chi2 only and lists the remaining unreached branches.

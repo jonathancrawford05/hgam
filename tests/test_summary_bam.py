@@ -6,7 +6,7 @@ factors given mgcv's level order (``Low, High``; R would sort the strings ``High
 absolute (the eta gate); Std. Error 1% relative (the se gate); per-term edf 0.05 absolute or 1%.
 z and p are functions of those two and are not gated. Smooth-term tests (reTest, Jonathan's PR #21 gates):
 Chi.sq 1% relative, Ref.df exact except on three sz terms where mgcv's rank is set by rounding (option a,
-PR #23); the p-value (psum.chisq) is not ported.
+PR #23); the p-value (psum.chisq) 1e-3 absolute or 1% relative, whichever is larger.
 
 The intercept is the level of ``s(AttdAge)``, so it meets the estimate gate only because each
 sum-to-zero constraint is taken over ``discrete.mf``'s padded frame, as bam(discrete = TRUE) takes it
@@ -104,7 +104,8 @@ def test_smooth_rows_and_scalars(exit_fit, ref):
     assert s.outer == "fREML performance iteration"
     text = str(s)
     assert "FaceSizeHigh:SmokeS" in text and "Pr(>|z|)" in text
-    assert "psum.chisq is not ported" in text and "fREML score is not ported" in text
+    assert "p from psum.chisq" in text and "fREML score is not ported" in text
+    assert "Smooth-term tests ('—')" not in text  # every exit smooth has its p-value (PR #26 review)
 
 
 def test_coefficient_names_follow_model_matrix():
@@ -122,7 +123,7 @@ def test_coefficient_names_follow_model_matrix():
 # by rounding.
 # On these three sz terms it counts eigenvalues of crossprod(Rm B), and B = mroot(Ve[m, m]) takes its rank
 # from dpstrf stopping at the first non-positive pivot of a matrix whose spectrum falls to 1e-17. Their Ref.df
-# is reported, not gated; Chi.sq (below) and, once ported, the p-value are gated for them.
+# is reported, not gated; Chi.sq and the p-value (below) are gated for them.
 SZ_REF_DF = ("s(FaceSize,AttdAge)", "s(Smoke,AttdAge)", "s(FaceSize,PolYear)")
 S_NAMES = json.loads((FIXTURES / "bam_discrete_exit_summary.json").read_text())["s_names"]
 
@@ -133,7 +134,14 @@ def test_smooth_null_space_and_chi_sq(exit_fit, ref):
     assert [t.null_space_dim for t in s.smooths] == ref["null_space_dim"]
     chi = np.array([t.chi_sq for t in s.smooths])
     np.testing.assert_allclose(chi, np.asarray(ref["s_table"])[:, 2], rtol=1e-2)
-    assert all(t.p_value is None for t in s.smooths)
+
+
+def test_smooth_p_values_meet_the_gate(exit_fit, ref):
+    """Q2 (PR #21): p-value 1e-3 absolute or 1% relative, whichever is larger, on all eight exit smooths,
+    the three sz terms whose Ref.df is not gated included (option (a), PR #23)."""
+    got = np.array([t.p_value for t in exit_fit.summary().smooths])
+    want = np.asarray(ref["s_table"])[:, 3]
+    assert np.all(np.abs(got - want) <= np.maximum(1e-3, 1e-2 * np.abs(want)))
 
 
 @pytest.mark.parametrize("label", [lab for lab in S_NAMES if lab not in SZ_REF_DF])

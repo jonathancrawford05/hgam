@@ -67,7 +67,7 @@ class SmoothSummary:
     chi_sq: float | None = None
     """``summary.gam``'s ``Chi.sq`` (``reTest``'s statistic); ``None`` where not ported."""
     p_value: float | None = None
-    """``summary.gam``'s p-value; ``psum.chisq`` is not ported, so always ``None`` for now."""
+    """``summary.gam``'s p-value (``reTest``: ``psum.chisq(Chi.sq, ev)``); ``None`` where not ported."""
 
     @property
     def saturated(self) -> bool:
@@ -140,13 +140,14 @@ class GamSummary:
         lines += [
             "",
             "Smooth terms:",
-            f"  {'term':<28}{'coef':>6}{'edf':>10}{'Ref.df':>8}{'Chi.sq':>12}   log10(sp)",
+            f"  {'term':<28}{'coef':>6}{'edf':>10}{'Ref.df':>8}{'Chi.sq':>12}{'p-value':>12}   log10(sp)",
         ]
         for s in self.smooths:
             sps = ", ".join(f"{v:.3f}" for v in s.log10_sp) or "—"
             ref_df = "—" if s.ref_df is None else str(s.ref_df)
             chi = "—" if s.chi_sq is None else f"{s.chi_sq:.5g}"
-            lines.append(f"  {s.label:<28}{s.n_coef:>6}{s.edf:>10.4f}{ref_df:>8}{chi:>12}   {sps}")
+            pv = "—" if s.p_value is None else f"{s.p_value:.3g}"
+            lines.append(f"  {s.label:<28}{s.n_coef:>6}{s.edf:>10.4f}{ref_df:>8}{chi:>12}{pv:>12}   {sps}")
         lines += [
             "",
             f"n = {self.n}   total edf = {self.edf_total:.4f}",
@@ -181,11 +182,15 @@ class GamSummary:
             lines.append(
                 f"Smoothed to the null space (upper bound of the search): {', '.join(self.at_bound_blocks)}"
             )
-        lines += [
-            "",
-            "Smooth-term p-values are not reported (psum.chisq is not ported). Ref.df and Chi.sq "
-            "are reTest's for fully penalised smooths of a discrete fit; '—' where not ported.",
-        ]
+        lines.append("")
+        if any(t.p_value is None for t in self.smooths):
+            lines.append(
+                "Smooth-term tests ('—') are reported only for fully penalised smooths of a discrete fit "
+                "with a fixed scale (reTest); testStat (terms with a null space), recov's random-effect "
+                "branch and the estimated-scale p-value are not ported."
+            )
+        else:
+            lines.append("Ref.df, Chi.sq and p-value are reTest's (p from psum.chisq, Davies' algorithm).")
         return "\n".join(lines)
 
 
@@ -361,7 +366,9 @@ def _with_smooth_tests(
     for sm in smooths:
         if sm.null_space_dim == 0 and not (random - {sm.label}):
             b = blocks[sm.label]
-            stat, rank = re_test(fit.coef, fit.xwx, s_total, fit.vp_override, slice(b["start"], b["end"]))
-            sm = replace(sm, ref_df=rank, chi_sq=stat)
+            stat, rank, pval = re_test(
+                fit.coef, fit.xwx, s_total, fit.vp_override, slice(b["start"], b["end"])
+            )
+            sm = replace(sm, ref_df=rank, chi_sq=stat, p_value=pval)
         out.append(sm)
     return tuple(out)

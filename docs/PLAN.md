@@ -70,5 +70,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   (4.8e-7) and the strict xfail is lifted. Next: the smooth-term table of `summary.gam`.
 - M4, `summary` smooth-term table, first step (done 2026-11-17, PR #23): `reTest` / `recov` / `mroot` give Chi.sq (all
   eight exit smooths, 1.7e-6) and Ref.df (exact on five; three sz terms reported, not gated: option (a)).
-- M4, `summary` smooth-term p-value, first step (2026-11-17, open): `psum.chisq`, Davies' `davies.c` and `liu2` ported
-  (`hgam.frontend.davies`, `tests/test_psum_chisq.py`, section 19). Next: wire `reTest`'s eigenvalues into `summary()`.
+- M4, `summary` smooth-term p-value, first step (done 2026-11-17, PR #25): `psum.chisq`, Davies' `davies.c` and `liu2`
+  ported (`hgam.frontend.davies`, `tests/test_psum_chisq.py`, section 19).
+- M4, `summary` smooth-term p-value wired (2026-11-17, open): `re_test` returns `reTest`'s p-value and `summary()`
+  reports it; exit fit 3.2e-7 at most (`tests/test_summary_bam.py`, section 16). `summary` is done for the exit fit.
+  Next: `vcov`.

@@ -18,8 +18,17 @@ import numpy as np
 
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec
 from hgam.errors import HgamNotImplementedError, HgamValidationError
+from hgam.frontend.r_rng import RRandom
 
-__all__ = ["CompressedTerm", "compress_covariates", "default_m", "discretise_frame"]
+__all__ = [
+    "CompressedTerm",
+    "compress_covariates",
+    "default_m",
+    "discrete_model_frame",
+    "discretise_frame",
+]
+
+_DISCRETE_SEED = 8547  # discrete.mf's temp.seed(8547), bam.r
 
 _M_ONE_D = 1000
 _M_TWO_D = 100
@@ -75,20 +84,23 @@ def compress_covariates(
     factors: frozenset[str] = frozenset(),
     *,
     m: int | None = None,
+    rng: RRandom | None = None,
 ) -> CompressedTerm:
     """mgcv counterpart: ``compress.df`` (bam.r), read from mgcv 1.9-1.
 
     Port of ``mgcv:::compress.df`` for one term's covariate columns.
 
-    One departure: mgcv shuffles the unique rows (``ii <- sample(1:nrow(xu))``) and remaps the
-    index; this port returns them in ``np.unique`` lexicographic order, so the cell partition
-    matches mgcv's but the cell labels do not. Reproducing R's random number stream is M3 work.
+    ``uniquecombs(dat, TRUE)`` returns the unique rows sorted, as ``np.unique`` does. mgcv then
+    shuffles them (``ii <- sample(1:nrow(xu), nrow(xu)); xu[ii, ] <- xu``) and remaps the index.
+    With ``rng`` (R's stream, :class:`~hgam.frontend.r_rng.RRandom`) the shuffle is drawn as
+    mgcv draws it; without it the rows stay sorted. Either way ``row_values`` is unchanged.
 
     Args:
         columns: name to 1-d float array (numeric) or integer codes (factor), equal length.
         factors: names in ``columns`` that are factors (never binned; they multiply the
             threshold by their number of levels).
         m: ``bam``'s ``m`` argument (``None`` = the defaults).
+        rng: R's stream to draw the shuffle from (``None``: no shuffle, no draw).
 
     Raises:
         HgamValidationError: empty input, ragged columns, or non-finite values.
@@ -137,12 +149,101 @@ def compress_covariates(
             binned=binned,
         )
     uniq, inverse = _unique_rows([arrays[k] for k in names])
+    if rng is not None:
+        ii = rng.sample_int(uniq.shape[0], uniq.shape[0]) - 1
+        shuffled = np.empty_like(uniq)
+        shuffled[ii] = uniq
+        uniq, inverse = shuffled, ii[inverse]
     return CompressedTerm(
         names=names,
         values={k: uniq[:, i] for i, k in enumerate(names)},
         index=inverse,
         binned=binned,
     )
+
+
+def _smooth_margins(term: TermSpec) -> tuple[str, ...]:
+    """Every covariate ``discrete.mf`` compresses for one smooth, in its order: the ``by``
+    variable (numeric or factor) first, then each one-covariate margin. ``sz`` is a tensor of
+    one-covariate margins there (``tensor.possible``, bam.r), factor first; ``re`` is its factor."""
+    if term.basis == "parametric":
+        return ()
+    if term.basis not in ("cr", "ti", "sz", "re"):
+        raise HgamNotImplementedError(
+            f"discrete_model_frame: {term.basis!r} terms are not discretised "
+            "(only cr, ti, sz, re and factors)."
+        )
+    by = term.by if term.by is not None else term.by_factor
+    return ((by,) if by is not None else ()) + term.variables
+
+
+def _factor_names(model: ModelSpec) -> frozenset[str]:
+    names: set[str] = set()
+    for term in model.terms:
+        if term.basis in ("parametric", "re"):
+            names.update(term.variables)
+        elif term.basis == "sz":
+            names.add(term.variables[0])
+        if term.by_factor is not None:
+            names.add(term.by_factor)
+    return frozenset(names)
+
+
+def discrete_model_frame(
+    model: ModelSpec, data: Mapping[str, np.ndarray], response: np.ndarray
+) -> dict[str, np.ndarray]:
+    """mgcv counterpart: ``discrete.mf`` (bam.r) with ``full = TRUE``, mgcv 1.9-1 (unchanged in
+    1.9-4): the padded frame ``mf0`` that ``bam(discrete=TRUE)`` hands ``gam.setup``.
+
+    Under ``temp.seed(8547)`` each covariate is compressed once (``compress.df``, shuffled): first
+    every smooth's ``by`` and margins in term order, then the parametric frame's columns not yet
+    done, in ``model.frame``'s order: the response, the factors of the parametric terms (R's
+    ``terms`` order: by degree, then as written), ``(weights)``, the offset. Every column is then
+    padded to the longest with ``sample(mf0[[i]], maxr - me, replace = TRUE)``, in that order.
+    ``smoothCon`` takes each sum-to-zero constraint as ``colMeans(X)`` over these rows.
+
+    Returns each compressed column under its name (the response under ``"(response)"``),
+    ``maxr`` rows each. An offset beside prior weights is refused: whether the offset sits before
+    ``(weights)`` (written in the formula) or after it (``offset=``) is not carried by the model.
+    """
+    if model.offset_column is not None and model.weights_column is not None:
+        raise HgamNotImplementedError(
+            "discrete_model_frame: an offset together with prior weights is not ported "
+            "(their order in discrete.mf's parametric frame depends on how the offset was given)."
+        )
+    factors = _factor_names(model)
+    columns: dict[str, np.ndarray] = {}
+    for term in model.terms:
+        for name in _smooth_margins(term):
+            if name not in columns:
+                columns[name] = np.asarray(data[name], dtype=np.float64)
+    smooth_names = list(columns)
+    parametric = sorted((t for t in model.terms if t.basis == "parametric"), key=lambda t: len(t.variables))
+    pmf: dict[str, np.ndarray] = {"(response)": np.asarray(response, dtype=np.float64)}
+    for term in parametric:
+        for name in term.variables:
+            pmf.setdefault(name, np.asarray(data[name], dtype=np.float64))
+    for extra in (model.weights_column, model.offset_column):
+        if extra is not None:
+            pmf.setdefault(extra, np.asarray(data[extra], dtype=np.float64))
+    rng = RRandom(_DISCRETE_SEED)
+    mf0: dict[str, np.ndarray] = {}
+    for name in smooth_names + [n for n in pmf if n not in columns]:
+        values = columns[name] if name in columns else pmf[name]
+        flag = frozenset({name}) if name in factors else frozenset()
+        mf0[name] = compress_covariates({name: values}, flag, rng=rng).values[name]
+    maxr = max(v.shape[0] for v in mf0.values())
+    for name, values in mf0.items():
+        me = values.shape[0]
+        if me < maxr:
+            if me == 1 and name not in factors:
+                raise HgamNotImplementedError(
+                    f"discrete_model_frame: {name!r} has one distinct value; R's sample() then "
+                    "draws from 1:x, which is not ported."
+                )
+            pads = values[rng.sample_int(me, maxr - me, replace=True) - 1]
+            mf0[name] = np.concatenate([values, pads])
+    return mf0
 
 
 def _numeric_margins(term: TermSpec) -> tuple[str, ...]:
@@ -172,8 +273,7 @@ def discretise_frame(model: ModelSpec, data: Mapping[str, np.ndarray]) -> dict[s
     every such column replaced by its discretised value per data row, so a design built on it
     equals mgcv's ``Xd[[j]][k[, j], ]`` row for row. mgcv builds its bases on the padded frame
     of unique values instead; basis placement (``place.knots`` takes unique values) is the same,
-    the sum-to-zero constraint is taken over the data rows here rather than over mgcv's padded
-    frame (``docs/DEFERRED.md``).
+    and the sum-to-zero constraints are taken over that frame (:func:`discrete_model_frame`).
     """
     out = dict(data)
     done: set[str] = set()

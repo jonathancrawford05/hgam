@@ -6,10 +6,10 @@ factors given mgcv's level order (``Low, High``; R would sort the strings ``High
 absolute (the eta gate); Std. Error 1% relative (the se gate); per-term edf 0.05 absolute or 1%.
 z and p are functions of those two and are not gated. The smooth-term tests are not ported yet.
 
-The intercept misses the estimate gate (3.6e-3; strict xfail below, the acceptance test ahead of the
-fix): the gap is entirely the level of ``s(AttdAge)``, whose sum-to-zero constraint bam(discrete = TRUE)
-takes over a row set hgam's ``unique_row_constraint`` does not reproduce (its shape agrees to 8e-6).
-The pull request asks Jonathan."""
+The intercept is the level of ``s(AttdAge)``, so it meets the estimate gate only because each
+sum-to-zero constraint is taken over ``discrete.mf``'s padded frame, as bam(discrete = TRUE) takes it
+(``tests/test_discrete_constraint_rows.py``, section 17).
+Over one row per distinct value it missed by 3.6e-3."""
 
 import json
 from pathlib import Path
@@ -77,19 +77,13 @@ def test_parametric_table_meets_the_gates(exit_fit, ref):
     table = np.asarray(ref["p_table"])
     est = np.array([r.estimate for r in s.parametric])
     se = np.array([r.std_error for r in s.parametric])
-    # every coefficient but the intercept (test_intercept_meets_the_estimate_gate)
-    assert np.max(np.abs(est[1:] - table[1:, 0])) < 1e-3
+    assert np.max(np.abs(est - table[:, 0])) < 1e-3
     np.testing.assert_allclose(se, table[:, 1], rtol=1e-2)
     # z and p are est / se and 2 * pnorm(-|z|), as summary.gam computes them.
     for r in s.parametric:
         np.testing.assert_allclose(r.z, r.estimate / r.std_error, rtol=1e-14)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="s(AttdAge)'s identifiability constraint in bam(discrete=TRUE) is taken over a row set "
-    "unique_row_constraint does not reproduce: the intercept is 3.6e-3 off (question on the PR).",
-)
 def test_intercept_meets_the_estimate_gate(exit_fit, ref):
     s = exit_fit.summary()
     assert s.parametric is not None

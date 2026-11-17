@@ -18,6 +18,7 @@ from hgam.engine.gam_basis_cr import (
     absorb_sum_to_zero_constraint,
     by_factor_mask_design,
     by_scale_design,
+    constraint_rows,
     cr_basis,
     cr_default_knots,
     sz_basis,
@@ -157,7 +158,8 @@ def build_python_cr_term(x: np.ndarray, term: TermSpec, by: np.ndarray | None = 
         design = by_scale_design(design_unc, by)
         s = s_unc
     else:
-        design, s = absorb_sum_to_zero_constraint(design_unc, s_unc)
+        rows = constraint_rows(term.variables[0], knots)
+        design, s = absorb_sum_to_zero_constraint(design_unc, s_unc, rows)
     rank = int(np.linalg.matrix_rank(s))
 
     return TermExtract(
@@ -235,7 +237,14 @@ def build_python_ti_term(x1: np.ndarray, x2: np.ndarray, term: TermSpec) -> Term
     knots1 = np.asarray(supplied1, dtype=np.float64) if supplied1 is not None else cr_default_knots(x1, k1)
     knots2 = np.asarray(supplied2, dtype=np.float64) if supplied2 is not None else cr_default_knots(x2, k2)
 
-    design, s1, s2 = ti_basis(x1, x2, knots1, knots2)
+    design, s1, s2 = ti_basis(
+        x1,
+        x2,
+        knots1,
+        knots2,
+        constraint_rows1=constraint_rows(var1, knots1),
+        constraint_rows2=constraint_rows(var2, knots2),
+    )
     rank1 = int(np.linalg.matrix_rank(s1))
     rank2 = int(np.linalg.matrix_rank(s2))
 
@@ -415,7 +424,8 @@ def build_python_cr_by_factor_term(x: np.ndarray, group: np.ndarray, term: TermS
     knots = np.asarray(supplied, dtype=np.float64) if supplied is not None else cr_default_knots(x, k)
 
     design_unc, s_unc = cr_basis(x, knots)
-    design_shared, s = absorb_sum_to_zero_constraint(design_unc, s_unc)
+    rows = constraint_rows(term.variables[0], knots)
+    design_shared, s = absorb_sum_to_zero_constraint(design_unc, s_unc, rows)
     design = by_factor_mask_design(design_shared, group, term.by_level)
     rank = int(np.linalg.matrix_rank(s))
 

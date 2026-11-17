@@ -9,7 +9,9 @@ search. The smoothing parameters are therefore the *iteration's end state*, whic
 ``bam`` reports and why exact-REML ``gam`` sits ~1e-2 from it on weak-signal cells.
 
 The covariates are first discretised as ``discrete.mf`` (bam.r) does
-(:func:`~hgam.frontend.discrete.discretise_frame`); without that step the fit is mgcv's
+(:func:`~hgam.frontend.discrete.discretise_frame`), and every sum-to-zero constraint is taken over
+``discrete.mf``'s padded frame (:func:`~hgam.frontend.discrete.discrete_model_frame`), as ``gam.setup``
+takes it there. Without the binning the fit is mgcv's
 ``bam(discrete=FALSE)`` instead (``make_fixtures.R`` section 12 records both).
 
 **Not ported (refused by name).** Free-scale and quasi families, ``gamma != 1``, and anything
@@ -20,7 +22,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from hgam.engine.gam_basis_cr import unique_row_constraint
+from hgam.engine.gam_basis_cr import constraint_frame
 from hgam.engine.gam_model import (
     EngineGAMFit,
     _dispersion_or_nan,
@@ -34,7 +36,7 @@ from hgam.engine.gam_predict import fit_term_state
 from hgam.engine.gam_term_spec import ModelSpec
 from hgam.errors import HgamNotImplementedError
 from hgam.frontend.bam_fitd import bam_fitd
-from hgam.frontend.discrete import discretise_frame
+from hgam.frontend.discrete import discrete_model_frame, discretise_frame
 
 __all__ = ["fit_engine_bam"]
 
@@ -68,8 +70,11 @@ def fit_engine_bam(model: ModelSpec, data: Mapping[str, np.ndarray], y: np.ndarr
         )
     # discrete.mf (bam.r): every numeric covariate is binned before the design is built, so the
     # fit, its edf and its term states (prediction) are at the discretised covariates.
+    # gam.setup builds every smooth on discrete.mf's padded frame, so smoothCon's sum-to-zero
+    # constraints are colMeans over its rows (discrete_model_frame), not over the data rows.
+    mf0 = discrete_model_frame(model, data, y)
     data = discretise_frame(model, data)
-    with unique_row_constraint():
+    with constraint_frame(mf0):
         full_design = assemble_model_design(model, data)
     design = pivot_design(full_design)
     # A structurally redundant coefficient (a bare s(x) beside s(x, by=f), ADR-256) is pivoted
@@ -90,7 +95,7 @@ def fit_engine_bam(model: ModelSpec, data: Mapping[str, np.ndarray], y: np.ndarr
     for lj, block in zip(lam, design["penalty_blocks"], strict=True):
         penalty = penalty + lj * block
     edf_total = float(np.sum(res.edf))
-    with unique_row_constraint():
+    with constraint_frame(mf0):
         term_states = tuple(fit_term_state(term, data) for term in model.terms)
     return EngineGAMFit(
         model=model,

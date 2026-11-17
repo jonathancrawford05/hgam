@@ -236,31 +236,36 @@ class TestGamEntryPoint:
             gam('y ~ s(age, bs="cr", k=8)', df, "gaussian", method="fREML", discrete=True)
 
 
-class TestUniqueRowConstraint:
-    """``unique_row_constraint``: the sum-to-zero constraint from one row per distinct value."""
+class TestConstraintFrame:
+    """``constraint_frame``: the sum-to-zero constraint over a supplied frame's rows."""
 
-    def test_default_is_data_rows_and_the_context_switches_to_unique_values(self) -> None:
+    def test_default_is_data_rows_and_the_context_switches_to_the_frame(self) -> None:
         from hgam.engine.gam_basis_cr import (
+            constraint_frame,
+            constraint_rows,
             cr_basis,
             cr_default_knots,
             sum_to_zero_null_space,
-            unique_row_constraint,
         )
+        from hgam.errors import HgamNotImplementedError
 
         x = np.concatenate(
             [np.full(50, 1.0), np.full(5, 2.0), np.full(5, 3.0), np.full(5, 4.0), np.full(5, 5.0)]
         )
         knots = cr_default_knots(x, 4)
         design = cr_basis(x, knots)[0]
-        z_data = sum_to_zero_null_space(design)
-        with unique_row_constraint():
-            z_unique = sum_to_zero_null_space(design)
+        assert constraint_rows("x", knots) is None
+        z_data = sum_to_zero_null_space(design, constraint_rows("x", knots))
+        frame_x = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 2.0])
+        with constraint_frame({"x": frame_x}):
+            z_frame = sum_to_zero_null_space(design, constraint_rows("x", knots))
+            with pytest.raises(HgamNotImplementedError, match="no column 'w'"):
+                constraint_rows("w", knots)
         assert np.allclose(design.mean(axis=0) @ z_data, 0.0, atol=1e-12)
-        uniq = np.unique(design, axis=0)
-        assert np.allclose(uniq.mean(axis=0) @ z_unique, 0.0, atol=1e-12)
-        assert not np.allclose(z_data, z_unique)  # unbalanced data: the two constraints differ
+        assert np.allclose(cr_basis(frame_x, knots)[0].mean(axis=0) @ z_frame, 0.0, atol=1e-12)
+        assert not np.allclose(z_data, z_frame)  # unbalanced data: the two constraints differ
         # the switch is scoped: outside the context the default is restored
-        assert np.allclose(sum_to_zero_null_space(design), z_data)
+        assert constraint_rows("x", knots) is None
 
     def test_bam_fit_predicts_its_own_training_rows_in_the_same_basis(self) -> None:
         df = _frame()

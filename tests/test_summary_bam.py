@@ -98,7 +98,7 @@ def test_intercept_meets_the_estimate_gate(exit_fit, ref):
 
 def test_smooth_rows_and_scalars(exit_fit, ref):
     s = exit_fit.summary()
-    assert len(s.smooths) == len(ref["s_names"])
+    assert [t.label for t in s.smooths] == ref["s_names"]
     edf = np.array([t.edf for t in s.smooths])
     ref_edf = np.asarray(ref["s_table"])[:, 0]
     assert np.all(np.abs(edf - ref_edf) <= np.maximum(0.05, 0.01 * np.abs(ref_edf)))

@@ -81,26 +81,27 @@ direction (`attr(b14$smooth[[1]], "qrc")`) matches neither the 981 distinct poin
 pads (2.3e-5), so the row set is not pinned yet. Scripts that showed this were scratch (not committed): rebuild
 `discrete.mf`'s input as bam does (sz specs get one-variable margins first, bam.r ~2265) to call it directly.
 
-## Next slice: depends on Jonathan's answers on the summary PR
+## Next slice: pin and port discrete bam's constraint rows (Q1, option A)
 
-If Q1 is (A): pin the row set of `s(AttdAge)`'s constraint in `bam(discrete=TRUE)` (read `gam.setup` with `modCon=2`,
+Pin the row set of `s(AttdAge)`'s constraint in `bam(discrete=TRUE)` (read `gam.setup` with `modCon=2`,
 `smoothCon` with `sparse.cons=0` on `mf0`, and the padding in `discrete.mf`), port it into `unique_row_constraint`
 (ADR-260 amendment 9 chose not to; this reopens it, so write the ADR amendment), and lift the strict xfail. It should
 also move the ti sp gap in `docs/DEFERRED.md`. Re-check every bam fixture's gates afterwards.
 
-Then: the smooth-term table of `summary.gam` on the exit fit, at the gates Jonathan picks in Q2. Every exit smooth
+Then: the smooth-term table of `summary.gam` on the exit fit, at the Q2 gates above. Every exit smooth
 has `null.space.dim == 0` (select=TRUE), so all go through `reTest` / `recov` (mgcv.r), not `testStat`, and the p-value
 through `psum.chisq` (Davies' algorithm, C code `davies.c`; `liu2` is only its fallback). Section 16's fixture already
 holds `s_table` (edf, Ref.df, Chi.sq, p-value). Ref.df here is 12, 5, 60, 11, 7, 6, 5, 13.
 
 ## Open items for Jonathan
 
-Asked on the summary PR (2026-11-16):
-- Q1. The parametric table's intercept misses the 1e-3 estimate gate (3.6e-3) through the discrete-bam constraint
-  on s(AttdAge). Options: (A) pin and port mgcv's constraint rows (one slice); (B) gate the contrasts only and record the
-  intercept in DEFERRED; (C) a new gate for the intercept relative to its se (gap is 2.9% of se). Recommended: A.
-- Q2. Gates for the smooth-term tests (not in `docs/PRIORITIES.md`). Recommended: Ref.df exact; Chi.sq 1% relative;
-  p-value 1e-3 absolute or 1% relative, whichever is larger.
+None.
+
+Decided on PR #21 (2026-11-16): Q1 option (A): port mgcv's constraint rows for discrete bam, held to the
+"Deterministic pieces ... constraints" gate, so the intercept meets the estimate gate. The strict xfail
+`test_intercept_meets_the_estimate_gate` stays until that port lifts it. Q2 option (a): smooth-term tests are gated
+at Ref.df exact; Chi.sq 1% relative; p-value 1e-3 absolute or 1% relative, whichever is larger. The matching
+`docs/PRIORITIES.md` row is Jonathan's change (a routine slice does not edit that file).
 
 Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a fitted quantity at
 estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at the unchanged gate.
@@ -113,7 +114,7 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 ## Open questions
 
-Q1 and Q2 above.
+None.
 
 PR #15 review nit (not done, predates it): an sz term's factor is assumed to be `variables[0]`; `s(x, f, bs="sz")`
 would fail with a bare `ValueError`, not a named refusal. Add the refusal when the sz parser is next touched.

@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-17 (twenty-eighth slice): the `fs` basis (first step of `fs`, PLAN step 3)
+
+PR #35 auto-merged (six conditions posted). `nat.param` (type 1) and `smooth.construct.fs.smooth.spec` on cr ported in `hgam.engine.gam_basis_fs`, with `Predict.matrix.fs.interaction`; `gam()` still refuses `bs="fs"`. The full fit would exceed the slice limit, so this is the basis only.
+Tests: 767 → 769 (`tests/test_fs_basis.py`, two). `make lint` clean. X, P, S and PredictMat 2.4e-14 relative under one sign-and-null-order column map (section 24, tier 1, mgcv 1.9-1).
+Deferred: the null-space order is set by rounding (`dsyevr` needed; mgcv's fit is invariant to the swap, measured 2.8e-14); unused factor levels (PR #35 nit). Next: the fs fit.
+
 ## 2026-11-17 (twenty-seventh slice): factor `by` on cr, first widening slice (PLAN step 3)
 
 PR #34 had merged (Jonathan). Section 23 holds `s(x, by=f, bs="cr")` to `smoothCon`'s factor-by branch and to `f + s(x, by=f)` as a REML gam, a discrete bam and a discrete bam with `select=TRUE` plus predict on new data; the existing build already agreed, so no engine change. An ordered categorical is now refused by name.

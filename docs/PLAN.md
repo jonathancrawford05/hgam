@@ -106,3 +106,6 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   basis vs `smoothCon` 1.7e-14, structure and coefficient names exact, eta 5.7e-7 (REML gam) and 1e-13 (discrete bam,
   with and without `select=TRUE`), se 5.6e-4, edf within 2.3e-4 of the gate's width, predict on new data 1.2e-13
   (`tests/test_cr_by_factor.py`, section 23). An ordered factor is refused. Next: `fs`.
+- Widening, `fs` on cr, first step (2026-11-17): the basis. `nat.param` (type 1) and `smooth.construct.fs.smooth.spec`
+  ported (`hgam.engine.gam_basis_fs`), held to `smoothCon` and `PredictMat` at 2.4e-14 up to column signs and the order
+  of the two null-space columns (`tests/test_fs_basis.py`, section 24). `gam()` still refuses `bs="fs"`. Next: the fit.

@@ -191,6 +191,11 @@ class Family:
         alpha = 1.0 + (y - mu) * (self._variance_prime(mu) / self.variance(mu) + g_double_over_g_prime)
         return alpha * fisher_weight
 
+    def dev_resids(self, y: np.ndarray, mu: np.ndarray, weights: np.ndarray) -> np.ndarray:
+        """R counterpart: ``family$dev.resids(y, mu, wt)`` (stats), the per-observation deviance
+        ``2 * w_i * d_i``; :meth:`deviance` is its sum."""
+        return 2.0 * weights * self._deviance_terms(y, mu)
+
     def deviance(self, y: np.ndarray, mu: np.ndarray, weights: np.ndarray) -> float:
         """The weighted deviance ``D = 2 * sum(w_i * d_i(y_i, mu_i))`` — the
         standard definition (matching R's own ``family$dev.resids``, e.g.

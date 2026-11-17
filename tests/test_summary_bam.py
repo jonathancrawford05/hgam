@@ -104,7 +104,8 @@ def test_smooth_rows_and_scalars(exit_fit, ref):
     assert s.outer == "fREML performance iteration"
     text = str(s)
     assert "FaceSizeHigh:SmokeS" in text and "Pr(>|z|)" in text
-    assert "psum.chisq is not ported" in text and "fREML score is not ported" in text
+    assert "p from psum.chisq" in text and "fREML score is not ported" in text
+    assert "Smooth-term tests ('—')" not in text  # every exit smooth has its p-value (PR #26 review)
 
 
 def test_coefficient_names_follow_model_matrix():

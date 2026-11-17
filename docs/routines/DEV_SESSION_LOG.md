@@ -6,6 +6,7 @@ PR #25 auto-merged (six SETTINGS conditions checked and posted). `re_test` now r
 Tests: 726 pass before; 727 pass, no xfail after. `make lint` is clean.
 Tier 1, mgcv 1.9-1: p-value 3.2e-7 absolute at most on the eight exit smooths (gate 1e-3 or 1%); five are 0 in both.
 Deferred: the estimated-scale p-value (`psum.chisq(0, c(ev, -stat/k), ...)`) stays refused with `sig2 != 1`.
+Review 4fb2174 should-fix 1: the text report's footer depends on whether every p-value is filled (it said psum.chisq was not ported); both report tests updated. 727 pass.
 
 ## 2026-11-17 (seventeenth slice, review follow-up): PR #25 review b892122
 

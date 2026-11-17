@@ -182,11 +182,15 @@ class GamSummary:
             lines.append(
                 f"Smoothed to the null space (upper bound of the search): {', '.join(self.at_bound_blocks)}"
             )
-        lines += [
-            "",
-            "Smooth-term p-values are not reported (psum.chisq is not ported). Ref.df and Chi.sq "
-            "are reTest's for fully penalised smooths of a discrete fit; '—' where not ported.",
-        ]
+        lines.append("")
+        if any(t.p_value is None for t in self.smooths):
+            lines.append(
+                "Smooth-term tests ('—') are reported only for fully penalised smooths of a discrete fit "
+                "with a fixed scale (reTest); testStat (terms with a null space), recov's random-effect "
+                "branch and the estimated-scale p-value are not ported."
+            )
+        else:
+            lines.append("Ref.df, Chi.sq and p-value are reTest's (p from psum.chisq, Davies' algorithm).")
         return "\n".join(lines)
 
 

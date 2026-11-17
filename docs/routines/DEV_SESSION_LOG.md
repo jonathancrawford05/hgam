@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-17 (thirtieth slice): `fs` in discrete bam (third step of `fs`, PLAN step 3)
+
+PR #37 auto-merged (six conditions posted; the branch delete was refused by the proxy). `bam(discrete=TRUE)` builds fs on `discrete.mf`'s `mf0`: `fs_basis(frame=)` takes `nat.param` and the penalty scaling over its rows (`fs_frame`, read through `constraint_frame`), and `TermSpec.margin_order` keeps the written order for compression. Refusal test `test_fs_refused_by_bam` retired (SETTINGS condition 5), replaced by `test_fs_discrete_bam_meets_the_gates`.
+Tests: 783 → 784. `make lint` clean. Section 24d (tier 1, mgcv 1.9-1), both written orders: eta 6.1e-14, se 3.7e-14, P 1.3e-14, predict 6.3e-14, Ref.df exact, Chi.sq 3e-14; built on the data rows instead, eta misses by 8.1e-3.
+Deferred: fs with select=TRUE (refused); the 24c sp nit from PR #37 recorded. Next: select=TRUE with fs.
+
 ## 2026-11-17 (twenty-ninth slice): the `fs` fit (second step of `fs`, PLAN step 3)
 
 No open PR at start (PR #36 had merged). `s(x, f, bs="fs", xt="cr", k=)` wired into the REML gam path: parser, `TermSpec(basis="fs")`, `build_python_fs_term`, predict through `Predict.matrix.fs.interaction` with `P` kept in `TermState.fs_p`; no engine change to the fit itself. `test_fs_is_still_refused` retired (SETTINGS condition 5), replaced by `tests/test_fs_fit.py`.

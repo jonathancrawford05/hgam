@@ -165,14 +165,17 @@ def compress_covariates(
 def _smooth_margins(term: TermSpec) -> tuple[str, ...]:
     """Every covariate ``discrete.mf`` compresses for one smooth, in its order: the ``by``
     variable (numeric or factor) first, then each one-covariate margin. ``sz`` is a tensor of
-    one-covariate margins there (``tensor.possible``, bam.r), factor first; ``re`` is its factor."""
+    one-covariate margins there (``tensor.possible``, bam.r), factor first; ``re`` is its factor. ``fs`` is
+    ``tensor.possible`` too, with one margin per written term (``TermSpec.margin_order``)."""
     if term.basis == "parametric":
         return ()
-    if term.basis not in ("cr", "ti", "sz", "re"):
+    if term.basis not in ("cr", "ti", "sz", "fs", "re"):
         raise HgamNotImplementedError(
             f"discrete_model_frame: {term.basis!r} terms are not discretised "
-            "(only cr, ti, sz, re and factors)."
+            "(only cr, ti, sz, fs, re and factors)."
         )
+    if term.basis == "fs":
+        return term.margin_order if term.margin_order is not None else term.variables
     by = term.by if term.by is not None else term.by_factor
     return ((by,) if by is not None else ()) + term.variables
 
@@ -182,7 +185,7 @@ def _factor_names(model: ModelSpec) -> frozenset[str]:
     for term in model.terms:
         if term.basis in ("parametric", "re"):
             names.update(term.variables)
-        elif term.basis == "sz":
+        elif term.basis in ("sz", "fs"):
             names.add(term.variables[0])
         if term.by_factor is not None:
             names.add(term.by_factor)
@@ -255,11 +258,12 @@ def _numeric_margins(term: TermSpec) -> tuple[str, ...]:
         return ()
     if term.basis in ("cr", "ti"):
         margins: tuple[str, ...] = term.variables
-    elif term.basis == "sz":
+    elif term.basis in ("sz", "fs"):
         margins = term.variables[1:]
     else:
         raise HgamNotImplementedError(
-            f"discretise_frame: {term.basis!r} terms are not discretised (only cr, ti, sz, re and factors)."
+            f"discretise_frame: {term.basis!r} terms are not discretised "
+            "(only cr, ti, sz, fs, re and factors)."
         )
     return ((term.by,) if term.by is not None else ()) + margins
 

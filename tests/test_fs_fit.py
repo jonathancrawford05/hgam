@@ -1,4 +1,5 @@
-"""The ``fs`` factor-smooth term in a REML gam fit, held to mgcv (``make_fixtures.R`` section 24b).
+"""The ``fs`` factor-smooth term in a REML gam fit and in a discrete bam fit, held to mgcv
+(``make_fixtures.R`` sections 24b to 24d).
 
 mgcv counterpart: ``smooth.construct.fs.smooth.spec`` with ``xt = "cr"`` (smooth.r, mgcv 1.9-4), the
 non-``gamm``, non-tensor branch, fitted by ``gam(method = "REML")``; prediction through
@@ -150,7 +151,11 @@ def small() -> dict[str, np.ndarray]:
         ('p ~ s(x, z, bs="fs", xt="cr")', {}, "exactly one factor"),
         ('p ~ s(f, g, bs="fs", xt="cr")', {}, "exactly one factor"),
         ('p ~ s(x, f, bs="fs", xt="cr", k=6)', {"select": True}, "select=True"),
-        ('p ~ s(x, f, bs="fs", xt="cr", k=6)', {"method": "fREML", "discrete": True}, "discrete=True"),
+        (
+            'p ~ s(x, f, bs="fs", xt="cr", k=6)',
+            {"method": "fREML", "discrete": True, "select": True},
+            "select=True",
+        ),
     ],
 )
 def test_fs_refusals(small, formula: str, kwargs: dict, match: str) -> None:
@@ -159,6 +164,64 @@ def test_fs_refusals(small, formula: str, kwargs: dict, match: str) -> None:
         gam(formula, small, FAMILY, weights="n", **opts)
 
 
-def test_fs_refused_by_bam(small) -> None:
-    with pytest.raises(HgamNotImplementedError, match="discrete=True"):
-        bam('p ~ s(x, f, bs="fs", xt="cr", k=6)', small, FAMILY, weights="n", method="fREML", discrete=True)
+DISCRETE = ("bam_discrete_binomial_cloglog_fs", "bam_discrete_binomial_cloglog_fs_factor_first")
+
+
+@pytest.mark.parametrize("name", DISCRETE)
+def test_fs_discrete_bam_meets_the_gates(name: str, load_fixture, margin) -> None:
+    """Section 24d: ``bam(method = "fREML", discrete = TRUE)``. mgcv builds the term on ``discrete.mf``'s
+    padded frame ``mf0`` (margins compressed in written order), so ``P`` and the penalty scaling come from
+    ``mf0``'s rows; built on the data rows instead, eta misses by 8.1e-3. ``P`` is a deterministic piece
+    (1e-8 relative, under the column-sign and null-order map of ``test_fs_basis.py``)."""
+    fx = load_fixture(name)
+    data = _columns(fx["data"])
+    formula = fx["formula"].replace("'", '"')
+    fit = bam(formula, data, FAMILY, weights="n", method="fREML", discrete=True, knots=fx["knots"])
+    assert fit.converged
+    assert list(fit.smooth_labels) == [fx["labels"]]
+    assert fit.coef.size == fx["n_coef"] == fx["rank"] == 19
+    assert not fit.pivoted_columns
+    assert list(fit.coefficient_names) == fx["coef_names"]
+
+    (state,) = fit.term_states
+    assert state.fs_p is not None
+    ref_p = np.asarray(fx["P"])
+    rel_p = min(
+        float(
+            np.max(
+                np.abs(state.fs_p[:, order] * np.sign(np.sum(state.fs_p[:, order] * ref_p, axis=0)) - ref_p)
+            )
+        )
+        for order in ([0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 5, 4])
+    ) / float(np.max(np.abs(ref_p)))
+
+    eta, se = fit.predict(data, se_fit=True)
+    d_eta = float(np.max(np.abs(eta - np.asarray(fx["eta"]))))
+    d_se = float(np.max(np.abs(se / np.asarray(fx["se"]) - 1.0)))
+    ref_edf = float(fx["edf"])
+    d_edf = abs(fit.edf_per_term[fx["labels"]] - ref_edf) / max(0.05, 0.01 * ref_edf)
+    eta_new, se_new = fit.predict(_columns(fx["newdata"]), se_fit=True)
+    d_new = float(np.max(np.abs(eta_new - np.asarray(fx["fit_new"]))))
+    d_se_new = float(np.max(np.abs(se_new / np.asarray(fx["se_new"]) - 1.0)))
+    margin("fs discrete bam", "P, max rel", rel_p, "1e-8 rel", name)
+    margin("fs discrete bam", "eta, max abs", d_eta, "1e-3 abs", name)
+    margin("fs discrete bam", "se, max rel", d_se, "1e-2 rel", name)
+    margin("fs discrete bam", "edf, fraction of gate", d_edf, "0.05 abs or 1%", name)
+    margin("fs discrete predict", "eta, max abs", d_new, "1e-3 abs", name)
+    margin("fs discrete predict", "se, max rel", d_se_new, "1e-2 rel", name)
+    # summary.gam's s.table: fs has null.space.dim 0, so its row comes from reTest. Gates (PR #21, Q2): Ref.df
+    # exact, Chi.sq 1% relative, p-value 1e-3 absolute or 1% relative, whichever is larger.
+    (sm,) = fit.summary().smooths
+    _, ref_df, ref_chi, ref_pv = fx["s_table"][0]
+    assert sm.ref_df == ref_df
+    assert sm.chi_sq is not None and sm.p_value is not None
+    d_chi = abs(sm.chi_sq / ref_chi - 1.0)
+    margin("fs discrete summary", "Chi.sq, rel", d_chi, "1e-2 rel", name)
+    assert d_chi < 1e-2
+    assert abs(sm.p_value - ref_pv) <= max(1e-3, 1e-2 * ref_pv)
+    assert rel_p < 1e-8
+    assert d_eta < 1e-3
+    assert d_se < 1e-2
+    assert d_edf <= 1.0
+    assert d_new < 1e-3
+    assert d_se_new < 1e-2

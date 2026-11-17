@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twentieth slice (M4: `k.check`, gam.check's first step). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's twenty-first slice (M4: `k.check`'s tensor branch). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -116,20 +116,24 @@ residuals 1.8e-7, k-index 6.8e-10 relative, p-value exact on the three 1-D terms
 (no gate in PRIORITIES); the test asserts the measured values. The `n > subsample` branch is held to
 `k.check(b14, subsample = 1000, n.rep = 50)` (same section; k-index and p exact). Tests: 746 pass, no xfail.
 
-## Next slice: k.check's tensor branch (ti), then gam.check's report (M4)
+## Nek.check's tensor branch (this run's PR): a ti term is rescaled by `gr.f` (mean absolute finite difference of
+`predict_term_design(term_state) @ beta`, step `diff(range)/1000`) and tested over each row's 3 nearest neighbours
+(`cKDTree` for mgcv's `k_nn` kd-tree; a tie at the third neighbour is refused, mgcv breaks it in its own order). Exit fit
+`ti(PolYear,AttdAge)`: k-index 1.3e-10 relative, p exact (0.7875) under `set.seed(21)`, and on the subsample branch (0.88).
+`k.check` is done for the exit fit. No fixture change (section 21 already recorded the ti row). Tests: 747 pass, no xfail.
 
-1. The ti branch of `k.check` (plots.r:226-254, 1.9-4): scale each covariate by `gr.f[i]`, the mean absolute finite
-   difference of the term's fitted values (`PredictMat(smooth, datp) %*% beta`, step `diff(range)/1000`), after
-   shifting to min 0 and dividing by the max; then `nearest(3, X)$ni` (sparse.r:129, C `k_nn` in mgcv's src: a kd-tree
-   3-nearest-neighbour search, "ties broken arbitrarily") and the residual differences over those neighbours. hgam's
-   `EngineGAMFit.predict` machinery can give the term's fitted values at new rows (`term_states`); for the neighbours a
-   brute-force or SciPy `cKDTree` search gives the same set where there are no distance ties (the exit fit's covariates
-   are continuous), so port `k_nn` only if a fixture shows ties. Same fixture (section 21); the ti row's k-index and p
-   join the test. Note the ti in mgcv's b14 is `ti(PolYear,AttdAge)` (tero order): take the margins in that order.
-2. Then `gam.check`'s printed report (plots.r:264): the convergence lines for a bam fit, the rank line, and the k.check
-   table with its footnote. After that M4 is done: PLAN's step 2 (confirm with Jonathan) if PR #24 has merged.
+## Next slice: gam.check's printed report (M4)
 
-## Open items for Jonathan
+`gam.check` (plots.r:264, 1.9-4) without the plots: for a bam fit, the convergence lines (method, optimizer, iteration
+count / "full convergence" message, gradient range, Hessian eigenvalue range as mgcv prints them from `b$outer.info`
+or bam's fREML info), the "Model rank = r / p" line, then `printCoefmat(k.check(b))` and its footnote ("Basis
+dimension (k) checking results. Low p-value ..."). Read which of `b$outer.info`'s fields a discrete bam fit has and
+which hgam's `bam_fitd` records; port only what the exit fit prints, refuse the rest. Fixture: capture
+`capture.output(gam.check(b14))` minus plots in section 21 (or 22) and hold the text lines that are key results
+(rank, k table) exactly; the convergence numbers are not key results (assert at what is measured). After that M4 is
+done: PLAN's step 2 (confirm with Jonathan) if PR #24 has merged.
+
+en items for Jonathan
 
 None.
 

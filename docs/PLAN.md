@@ -80,4 +80,5 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   for the exit fit (Vc refused for a discrete fit).
 - M4, `gam.check`, first step (2026-11-17, open): `k.check` (plots.r) as `GamFit.k_check(data, seed=)`, one-covariate
   smooths and the factor NA; exit fit k', edf and NA exact or in gate, k-index 6.8e-10, p exact under R's draws
-  (`tests/test_k_check_bam.py`, section 21). Next: k.check's tensor branch (ti), then gam.check's printed report.
+  (`tests/test_k_check_bam.py`, section 21). Second step (2026-11-17): the tensor branch, so the exit fit's ti row has
+  k-index (1.3e-10 relative) and p (exact); `k.check` is done for the exit fit. Next: gam.check's printed report.

@@ -468,4 +468,13 @@ put("gam_gaussian_vcov_reml", list(data = d20, formula = "y ~ g + s(x, bs='cr', 
   method = "REML", levels = list(g = levels(d20$g)), names = rownames(vcov(m20)), sig2 = m20$sig2,
   Vp = unname(vcov(m20)), Vp_dispersion_2 = unname(vcov(m20, dispersion = 2)),
   se = as.numeric(predict(m20, se.fit = TRUE)$se.fit)))
+# 21. k.check (plots.r), gam.check's basis-dimension test, on section 14's discrete fit b14 under set.seed(21): per smooth
+# k', edf, k-index and p-value. n = 4000 <= subsample, so no subsample is drawn; each 1-D or tensor term draws n.rep
+# shuffles sample(1:nr, nr) in smooth order, terms with a factor (sz) get NA and draw nothing, and a by variable is
+# dropped. residuals(b14) (deviance residuals, residuals.gam) are recorded beside it.
+set.seed(21); kc21 <- k.check(b14)
+put("bam_discrete_exit_k_check", list(seed = 21, n_rep = 400, subsample = 5000, names = rownames(kc21),
+  columns = colnames(kc21), k_table = unname(kc21), residuals = as.numeric(residuals(b14)),
+  # the n > subsample branch (sample(1:n, subsample) before the loop), reached at subsample = 1000
+  subsampled = list(subsample = 1000, n_rep = 50, k_table = unname({set.seed(21); k.check(b14, subsample = 1000, n.rep = 50)}))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

@@ -75,6 +75,9 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - M4, `summary` smooth-term p-value wired (done 2026-11-17, PR #26): `re_test` returns `reTest`'s p-value and
   `summary()` reports it; exit fit 3.2e-7 at most (`tests/test_summary_bam.py`, section 16). `summary` is done for the
   exit fit.
-- M4, `vcov` (2026-11-17, open): `GamFit.vcov(freq=, dispersion=)` and `GamFit.coefficient_names` port `vcov.gam`;
+- M4, `vcov` (done 2026-11-17, PR #27): `GamFit.vcov(freq=, dispersion=)` and `GamFit.coefficient_names` port `vcov.gam`;
   exit fit Vp diagonal 8.3e-6, Ve 8.7e-5 relative, names exact (`tests/test_vcov_bam.py`, sections 20 and 20b). `vcov` is done
-  for the exit fit (Vc refused for a discrete fit). Next: `gam.check`.
+  for the exit fit (Vc refused for a discrete fit).
+- M4, `gam.check`, first step (2026-11-17, open): `k.check` (plots.r) as `GamFit.k_check(data, seed=)`, one-covariate
+  smooths and the factor NA; exit fit k', edf and NA exact or in gate, k-index 6.8e-10, p exact under R's draws
+  (`tests/test_k_check_bam.py`, section 21). Next: k.check's tensor branch (ti), then gam.check's printed report.

@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's nineteenth slice (M4: `vcov` on the exit fit). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's twentieth slice (M4: `k.check`, gam.check's first step). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -106,19 +106,28 @@ on a discrete fit stays refused (mgcv's Vc there is Sl.postproc's sp-corrected o
 fixture records it). `sandwich=True` refused. Section 20b (a gaussian REML gam fit) holds names and `dispersion = 2` off the
 discrete path (3.1e-6). Tests: 739 pass, no xfail.
 
-## Next slice: `gam.check` on the exit fit (M4, last item)
+`k.check` (section 21, `tests/test_k_check_bam.py`, this run's PR; PR #27 merged): `GamFit.k_check(data, *, seed,
+subsample=5000, n_rep=400)` in `hgam.frontend.gam_check` ports `k.check` (plots.r) for one-covariate smooths (cr, tp;
+a numeric by is dropped, as mgcv does), with `deviance_residuals` (`residuals.gam`, deviance) and `Family.dev_resids`.
+Smooths with a factor covariate (sz, re) are NA as in mgcv. The ti branch is not ported (status `"not_ported"`), but its
+`n_rep` shuffles are drawn so the terms after it keep R's stream; a factor-by smooth is refused. `data` is the training
+frame (mgcv's `b$model`, raw covariates, not the binned ones). Exit fit under `set.seed(21)`: k' exact, edf 1.4e-6,
+residuals 1.8e-7, k-index 6.8e-10 relative, p-value exact on the three 1-D terms. k-index and p are not key results
+(no gate in PRIORITIES); the test asserts the measured values. The `n > subsample` branch is held to
+`k.check(b14, subsample = 1000, n.rep = 50)` (same section; k-index and p exact). Tests: 746 pass, no xfail.
 
-Port the numeric part of `gam.check` (plots.r, 1.9-4) for a discrete fit, without plots: the convergence report it
-prints (`b$outer.info`, `b$mgcv.conv` for bam), the rank line (`b$rank` of `length(coef)`), and `k.check` (plots.r:182)
-as `GamFit.k_check(subsample=5000, n_rep=400)`: per smooth k', edf, k-index and p-value. k.check draws from R's RNG
-(`sample` to subsample when n > 5000, then `n.rep` shuffles per smooth): `hgam.frontend.r_rng.RRandom` already ports
-`sample.int`, so under a given seed the p-value is reproducible draw for draw. It needs `residuals(b)` (deviance residuals
-for binomial; check what `residuals.gam` gives for a bam fit) and, for multi-D terms (ti, sz), the tensor scaling branch;
-terms with factors (sz) and the numeric by get NA as mgcv does (by is dropped: `$by <- "NA"`). Fixture: a new section with
-`set.seed(<n>); k.check(b14)` and the printed scalars. Gates to ask about if needed: k', edf exact/edf gate; k-index
-1% relative; p-value under the same seed exact. If the draws cannot be matched, the p-value is a question for Jonathan.
-Keep the first step to `k.check` if the slice would exceed 600 lines. After `gam.check`, M4 is done: PLAN's step 2
-(confirm with Jonathan, PR #24) if PR #24 has merged.
+## Next slice: k.check's tensor branch (ti), then gam.check's report (M4)
+
+1. The ti branch of `k.check` (plots.r:226-254, 1.9-4): scale each covariate by `gr.f[i]`, the mean absolute finite
+   difference of the term's fitted values (`PredictMat(smooth, datp) %*% beta`, step `diff(range)/1000`), after
+   shifting to min 0 and dividing by the max; then `nearest(3, X)$ni` (sparse.r:129, C `k_nn` in mgcv's src: a kd-tree
+   3-nearest-neighbour search, "ties broken arbitrarily") and the residual differences over those neighbours. hgam's
+   `EngineGAMFit.predict` machinery can give the term's fitted values at new rows (`term_states`); for the neighbours a
+   brute-force or SciPy `cKDTree` search gives the same set where there are no distance ties (the exit fit's covariates
+   are continuous), so port `k_nn` only if a fixture shows ties. Same fixture (section 21); the ti row's k-index and p
+   join the test. Note the ti in mgcv's b14 is `ti(PolYear,AttdAge)` (tero order): take the margins in that order.
+2. Then `gam.check`'s printed report (plots.r:264): the convergence lines for a bam fit, the rank line, and the k.check
+   table with its footnote. After that M4 is done: PLAN's step 2 (confirm with Jonathan) if PR #24 has merged.
 
 ## Open items for Jonathan
 

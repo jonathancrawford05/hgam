@@ -1,5 +1,13 @@
 # Development session log
 
+## 2026-11-17 (twentieth slice): k.check, gam.check's first step
+
+PR #27 (vcov) auto-merged after both reviews (six SETTINGS conditions posted); its branch delete was refused by the proxy (403). Ported `k.check` (plots.r) as `GamFit.k_check(data, seed=)` with `deviance_residuals` (residuals.gam) and `Family.dev_resids`; section 21, `tests/test_k_check_bam.py`.
+Tests: 739 pass before; 745 pass, no xfail after. `make lint` is clean.
+Tier 1, mgcv 1.9-1: labels and k' exact, edf 1.4e-6 at most, deviance residuals 1.8e-7, k-index 6.8e-10 relative, p-value exact (R's draws) on s(AttdAge), s(PolYear), s(AttdAge):StudyYear_C; sz NA as mgcv.
+Deferred: the ti branch of k.check (PredictMat scaling and the k_nn kd-tree); gam.check's printed report.
+Review 7c35e5c should-fix 1: section 21 adds `k.check(b14, subsample = 1000, n.rep = 50)`; the subsample branch gives k-index and p exactly as mgcv on the three 1-D terms. 746 pass.
+
 ## 2026-11-17 (nineteenth slice): vcov on the exit fit
 
 Ported `vcov.gam` (mgcv.r): `GamFit.vcov(freq=, dispersion=)` gives Vp, Ve (`Sl.postproc`'s `F %*% Vp`) and the dispersion rescaling; `GamFit.coefficient_names` gives `names(b14$edf)`. Section 20, `tests/test_vcov_bam.py`. PR #26 had merged; PR #24 (Jonathan's planning PR) is open and not a development PR.

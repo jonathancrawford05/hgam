@@ -7,17 +7,22 @@ last (``recov``), and the reference distribution is a weighted sum of chi-square
 weights are the eigenvalues of ``crossprod(Rm B) / sig2`` with ``B B' = Ve[m, m]``. ``Ref.df`` is the
 number of those eigenvalues above ``max * eps^0.8``.
 
-Ported here: the statistic (``Chi.sq``) and ``Ref.df``. The p-value (``psum.chisq``: Davies' algorithm,
-mgcv's ``davies.c``) is not ported yet; terms with a null space (``testStat``) and random-effect
-terms (``recov``'s ``re`` branch) are not ported either.
+Ported here: the statistic (``Chi.sq``), ``Ref.df`` and the p-value's distribution function
+(``psum.chisq``, Davies' algorithm in ``hgam.frontend.davies``, with the ``liu2`` fallback). ``reTest``
+does not yet hand its eigenvalues to ``psum_chisq``, so ``summary()`` still reports no p-value; terms
+with a null space (``testStat``) and random-effect terms (``recov``'s ``re`` branch) are not ported.
 """
+
+import warnings
 
 import numpy as np
 from scipy.linalg import lapack
+from scipy.stats import chi2, ncx2
 
 from hgam.errors import HgamComputationError, HgamValidationError
+from hgam.frontend.davies import davies
 
-__all__ = ["mroot", "re_test"]
+__all__ = ["liu2", "mroot", "psum_chisq", "re_test"]
 
 _EPS = float(np.finfo(np.float64).eps)
 
@@ -98,3 +103,103 @@ def re_test(
     ev[ev < 0.0] = 0.0
     rank = int(np.sum(ev > np.max(ev) * _EPS**0.8)) if ev.size else 0
     return stat, rank
+
+
+def psum_chisq(
+    q: float | np.ndarray,
+    lb: np.ndarray,
+    df: np.ndarray | int | None = None,
+    nc: np.ndarray | float | None = None,
+    sigz: float = 0.0,
+    lower_tail: bool = False,
+    tol: float = 2e-5,
+    nlim: int = 100000,
+) -> np.ndarray:
+    """mgcv counterpart: ``psum.chisq`` (mgcv.r), mgcv 1.9-4 (unchanged from 1.9-1).
+
+    ``Pr(q > sum_j lb[j] X_j + sigz Z)`` (``lower_tail=True``) or its complement (the default), with
+    ``X_j`` chi-squared on ``df[j]`` degrees of freedom and non-centrality ``nc[j]``, ``Z`` standard
+    normal, by Davies' algorithm (``davies``). On ``ifault`` 2 mgcv warns and keeps Davies' value; on any
+    other fault it warns and falls back to ``liu2`` when every ``nc`` is 0 (else ``NaN``, R's ``NA``).
+    As in mgcv, the fallback is ``liu2``'s upper tail whatever ``lower_tail`` is."""
+    qv = np.atleast_1d(np.asarray(q, dtype=np.float64))
+    lbv = np.atleast_1d(np.asarray(lb, dtype=np.float64))
+    r = lbv.size
+    dfv = np.ones(r) if df is None else np.atleast_1d(np.asarray(df, dtype=np.float64))
+    ncv = np.zeros(r) if nc is None else np.atleast_1d(np.asarray(nc, dtype=np.float64))
+    if dfv.size == 1:
+        dfv = np.repeat(dfv, r)
+    if ncv.size == 1:
+        ncv = np.repeat(ncv, r)
+    if dfv.size != r or ncv.size != r:
+        raise HgamValidationError("psum_chisq: lengths of lb, df and nc must match.")
+    dfv = np.round(dfv)  # R's round: half to even, as np.round
+    if np.any(dfv < 1):
+        raise HgamValidationError("psum_chisq: df must be positive integers.")
+    if np.all(lbv == 0):
+        raise HgamValidationError("psum_chisq: at least one element of lb must be non-zero.")
+    if sigz < 0:
+        sigz = 0.0
+    dfi = dfv.astype(np.int64)
+    p = qv.copy()
+    for i, qi in enumerate(qv):
+        res = davies(lbv, ncv, dfi, sigz, float(qi), nlim, tol)
+        if res.ifault != 0:
+            if res.ifault == 2:
+                warnings.warn("psum_chisq: danger of round-off error", RuntimeWarning, stacklevel=2)
+                p[i] = res.c if lower_tail else 1 - res.c
+            else:
+                warnings.warn(
+                    "psum_chisq: failure of Davies method, falling back on Liu et al approximation",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                p[i] = liu2(np.array([qi]), lbv, h=dfv)[0] if np.all(ncv == 0) else np.nan
+        else:
+            p[i] = res.c if lower_tail else 1 - res.c
+    return p
+
+
+def liu2(
+    x: float | np.ndarray, lam: np.ndarray, h: np.ndarray | None = None, lower_tail: bool = False
+) -> np.ndarray:
+    """mgcv counterpart: ``liu2`` (mgcv.r), mgcv 1.9-4: Liu, Tang and Zhang's (2009) approximation to
+    ``Pr[sum_i lam_i chisq_{h_i} > x]`` (``lower_tail=False``). ``pchisq(..., ncp = delta)`` is SciPy's
+    ``ncx2`` (``chi2`` where ``delta`` is 0), in place of R's ``pnchisq``."""
+    xv = np.atleast_1d(np.asarray(x, dtype=np.float64))
+    lamv = np.atleast_1d(np.asarray(lam, dtype=np.float64))
+    hv = np.ones(lamv.size) if h is None else np.atleast_1d(np.asarray(h, dtype=np.float64))
+    if hv.size != lamv.size:
+        raise HgamValidationError("liu2: lambda and h should have the same length!")
+    lh = lamv * hv
+    mu_q = np.sum(lh)
+    lh = lh * lamv
+    c2 = np.sum(lh)
+    lh = lh * lamv
+    c3 = np.sum(lh)
+    xpos = xv > 0
+    res = 1 + 0 * xv
+    if np.sum(xpos) == 0 or c2 <= 0:
+        return res
+    s1 = c3 / c2**1.5
+    s2 = np.sum(lh * lamv) / c2**2
+    sig_q = np.sqrt(2 * c2)
+    t = (xv[xpos] - mu_q) / sig_q
+    if s1**2 > s2:
+        a = 1 / (s1 - np.sqrt(s1**2 - s2))
+        delta = s1 * a**3 - a**2
+        l_ = a**2 - 2 * delta
+    else:
+        a = 1 / s1
+        delta = 0.0
+        if c3 == 0:
+            return res
+        l_ = c2**3 / c3**2
+    mu_x = l_ + delta
+    sig_x = np.sqrt(2) * a
+    z = t * sig_x + mu_x
+    if delta == 0:
+        res[xpos] = chi2.cdf(z, l_) if lower_tail else chi2.sf(z, l_)
+    else:
+        res[xpos] = ncx2.cdf(z, l_, delta) if lower_tail else ncx2.sf(z, l_, delta)
+    return res

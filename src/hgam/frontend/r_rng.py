@@ -4,7 +4,8 @@
 ``sample()`` draws under ``temp.seed(8547)``, which is ``set.seed(8547)`` after
 ``RNGkind("default", "default")``: Mersenne-Twister and Inversion. ``temp.seed`` does not set
 ``sample.kind``; this port assumes R's default since 3.6, Rejection, so an R session switched to
-``RNGkind(sample.kind = "Rounding")`` would pad differently (PR #22 review nit). Which values pad a covariate decides the rows its sum-to-zero constraint is taken over
+``RNGkind(sample.kind = "Rounding")`` would pad differently (PR #22 review nit).
+Which values pad a covariate decides the rows its sum-to-zero constraint is taken over
 (``smoothCon``'s ``colMeans(X)`` on the padded frame), so the stream is ported exactly.
 
 These are R's own C routines, not mgcv's: ``RNG_Init``, ``MT_genrand`` and ``fixup`` (R's

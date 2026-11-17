@@ -4,15 +4,14 @@ relative; the rank (its column count) exact. ``reTest`` itself is held through `
 ``tests/test_summary_bam.py``."""
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import FIXTURES  # honours HGAM_FIXTURE_DIR
 
 from hgam.errors import HgamValidationError
 from hgam.frontend.smooth_tests import mroot
 
-FIXTURES = Path(__file__).parent / "fixtures"
 CASES = json.loads((FIXTURES / "mroot_chol.json").read_text())["cases"]
 
 

@@ -39,6 +39,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --extra dev
       - run: uv run python oracle/compare_fixtures.py tests/fixtures oracle_out
+      # HGAM_REPORT_MARGINS prints each key result's largest difference against the oracle's fixtures
+      # (tests/conftest.py) in the log and the job summary.
       - run: uv run pytest -q
         env:
           HGAM_FIXTURE_DIR: oracle_out
+          HGAM_REPORT_MARGINS: "1"

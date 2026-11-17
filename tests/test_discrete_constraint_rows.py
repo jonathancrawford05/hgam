@@ -8,17 +8,16 @@ constrained cr smooth and ti margin to the deterministic-pieces gate (1e-8 relat
 ``r_rng_set_seed_8547`` and ``bam_discrete_constraint_rows``, tier 1 locally, tier 3 in CI."""
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import FIXTURES  # honours HGAM_FIXTURE_DIR
 
 import hgam.frontend.api as api
 from hgam.engine.gam_basis_cr import cr_basis
 from hgam.frontend.discrete import discrete_model_frame
 from hgam.frontend.r_rng import RRandom
 
-FIXTURES = Path(__file__).parent / "fixtures"
 GATE = 1e-8
 
 
@@ -81,11 +80,13 @@ def frame(captured) -> dict[str, np.ndarray]:
         ("Smoke", "Smoke"),
     ],
 )
-def test_padded_frame_is_mgcvs_row_for_row(frame, ref, ours, theirs) -> None:
+def test_padded_frame_is_mgcvs_row_for_row(frame, ref, ours, theirs, margin) -> None:
     assert len(frame) == len(ref["columns"])
     got = frame[ours]
     want = np.asarray(ref[theirs], dtype=np.float64)
     assert got.shape == (ref["maxr"],)
+    rel = float(np.max(np.abs(got - want) / np.maximum(np.abs(want), np.finfo(float).tiny)))
+    margin("constraint rows", "padded frame, max rel", rel, "1e-8 rel", "bam_discrete_constraint_rows")
     np.testing.assert_allclose(got, want, rtol=GATE, atol=0)
 
 
@@ -98,7 +99,9 @@ def test_padded_frame_is_mgcvs_row_for_row(frame, ref, ours, theirs) -> None:
         ("AttdAge", "ti_AttdAge"),
     ],
 )
-def test_constraint_direction_meets_the_deterministic_gate(frame, captured, ref, variable, key) -> None:
+def test_constraint_direction_meets_the_deterministic_gate(
+    frame, captured, ref, variable, key, margin
+) -> None:
     term = next(
         t for t in captured["model"].terms if t.basis == "cr" and t.variables == (variable,) and t.by is None
     )
@@ -107,6 +110,10 @@ def test_constraint_direction_meets_the_deterministic_gate(frame, captured, ref,
     c = c / np.linalg.norm(c)
     want = np.asarray(ref["constraint"][key], dtype=np.float64)
     sign = np.sign(c @ want)
+    diff = float(np.max(np.abs(sign * c - want)) / np.max(np.abs(want)))
+    margin(
+        "constraint rows", "constraint direction, max rel", diff, "1e-8 rel", "bam_discrete_constraint_rows"
+    )
     np.testing.assert_allclose(sign * c, want, rtol=GATE, atol=GATE * np.max(np.abs(want)))
 
 

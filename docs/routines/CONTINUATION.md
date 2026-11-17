@@ -137,6 +137,15 @@ work starts until Jonathan confirms on it. After he confirms, the order is: (0) 
 (1) the BLAS thread setting below (decided on PR #31, Priorities item 3), unless he says otherwise on the
 confirmation PR; (2) step 3's widening, starting with factor `by`.
 
+### Found while adding the margin report (this PR)
+
+Eight test modules (`test_predict_bam`, `test_summary_bam`, `test_vcov_bam`, `test_k_check_bam`, `test_gam_check_bam`,
+`test_discrete_constraint_rows`, `test_psum_chisq`, `test_smooth_tests`) read `tests/fixtures` by their own path, so
+CI's `oracle` job held them to the committed tier 1 copies and not to the pinned image. This PR makes them read
+`conftest.FIXTURES`, which honours `HGAM_FIXTURE_DIR`. The new rule is in `tests/conftest.py`'s docstring: every module
+reads fixtures through `FIXTURES` or `load_fixture`. The `oracle` job prints each key result's margin
+(`HGAM_REPORT_MARGINS`, the `margin` fixture). A new test that holds a key result should call `margin(...)`.
+
 ### First: name the unseen-level refusal (PR #32 review b087411, should-fix 1)
 
 `_FactorCoding.encode` (`src/hgam/frontend/api.py:147`) raises `HgamValidationError` for a factor level the fit did

@@ -19,7 +19,7 @@ HGAM_FORMULA = (
 )
 
 
-def test_hgam_formula_fits_as_written(load_fixture):
+def test_hgam_formula_fits_as_written(load_fixture, margin):
     ref = load_fixture("bam_discrete_exit_formula")
     structure = load_fixture("exit_hgam_formula_structure")
     rows = ref["data"]
@@ -48,15 +48,21 @@ def test_hgam_formula_fits_as_written(load_fixture):
     assert fit.log_lambda.size == len(ref["sp"]) == structure["n_sp"]
 
     # Linear predictor at the estimated smoothing parameters: 1e-3 absolute.
-    assert np.max(np.abs(fit.eta - np.asarray(ref["eta"]))) < 1e-3
+    eta_diff = np.max(np.abs(fit.eta - np.asarray(ref["eta"])))
+    margin("exit fit", "eta, max abs", eta_diff, "1e-3 abs", "bam_discrete_exit_formula")
+    assert eta_diff < 1e-3
 
     # Per-term edf (mgcv's fit is full rank, so the three parametric terms are identified): 0.05 or 1%.
     assert ref["rank"] == ref["n_coef"] and len(fit.pivoted_columns) == 0
     edf = dict(zip(ref["labels"], ref["edf"], strict=True))
     edf.update(zip(ref["param_labels"], ref["edf_param"], strict=True))
+    edf_diff = max(abs(fit.edf_per_term[label] - value) for label, value in edf.items())
+    margin("exit fit", "per-term edf, max abs", edf_diff, "0.05 abs or 1%", "bam_discrete_exit_formula")
     for label, value in edf.items():
         assert abs(fit.edf_per_term[label] - value) <= max(0.05, 0.01 * value), (label, value)
 
     # Standard errors of the linear predictor at the discretised covariates (as predict.bam): 1% relative.
     _, se = fit.predict(discretise_frame(fit.model, data), se_fit=True)
+    se_rel = np.max(np.abs(se / np.asarray(ref["se"]) - 1))
+    margin("exit fit", "se, max rel", se_rel, "1% rel", "bam_discrete_exit_formula")
     np.testing.assert_allclose(se, ref["se"], rtol=1e-2)

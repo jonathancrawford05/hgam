@@ -9,16 +9,16 @@ of ``trace`` (terms, integrations, the call counter) exact, the real parts of ``
 
 import json
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import FIXTURES  # honours HGAM_FIXTURE_DIR
 
 from hgam.errors import HgamValidationError
 from hgam.frontend.davies import davies, log1pmx, revsort
 from hgam.frontend.smooth_tests import liu2, psum_chisq
 
-FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "psum_chisq_davies.json").read_text())
+FIXTURE = json.loads((FIXTURES / "psum_chisq_davies.json").read_text())
 CASES = FIXTURE["cases"]
 
 
@@ -33,7 +33,7 @@ def _args(case: dict) -> dict:
 
 
 @pytest.mark.parametrize("name", sorted(CASES))
-def test_psum_chisq_matches_mgcv(name: str) -> None:
+def test_psum_chisq_matches_mgcv(name: str, margin) -> None:
     case = CASES[name]
     if case["ifault"] != 0:
         with pytest.warns(RuntimeWarning):
@@ -43,6 +43,10 @@ def test_psum_chisq_matches_mgcv(name: str) -> None:
             warnings.simplefilter("error", RuntimeWarning)
             got = psum_chisq(case["q"][0], **_args(case))
     want = np.nan if case["p"] in (None, "NA") else case["p"]  # R's NA (negative_nc: no fallback)
+    if not np.isnan(want):
+        margin(
+            "psum.chisq", "p, max abs (19 cases)", abs(got[0] - want), "1e-3 abs or 1%", "psum_chisq_davies"
+        )
     np.testing.assert_allclose(got[0], want, rtol=1e-8, atol=1e-12, equal_nan=True)
 
 

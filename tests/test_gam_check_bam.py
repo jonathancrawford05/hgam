@@ -18,9 +18,8 @@ import pytest
 import hgam
 
 sys.path.insert(0, str(Path(__file__).parent))
+from conftest import FIXTURES  # noqa: E402  (honours HGAM_FIXTURE_DIR)
 from test_k_check_bam import exit_fit, frame  # noqa: E402, F401  (module-scoped fixtures, shared)
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +33,10 @@ def report(exit_fit, frame, ref):  # noqa: F811
     return exit_fit.gam_check(frame, seed=ref["seed"], k_sample=ref["k_sample"], k_rep=ref["k_rep"])
 
 
-def test_structure(report, ref):
+def test_structure(report, ref, margin):
+    margin(
+        "gam.check", "model rank, abs", abs(report.rank - ref["rank"]), "exact", "bam_discrete_exit_gam_check"
+    )
     assert report.method == ref["method"] == "fREML"
     assert list(report.optimizer) == ref["optimizer"]
     assert report.rank == ref["rank"]
@@ -51,7 +53,7 @@ def test_outer_info(report, ref):
     assert dh < 1e-5
 
 
-def test_k_table(report, ref):
+def test_k_table(report, ref, margin):
     assert [r.label for r in report.k_table] == ref["names"]
     for r, row in zip(report.k_table, ref["k_table"], strict=True):
         assert r.k_prime == int(row[0])
@@ -60,6 +62,14 @@ def test_k_table(report, ref):
             assert r.k_index is None and r.p_value is None
             continue
         assert r.k_index is not None
+        rel = abs(r.k_index / row[2] - 1)
+        margin(
+            "gam.check",
+            "k table k-index, max rel",
+            rel,
+            "none (measured 1e-6 rel)",
+            "bam_discrete_exit_gam_check",
+        )
         np.testing.assert_allclose(r.k_index, row[2], rtol=1e-6)
         assert r.p_value == row[3]
 

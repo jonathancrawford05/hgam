@@ -14,16 +14,14 @@ sum-to-zero constraint is taken over ``discrete.mf``'s padded frame, as bam(disc
 Over one row per distinct value it missed by 3.6e-3."""
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import FIXTURES  # honours HGAM_FIXTURE_DIR
 
 import hgam
 from hgam.engine.gam_term_spec import TermSpec
 from hgam.frontend.api import Factor, GamFit, parametric_coefficient_names
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 HGAM_FORMULA = (
     "DthCnt / ExposCnt ~ FaceSize + Smoke + FaceSize:Smoke"
@@ -71,7 +69,7 @@ def exit_fit(ref) -> GamFit:
     )
 
 
-def test_parametric_table_meets_the_gates(exit_fit, ref):
+def test_parametric_table_meets_the_gates(exit_fit, ref, margin):
     s = exit_fit.summary()
     assert ref["p_columns"] == ["Estimate", "Std. Error", "z value", "Pr(>|z|)"]
     assert s.parametric is not None
@@ -79,6 +77,9 @@ def test_parametric_table_meets_the_gates(exit_fit, ref):
     table = np.asarray(ref["p_table"])
     est = np.array([r.estimate for r in s.parametric])
     se = np.array([r.std_error for r in s.parametric])
+    item, name = "summary, parametric", "bam_discrete_exit_summary"
+    margin(item, "Estimate, max abs", np.max(np.abs(est - table[:, 0])), "1e-3 abs", name)
+    margin(item, "Std. Error, max rel", np.max(np.abs(se / table[:, 1] - 1)), "1% rel", name)
     assert np.max(np.abs(est - table[:, 0])) < 1e-3
     np.testing.assert_allclose(se, table[:, 1], rtol=1e-2)
     # z and p are est / se and 2 * pnorm(-|z|), as summary.gam computes them.
@@ -92,11 +93,12 @@ def test_intercept_meets_the_estimate_gate(exit_fit, ref):
     assert abs(s.parametric[0].estimate - ref["p_table"][0][0]) < 1e-3
 
 
-def test_smooth_rows_and_scalars(exit_fit, ref):
+def test_smooth_rows_and_scalars(exit_fit, ref, margin):
     s = exit_fit.summary()
     assert [t.label for t in s.smooths] == ref["s_names"]
     edf = np.array([t.edf for t in s.smooths])
     ref_edf = np.asarray(ref["s_table"])[:, 0]
+    margin("summary, smooths", "edf, max abs", np.max(np.abs(edf - ref_edf)), "0.05 abs or 1%", S_FIXTURE)
     assert np.all(np.abs(edf - ref_edf) <= np.maximum(0.05, 0.01 * np.abs(ref_edf)))
     assert s.n == ref["n"]
     assert s.scale == ref["scale"] == 1.0
@@ -125,30 +127,38 @@ def test_coefficient_names_follow_model_matrix():
 # from dpstrf stopping at the first non-positive pivot of a matrix whose spectrum falls to 1e-17. Their Ref.df
 # is reported, not gated; Chi.sq and the p-value (below) are gated for them.
 SZ_REF_DF = ("s(FaceSize,AttdAge)", "s(Smoke,AttdAge)", "s(FaceSize,PolYear)")
+S_FIXTURE = "bam_discrete_exit_summary"
 S_NAMES = json.loads((FIXTURES / "bam_discrete_exit_summary.json").read_text())["s_names"]
 
 
-def test_smooth_null_space_and_chi_sq(exit_fit, ref):
+def test_smooth_null_space_and_chi_sq(exit_fit, ref, margin):
     """Every exit smooth is fully penalised (select=TRUE), so summary.gam tests it by reTest."""
     s = exit_fit.summary()
     assert [t.null_space_dim for t in s.smooths] == ref["null_space_dim"]
     chi = np.array([t.chi_sq for t in s.smooths])
+    rel = np.max(np.abs(chi / np.asarray(ref["s_table"])[:, 2] - 1))
+    margin("summary, smooths", "Chi.sq, max rel", rel, "1% rel", S_FIXTURE)
     np.testing.assert_allclose(chi, np.asarray(ref["s_table"])[:, 2], rtol=1e-2)
 
 
-def test_smooth_p_values_meet_the_gate(exit_fit, ref):
+def test_smooth_p_values_meet_the_gate(exit_fit, ref, margin):
     """Q2 (PR #21): p-value 1e-3 absolute or 1% relative, whichever is larger, on all eight exit smooths,
     the three sz terms whose Ref.df is not gated included (option (a), PR #23)."""
     got = np.array([t.p_value for t in exit_fit.summary().smooths])
     want = np.asarray(ref["s_table"])[:, 3]
+    margin("summary, smooths", "p-value, max abs", np.max(np.abs(got - want)), "1e-3 abs or 1%", S_FIXTURE)
     assert np.all(np.abs(got - want) <= np.maximum(1e-3, 1e-2 * np.abs(want)))
 
 
 @pytest.mark.parametrize("label", [lab for lab in S_NAMES if lab not in SZ_REF_DF])
-def test_smooth_ref_df_is_exact(exit_fit, ref, label):
+def test_smooth_ref_df_is_exact(exit_fit, ref, label, margin):
     s = exit_fit.summary()
     row = next(t for t in s.smooths if t.label == label)
-    assert row.ref_df == np.asarray(ref["s_table"])[ref["s_names"].index(label), 1]
+    want = np.asarray(ref["s_table"])[ref["s_names"].index(label), 1]
+    margin(
+        "summary, smooths", "Ref.df (five gated terms), max abs", abs(row.ref_df - want), "exact", S_FIXTURE
+    )
+    assert row.ref_df == want
 
 
 @pytest.mark.parametrize("label", SZ_REF_DF)

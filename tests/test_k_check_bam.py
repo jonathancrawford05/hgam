@@ -124,11 +124,13 @@ def test_ti_tensor_branch(table, ref):
     assert r.p_value == row[3]
 
 
-def test_ti_neighbour_tie_is_refused():
-    """Rows on a grid tie at the third nearest neighbour; mgcv's kd-tree order is not ported."""
+@pytest.mark.parametrize(("offset", "step"), [(0.0, 1.0), (2.0, 0.3), (0.37, 0.1), (1.3, 0.07)])
+def test_ti_neighbour_tie_is_refused(offset, step):
+    """Rows on a grid tie at the third nearest neighbour; mgcv's kd-tree order is not ported. The (2.0, 0.3)
+    grid ties only up to rounding (PR #29 review nit 1)."""
     rng = np.random.default_rng(5)
     a, b = np.meshgrid(np.arange(12.0), np.arange(12.0))
-    x, z = a.ravel(), b.ravel()
+    x, z = offset + step * a.ravel(), offset + step * b.ravel()
     y = np.sin(x / 3) + np.cos(z / 4) + rng.normal(scale=0.3, size=x.size)
     fit = hgam.gam(
         "y ~ s(x, k=5, bs='cr') + s(z, k=5, bs='cr') + ti(x, z, k=c(5, 5), bs='cr')",

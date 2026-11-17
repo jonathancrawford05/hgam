@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's twenty-first slice (M4: `k.check`'s tensor branch). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's twenty-second slice (M4: `gam.check`'s report). M4 is done for the exit fit. Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -109,31 +109,34 @@ discrete path (3.1e-6). Tests: 739 pass, no xfail.
 `k.check` (section 21, `tests/test_k_check_bam.py`, this run's PR; PR #27 merged): `GamFit.k_check(data, *, seed,
 subsample=5000, n_rep=400)` in `hgam.frontend.gam_check` ports `k.check` (plots.r) for one-covariate smooths (cr, tp;
 a numeric by is dropped, as mgcv does), with `deviance_residuals` (`residuals.gam`, deviance) and `Family.dev_resids`.
-Smooths with a factor covariate (sz, re) are NA as in mgcv. The ti branch is not ported (status `"not_ported"`), but its
-`n_rep` shuffles are drawn so the terms after it keep R's stream; a factor-by smooth is refused. `data` is the training
+Smooths with a factor covariate (sz, re) are NA as in mgcv; a factor-by smooth is refused. `data` is the training
 frame (mgcv's `b$model`, raw covariates, not the binned ones). Exit fit under `set.seed(21)`: k' exact, edf 1.4e-6,
 residuals 1.8e-7, k-index 6.8e-10 relative, p-value exact on the three 1-D terms. k-index and p are not key results
 (no gate in PRIORITIES); the test asserts the measured values. The `n > subsample` branch is held to
 `k.check(b14, subsample = 1000, n.rep = 50)` (same section; k-index and p exact). Tests: 746 pass, no xfail.
 
-## Nek.check's tensor branch (this run's PR): a ti term is rescaled by `gr.f` (mean absolute finite difference of
+k.check's tensor branch (PR #29, merged): a ti term is rescaled by `gr.f` (mean absolute finite difference of
 `predict_term_design(term_state) @ beta`, step `diff(range)/1000`) and tested over each row's 3 nearest neighbours
-(`cKDTree` for mgcv's `k_nn` kd-tree; a tie at the third neighbour is refused, mgcv breaks it in its own order). Exit fit
-`ti(PolYear,AttdAge)`: k-index 1.3e-10 relative, p exact (0.7875) under `set.seed(21)`, and on the subsample branch (0.88).
-`k.check` is done for the exit fit. No fixture change (section 21 already recorded the ti row). Tests: 747 pass, no xfail.
+(`cKDTree` for mgcv's `k_nn` kd-tree; a tie at the third neighbour, relative gap 1e-12, is refused, since mgcv breaks it in
+its own order). Exit fit `ti(PolYear,AttdAge)`: k-index 1.3e-10 relative, p exact (0.7875) under `set.seed(21)`, and on the
+subsample branch (0.88). `k.check` is done for the exit fit.
 
-## Next slice: gam.check's printed report (M4)
+`gam.check` (section 22, `tests/test_gam_check_bam.py`, this run's second PR): `GamFit.gam_check(data, *, seed,
+k_sample=5000, k_rep=200)` returns a `GamCheckReport` (`print()` it): method `fREML`, optimizer `perf chol`, `outer.info`
+grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `EngineGAMFit.outer_grad`/`outer_hess`),
+`Model rank = 132 / 132` (exact), and the k table. `qq.gam` draws `s.rep = 10` permutations before `k.check`, so those
+draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
+are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-`gam.check` (plots.r:264, 1.9-4) without the plots: for a bam fit, the convergence lines (method, optimizer, iteration
-count / "full convergence" message, gradient range, Hessian eigenvalue range as mgcv prints them from `b$outer.info`
-or bam's fREML info), the "Model rank = r / p" line, then `printCoefmat(k.check(b))` and its footnote ("Basis
-dimension (k) checking results. Low p-value ..."). Read which of `b$outer.info`'s fields a discrete bam fit has and
-which hgam's `bam_fitd` records; port only what the exit fit prints, refuse the rest. Fixture: capture
-`capture.output(gam.check(b14))` minus plots in section 21 (or 22) and hold the text lines that are key results
-(rank, k table) exactly; the convergence numbers are not key results (assert at what is measured). After that M4 is
-done: PLAN's step 2 (confirm with Jonathan) if PR #24 has merged.
+## Next slice: after M4
 
-en items for Jonathan
+M4 is done for the exit fit. The order of work after the exit test is Jonathan's PR #24 (open, not a development PR).
+If PR #24 has merged, follow its order (its step 2 is to confirm the initial scope with Jonathan). If it has not merged,
+the candidate in the meantime is Priorities item 3, run time: `hgam.bam` on the exit model is 2.3x slower than mgcv with
+OpenBLAS's four default threads and 2.3x faster on one (`docs/findings/0002-exit-benchmark.md`). Capping threads through an
+environment variable needs no dependency; `threadpoolctl` would be a new optional extra, which is an "Always ask" item.
+
+## Open items for Jonathan
 
 None.
 

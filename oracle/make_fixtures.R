@@ -477,4 +477,18 @@ put("bam_discrete_exit_k_check", list(seed = 21, n_rep = 400, subsample = 5000, 
   columns = colnames(kc21), k_table = unname(kc21), residuals = as.numeric(residuals(b14)),
   # the n > subsample branch (sample(1:n, subsample) before the loop), reached at subsample = 1000
   subsampled = list(subsample = 1000, n_rep = 50, k_table = unname({set.seed(21); k.check(b14, subsample = 1000, n.rep = 50)}))))
+# 22. gam.check (plots.r) on section 14's discrete fit b14, without the plots (drawn to a null device): what it prints
+# for a bam fit, whose optimizer is c("perf", "chol") so outer.info (Sl.fitChol's grad and hess at the last
+# smoothing-parameter update) is printed as a list; then "Model rank = b$rank / length(coef)" and k.check at
+# k.sample = 5000, k.rep = 200 under set.seed(22). qq.gam (rep = 0) draws s.rep = 10 permutations sample(U, n) before
+# k.check runs, so gam.check's k table is not k.check's after the same seed: the table gam.check computes is taken
+# from inside it with trace().
+pdf(NULL)
+trace(k.check, exit = quote(assign("kc22", returnValue(), envir = globalenv())), print = FALSE,
+      where = asNamespace("mgcv"))
+set.seed(22); gc22 <- capture.output(gam.check(b14))
+untrace(k.check, where = asNamespace("mgcv")); invisible(dev.off())
+put("bam_discrete_exit_gam_check", list(seed = 22, k_sample = 5000, k_rep = 200, method = b14$method,
+  optimizer = b14$optimizer, grad = as.numeric(b14$outer.info$grad), hess = unname(b14$outer.info$hess),
+  rank = b14$rank, n_coef = length(b14$coefficients), names = rownames(kc22), k_table = unname(kc22), output = gc22))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

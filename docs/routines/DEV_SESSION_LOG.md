@@ -1,5 +1,12 @@
 # Development session log
 
+## 2026-11-17 (twenty-second slice): gam.check's report
+
+PR #29 (k.check's ti branch) auto-merged (six SETTINGS conditions posted); its branch delete was refused by the proxy. Ported `gam.check` (plots.r) without plots as `GamFit.gam_check(data, seed=)`: `outer.info` grad/hess carried from `bam_fitd`, model rank, `qq.gam`'s ten draws, then k.check; section 22, `tests/test_gam_check_bam.py`. PR #29 nit: tie test at relative 1e-12. Fixed a garbled heading in CONTINUATION from the previous slice.
+Tests: 747 pass before; 756 pass, no xfail after (+6 gam.check, +3 tie grids). `make lint` is clean.
+Tier 1, mgcv 1.9-1: method/optimizer/rank 132/132 exact; k table k' exact, edf 1.4e-6, k-index 1.3e-10, p exact; grad 1.1e-5, Hessian 6.2e-6 absolute (not key results).
+Deferred: plots; R's print formatting of outer.info and printCoefmat's digit rules. M4 is done for the exit fit.
+
 ## 2026-11-17 (twenty-first slice): k.check's tensor branch
 
 No open development PR (PR #28 merged). Ported k.check's ti branch (plots.r): `gr.f` finite-difference rescaling through `predict_term_design`, then 3 nearest neighbours via SciPy `cKDTree` in place of `k_nn`; ties at the third neighbour refused. `tests/test_ti_is_not_ported` replaced by `test_ti_tensor_branch` (fixture-backed) plus `test_ti_neighbour_tie_is_refused`.

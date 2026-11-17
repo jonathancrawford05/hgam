@@ -129,13 +129,12 @@ grad and Hessian (`bam_fitd` now keeps `Sl.fitChol`'s last `grad` and `hess`; `E
 draws are made; the k table is then exact against the one gam.check computes (taken with `trace()` in the fixture). Plots
 are not ported; a REML gam fit and `type != "deviance"` are refused. Tests: 756 pass, no xfail.
 
-## Next slice: waiting on Jonathan's confirmation of the initial scope
+## Next slice: the unseen-level refusal, then nthreads, then widening
 
-PR #24 merged, so `docs/PLAN.md`'s "Order of work from here" applies. Step 2 is open: the confirmation PR
-(`dev/2026-11-17-confirm-initial-scope`) lists every initial-scope item with its test, fixture and numbers. No new
-work starts until Jonathan confirms on it. After he confirms, the order is: (0) the unseen-level refusal below;
-(1) the BLAS thread setting below (decided on PR #31, Priorities item 3), unless he says otherwise on the
-confirmation PR; (2) step 3's widening, starting with factor `by`.
+Jonathan confirmed the initial scope on PR #32 (2026-11-17, option (a)). `docs/PLAN.md`'s "Order of work" step 2 is
+done, and step 3 (widening) is open. Order: (0) the unseen-level refusal below; (1) the BLAS thread setting below
+(PR #31); (2) step 3's widening, starting with factor `by`. Start (0) only after PR #32 has merged. It changes
+`.github/` and `tests/`, so Jonathan merges it.
 
 ### Found while adding the margin report (this PR)
 
@@ -177,7 +176,8 @@ Large data (about 30 million rows) is deferred: see `docs/DEFERRED.md`.
 
 ## Open items for Jonathan
 
-Confirm the initial scope (PLAN.md step 2) on the confirmation PR. That PR's "Questions for Jonathan" holds the checklist.
+Decided on PR #32 (2026-11-17): option (a). The initial scope is confirmed against the pinned image (every checklist
+item inside its gate, largest margin Ve's diagonal 8.1e-5 against 1e-2). The next slices are in the order above.
 
 Decided on PR #31 (2026-11-17): option (A) as a setting, `nthreads` with default 1 (next slice above); optimise for
 large data (about 30m rows) later (DEFERRED).

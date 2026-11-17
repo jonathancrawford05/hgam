@@ -8,6 +8,7 @@ The numbers quoted are tier 1 (mgcv 1.9-1). CI does not print the tier 3 margins
 Deferred: nothing new.
 Review b087411: should-fix 1, the unseen-level refusal is a mislabelled `HgamValidationError`; it is moved out of the checklist's refusals, and a slice is scheduled in CONTINUATION. Should-fix 2: the exit row was remeasured (eta 7.5e-8, se 7.2e-7, edf 1.4e-6).
 At Jonathan's request, CI's `oracle` job now prints the key-result margins (`margin` fixture, `HGAM_REPORT_MARGINS`). This found that eight M4 test modules read the committed tier 1 fixtures, not the oracle's. They now read `conftest.FIXTURES`. Locally: 756 pass; the margin table matches the checklist's (15b eta 2.2e-8, below the 4.0e-5 recorded before the constraint rows).
+Pinned image (`oracle` 134048849560): 756 pass with every module on tier 3; margins in the PR #32 checklist. Jonathan confirmed the initial scope (option (a)); the next slice is the unseen-level refusal.
 
 ## 2026-11-17 (twenty-third slice, follow-up): Jonathan's answer on PR #31
 

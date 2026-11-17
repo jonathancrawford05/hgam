@@ -151,14 +151,13 @@ def test_gaussian_names_are_mgcvs(gaussian_fit, gaussian_ref):
 
 
 def test_gaussian_dispersion_rescales_as_mgcv(gaussian_fit, gaussian_ref):
-    # dispersion * Vp / sig2 = dispersion * (X'WX + S)^-1: the scale estimator cancels, so this is gated at the se
-    # gate although hgam's sig2 (Fletcher) is not mgcv's REML scale estimate.
+    # dispersion * Vp / sig2 = dispersion * (X'WX + S)^-1: the scale estimator cancels, so this is gated at
+    # the se gate although hgam's sig2 (Fletcher) is not mgcv's REML scale estimate.
     np.testing.assert_allclose(
         np.diag(gaussian_fit.vcov(dispersion=2.0)),
         np.diag(np.asarray(gaussian_ref["Vp_dispersion_2"])),
         rtol=1e-2,
     )
     expected = np.asarray(gaussian_ref["Vp"])
-    print(
-        f"gaussian Vp diagonal: max relative difference {np.max(np.abs(np.diag(gaussian_fit.vcov()) / np.diag(expected) - 1)):.2e}"
-    )
+    rel = np.max(np.abs(np.diag(gaussian_fit.vcov()) / np.diag(expected) - 1))
+    print(f"gaussian Vp diagonal (reported, not gated): max relative difference {rel:.2e}")

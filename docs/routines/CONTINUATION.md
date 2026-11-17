@@ -96,14 +96,19 @@ line for line in `hgam.frontend.davies` (with R's `revsort` and `log1pmx`); `psu
 `hgam.frontend.smooth_tests`. Against `psum.chisq(..., trace = TRUE)` on 15 cases: p to 4.4e-16, `trace` to 4.3e-15
 relative, ifault and every count exact. Not yet called by `summary()`. Tests: 718 pass, no xfail.
 
-## Next slice: wire the p-value into `summary()` (M4)
+## In review: PR #25, `psum.chisq` and Davies' algorithm (M4)
 
-`re_test` (`hgam.frontend.smooth_tests`) already computes `ev`; return it (or the p-value) and set p as `reTest` does:
-fixed scale `psum_chisq(stat, ev)`; the estimated-scale branch (`psum.chisq(0, c(ev, -stat/k), df = c(rep(1, length(ev)),
-k))`, k = max(1, round(df.residual))) stays refused, as `sig2 != 1` is. Fill `p_value` in `summary()`'s smooth table
-(currently `None`) and hold it to section 16's `s_table[:, 3]` in `tests/test_summary_bam.py` at Q2's gate (1e-3 absolute
-or 1%, whichever is larger). Expected from last run's measurement: mgcv's p to about 3e-6 on all eight terms, five of them
-0. Then M4 continues with `vcov` and `gam.check` (PLAN "Order of work", PR #24 if merged).
+`hgam.frontend.davies` ports `davies.c` line for line; `psum_chisq` and `liu2` live in `smooth_tests`. Section 19
+(`psum_chisq_davies`, 18 cases plus liu2) holds p to 4.4e-16 and Davies' trace counts exactly. Review b892122's
+should-fix (three unreached branches) and nit (liu2 DEFERRED wording) are addressed on the branch
+`claude/dazzling-fermi-xjcoko`. Tests: 724 pass, no xfail. Waiting for a review of the new head.
+
+## Next slice (after PR #25 merges): wire the p-value into `summary()` (M4)
+
+`re_test` returns its eigenvalues; `summary()` of a discrete fit fills each fully penalised smooth's p-value with
+`psum_chisq(Chi.sq, eigenvalues)` as `reTest` does (mgcv.r). Gate (Q2): p-value 1e-3 absolute or 1% relative,
+whichever is larger, against section 16's `s_table[:, 3]`. Exit fit: five p-values are 0, three are 0.0886, 0.111,
+0.223; mgcv's own `psum.chisq` on hgam's eigenvalues gives mgcv's p to 3e-6, so the sz Ref.df gap does not move p.
 
 ## Open items for Jonathan
 

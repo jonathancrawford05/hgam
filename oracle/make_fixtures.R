@@ -431,7 +431,13 @@ psum19 <- list(
   many_small = list(q = 1.2, lb = c(1, runif(40, 0, 0.02))),
   skew = list(q = 25, lb = c(1, 0.999, 1e-3), df = c(1, 1, 50)),
   df_round = list(q = 9, lb = c(1.2, 0.6), df = c(2.5, 3.4)),
-  fallback = list(q = 12, lb = c(3.1, 1.7, 0.9), nlim = 5))
+  fallback = list(q = 12, lb = c(3.1, 1.7, 0.9), nlim = 5),
+  # davies.c branches reached only here (PR #25 review): the auxiliary loop's `ntm > lim` exit, which
+  # returns c = -1 with ifault = 0 so psum.chisq reports p = 2 without a warning; cfe's `fail` return;
+  # cfe's `axl = axl2` clamp
+  aux_lim = list(q = 3, lb = c(10, rep(0.01, 30)), nlim = 5),
+  cfe_fail = list(q = 3, lb = c(10, rep(0.5, 200))),
+  cfe_clamp = list(q = 12, lb = c(1, 0.05)))
 put("psum_chisq_davies", list(
   cases = lapply(psum19, function(a) {
     a$df <- if (is.null(a$df)) rep(1, length(a$lb)) else a$df

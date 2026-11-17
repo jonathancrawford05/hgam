@@ -72,6 +72,9 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   eight exit smooths, 1.7e-6) and Ref.df (exact on five; three sz terms reported, not gated: option (a)).
 - M4, `summary` smooth-term p-value, first step (done 2026-11-17, PR #25): `psum.chisq`, Davies' `davies.c` and `liu2`
   ported (`hgam.frontend.davies`, `tests/test_psum_chisq.py`, section 19).
-- M4, `summary` smooth-term p-value wired (2026-11-17, open): `re_test` returns `reTest`'s p-value and `summary()`
-  reports it; exit fit 3.2e-7 at most (`tests/test_summary_bam.py`, section 16). `summary` is done for the exit fit.
-  Next: `vcov`.
+- M4, `summary` smooth-term p-value wired (done 2026-11-17, PR #26): `re_test` returns `reTest`'s p-value and
+  `summary()` reports it; exit fit 3.2e-7 at most (`tests/test_summary_bam.py`, section 16). `summary` is done for the
+  exit fit.
+- M4, `vcov` (2026-11-17, open): `GamFit.vcov(freq=, dispersion=)` and `GamFit.coefficient_names` port `vcov.gam`;
+  exit fit Vp diagonal 8.3e-6, Ve 8.7e-5 relative, names exact (`tests/test_vcov_bam.py`, section 20). `vcov` is done
+  for the exit fit (Vc refused for a discrete fit). Next: `gam.check`.

@@ -1,6 +1,6 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's eighteenth slice (M4: the smooth-term p-value in `summary()`). Read `docs/PRIORITIES.md` before
+Last updated: 2026-11-17, by the development run's nineteenth slice (M4: `vcov` on the exit fit). Read `docs/PRIORITIES.md` before
 choosing work.
 
 ## State
@@ -98,16 +98,26 @@ R's `revsort` and `log1pmx`); `psum_chisq` and `liu2` (mgcv.r) are in `hgam.fron
 most against section 16's `s_table[:, 3]` (five of eight are 0), all eight terms including the three sz terms whose Ref.df
 is not gated. `summary` is done for the exit fit. Tests: 727 pass, no xfail.
 
-## Next slice: `vcov` on the exit fit (M4)
+`vcov` (section 20, `tests/test_vcov_bam.py`, this run's PR): `GamFit.vcov(unconditional=, *, freq=, dispersion=,
+sandwich=)` ports `vcov.gam` (mgcv.r): Vp by default, Ve with `freq=True` (`Sl.postproc`'s `F %*% Vp`, i.e.
+`Vp X'WX Vp / sig2`; only for a discrete fit, which carries X'WX), `dispersion * vc / sig2`. `GamFit.coefficient_names` is
+`names(b14$edf)`. Exit fit: Vp diagonal 8.3e-6 relative, Ve 8.7e-5 (gate 1%), names exact on 132. `unconditional=True`
+on a discrete fit stays refused (mgcv's Vc there is Sl.postproc's sp-corrected one, up to 3.1x Vp; DEFERRED; the
+fixture records it). `sandwich=True` refused. Tests: 737 pass, no xfail.
 
-Port `vcov.gam` (mgcv.r, 1.9-4): `Vp` by default, `Ve` with `freq = TRUE`, `Vc` with `unconditional = TRUE`
-where it exists, `dispersion` rescaling, dimnames from `names(object$edf)`; `sandwich = TRUE` refused. The engine
-already has `GAMFitResult.vcov` and `bam_fitd` carries `vp` (`vp_override`) and `xwx`; expose `GamFit.vcov(freq=,
-unconditional=, dispersion=)` with mgcv's coefficient names (`parametric_names` plus the smooth labels' `.1`, `.2`, ...).
-Fixture: a new section exporting `vcov(b14)`, `vcov(b14, freq = TRUE)` and whether `b14$Vc` is NULL (discrete bam may
-not set it; then `unconditional = TRUE` returns Vp, as mgcv does). Gate: 1% relative on the diagonal (the se gate) and
-names exact; report the off-diagonal. After `vcov`, `gam.check` finishes M4, then PLAN's step 2 (confirm with
-Jonathan) if PR #24 has merged.
+## Next slice: `gam.check` on the exit fit (M4, last item)
+
+Port the numeric part of `gam.check` (plots.r, 1.9-4) for a discrete fit, without plots: the convergence report it
+prints (`b$outer.info`, `b$mgcv.conv` for bam), the rank line (`b$rank` of `length(coef)`), and `k.check` (plots.r:182)
+as `GamFit.k_check(subsample=5000, n_rep=400)`: per smooth k', edf, k-index and p-value. k.check draws from R's RNG
+(`sample` to subsample when n > 5000, then `n.rep` shuffles per smooth): `hgam.frontend.r_rng.RRandom` already ports
+`sample.int`, so under a given seed the p-value is reproducible draw for draw. It needs `residuals(b)` (deviance residuals
+for binomial; check what `residuals.gam` gives for a bam fit) and, for multi-D terms (ti, sz), the tensor scaling branch;
+terms with factors (sz) and the numeric by get NA as mgcv does (by is dropped: `$by <- "NA"`). Fixture: a new section with
+`set.seed(<n>); k.check(b14)` and the printed scalars. Gates to ask about if needed: k', edf exact/edf gate; k-index
+1% relative; p-value under the same seed exact. If the draws cannot be matched, the p-value is a question for Jonathan.
+Keep the first step to `k.check` if the slice would exceed 600 lines. After `gam.check`, M4 is done: PLAN's step 2
+(confirm with Jonathan, PR #24) if PR #24 has merged.
 
 ## Open items for Jonathan
 

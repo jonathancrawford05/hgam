@@ -451,4 +451,11 @@ put("psum_chisq_davies", list(
   }),
   liu2 = list(x = c(-1, 0.5, 5, 30), lambda = c(2, 1, 0.5), h = c(1, 2, 1),
               p = mgcv:::liu2(c(-1, 0.5, 5, 30), c(2, 1, 0.5), h = c(1, 2, 1)))))
+# 20. vcov.gam (mgcv.r) of section 14's discrete fit b14: Vp (the default), Ve (freq = TRUE), Vc (unconditional = TRUE;
+# bgam.fitd's Sl.postproc sets it for a discrete fit), and a dispersion rescaling (dispersion * vc / sig2), under
+# names(b14$edf) as dimnames.
+put("bam_discrete_exit_vcov", list(
+  names = rownames(vcov(b14)), sig2 = b14$sig2, vc_is_null = is.null(b14$Vc),
+  Vp = unname(vcov(b14)), Ve = unname(vcov(b14, freq = TRUE)), Vc = unname(vcov(b14, unconditional = TRUE)),
+  Vp_dispersion_2 = unname(vcov(b14, dispersion = 2)), Ve_dispersion_2 = unname(vcov(b14, freq = TRUE, dispersion = 2))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-20 (thirty-third slice): `te` on cr, the basis (first step of `te`, PLAN step 3)
+
+No open PR at start (PR #40 had merged). `hgam.engine.gam_basis_te` ports `smooth.construct.tensor.smooth.spec` (te branch: margins by `smooth.construct`, cr's `noterp` skips the np reparameterisation), `tensor.prod.model.matrix`, `tensor.prod.penalties`, `Predict.matrix.tensor.smooth` and smoothCon's scaling and whole-term constraint, for any number of cr margins. `gam()` still refuses te.
+Tests: 789 → 793 (four added). `make lint` clean. Section 26 (tier 1, mgcv 1.9-1), structure (rank, null.space.dim, columns) exact; te(x,z) X 1.6e-14, S 1.7e-14, PredictMat 1.0e-14, knots 1.6e-15; te(x,z,w) X 1.5e-14, S 1.6e-14, PredictMat 8.5e-15.
+Deferred: nothing new. Next: wire te into gam(REML) (section 26b).
+
 ## 2026-11-20 (thirty-second slice): `re` beside cr and fs (PLAN step 3)
 
 PR #39 auto-merged in this run (six conditions posted). `s(g, bs="re")` measured, no code change: section 25 holds `s(x, bs="cr") + s(g, bs="re")` and `s(x, f, bs="fs") + s(g, bs="re")` as REML gam and discrete bam (`tests/test_re_fit.py`). PR #39 nits: hgam's fs select fit asserted equal to its no-select fit (exact); the `matrix_rank` vs `eps^0.66` tolerance is a DEFERRED line.

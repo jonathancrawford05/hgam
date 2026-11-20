@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-20 (thirty-ninth slice): `t2` on cr in discrete bam (third step of `t2`, PLAN step 3)
+
+No open PR at start (PR #46 merged). bam's `modCon = 2` (t2 fit constraint = `Cp`, built on `mf0`), joint `compress.df` for t2's covariates, `uniquecombs`' multi-column text order with R's `as.character` (`r_double_string`); `tero` skips t2. Retired refusal case: `test_t2_refusals[discrete=True]`, replaced by `test_discrete_t2_meets_the_gates`.
+Tests: 838 → 846. `make lint` clean. Section 27c (tier 1, mgcv 1.9-1 local): eta 6.3e-12, se 2.8e-11, edf 4.8e-5 of gate, predict 5.6e-12 / se 3.1e-11, |Cp| 5.9e-15, joint compress.df rows and index exact; structure exact.
+Deferred: vcov/summary on a discrete t2 fit (refused, not measured); `r_double_string` above 1e15. Next: `select=TRUE` with t2.
+
 ## 2026-11-20 (thirty-eighth slice): `t2` on cr, the REML fit (second step of `t2`, PLAN step 3)
 
 PR #45 auto-merged in this run (six conditions posted; the branch could not be deleted, the git proxy cuts the push). t2 wired into `gam(method="REML")` in smoothCon's fit parameterisation; `G$P` not ported (spans agree to 1.1e-14), so `vcov`/`summary`/`k_check` refuse t2. Retired refusal-only t2 cases (SETTINGS condition 5): `test_gam_still_refuses_t2`, the `t2()` formula refusal and `TermSpec(basis="t2")` refusal, replaced by `test_t2_meets_the_gates` (the formula cases now refuse `full=`, `ord=` and three margins).

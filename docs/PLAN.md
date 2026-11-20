@@ -159,3 +159,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   `[1, X]` and `[1, Xp]` span the same space, 1.1e-14), and `vcov`, `summary`, `k_check` refuse t2. Section 27b,
   `tests/test_t2_fit.py`: eta 2.4e-4 and 4.4e-4 (the second against mgcv's tight refit, PR #12 rule), se 3.1e-3,
   edf 3.5e-2 of the gate, predict 5.7e-4; fit at mgcv's sp 8.7e-12; structure exact. Next: discrete bam.
+- Widening, `t2` on cr, third step (2026-11-20): discrete bam. `bam` calls `gam.setup(..., modCon = 2)`, so t2's fit
+  constraint is `Cp` (dense, smoothCon's full QR branch; no `G$P`); `discrete.mf` compresses t2's covariates jointly
+  (`uniquecombs`' text order ported with R's `as.character`, `r_double_string`) and the term is built on `mf0`
+  (`t2_basis(frame=, mod_con=2)`). Section 27c, `tests/test_t2_discrete.py`: eta at most 6.3e-12, se 2.8e-11, predict
+  5.6e-12, edf 4.8e-5 of the gate, |Cp| 5.9e-15, joint compress.df rows and index exact; structure exact. Next: `select=TRUE` with t2.

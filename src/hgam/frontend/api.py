@@ -289,8 +289,15 @@ class GamFit(EngineGAMFit):
     def _refuse_t2_coefficients(self, what: str) -> None:
         """mgcv reports a fit with a t2 term in ``gam.setup``'s prediction parameterisation (``G$P``, applied
         to coefficients, ``Vp`` and ``Ve`` by ``estimate.gam``, mgcv.r); hgam keeps the fit one
-        (``build_python_t2_term``), so a quantity read off the coefficients would not be mgcv's."""
+        (``build_python_t2_term``), so a quantity read off the coefficients would not be mgcv's. In a
+        ``discrete=True`` fit the two parameterisations are one (``modCon = 2``), but coefficient-level
+        output for a t2 term is not measured there, so it is refused too."""
         t2 = [t.label for t in self.model.terms if t.basis == "t2"]
+        if t2 and self.fit_method == "fREML-discrete":
+            raise HgamNotImplementedError(
+                f"{what}: the fit has {', '.join(t2)}; coefficient-level output for a t2 term in "
+                "bam(discrete=True) is not measured against mgcv yet, so it is refused."
+            )
         if t2:
             raise HgamNotImplementedError(
                 f"{what}: the fit has {', '.join(t2)}; mgcv reports it in the prediction parameterisation "
@@ -587,19 +594,15 @@ def _refuse_te(call: TensorCall, parsed: ParsedFormula) -> None:
             )
 
 
-def _refuse_t2(call: TensorCall, parsed: ParsedFormula, *, select: bool, discrete: bool) -> None:
-    """``t2(x, z, bs="cr")`` is ported for ``gam(method="REML")`` on its own covariates. Refused by
-    name: ``select=TRUE`` and ``bam(discrete=TRUE)`` (not measured yet), and a t2 beside another smooth of
-    one of its covariates (``gam.side``, as for te: :func:`_refuse_te`)."""
+def _refuse_t2(call: TensorCall, parsed: ParsedFormula, *, select: bool) -> None:
+    """``t2(x, z, bs="cr")`` is ported for ``gam(method="REML")`` and ``bam(discrete=TRUE)`` on its own
+    covariates. Refused by name: ``select=TRUE`` (not measured yet), and a t2 beside another smooth of
+    one of its covariates (``gam.side``, as for te: :func:`_refuse_te`). In a discrete bam a t2 is not
+    ``tero``-reordered (it is not a ``tensor.smooth.spec``) and its covariates are compressed jointly."""
     if select:
         raise HgamNotImplementedError(
             f"gam(): select=True with {call.text} is not verified against mgcv yet (smoothCon's "
             "null.space.penalty on a t2 term)."
-        )
-    if discrete:
-        raise HgamNotImplementedError(
-            f"gam(): {call.text} in bam(discrete=True) is not ported (discrete.mf and mf0 for t2); "
-            'fit it with gam(method="REML").'
         )
     _refuse_te(call, parsed)
 
@@ -753,8 +756,8 @@ def _build_model(
             if call.kind == "te":
                 _refuse_te(call, parsed)
             if call.kind == "t2":
-                _refuse_t2(call, parsed, select=select, discrete=tero)
-            call = _tero(call) if tero else call
+                _refuse_t2(call, parsed, select=select)
+            call = _tero(call) if tero and call.kind != "t2" else call
             margin_knots = tuple(
                 pair
                 for v, k in zip(call.variables, call.k, strict=True)

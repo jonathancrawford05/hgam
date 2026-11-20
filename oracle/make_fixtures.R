@@ -770,4 +770,42 @@ put("gam_binomial_cloglog_factor_t2_reml", c(gam_case(m27b2, d26b, f27b2, "binom
     list(tight = c(gam_case(m27b2t, d26b, f27b2, "binomial(link='cloglog')")[
       c("sp", "edf", "eta", "se", "reml", "outer_iter", "outer_conv")],
       list(conv_tol = 1e-12, fit_new = as.numeric(pr27b2t$fit), se_new = as.numeric(pr27b2t$se.fit))))))
+# 27c. t2 on cr in bam(method = "fREML", discrete = TRUE). bam calls gam.setup(..., modCon = 2), so smoothCon sets the
+# fit constraint to the prediction one (sm$C <- sm$Cp, colSums(X), dense: the full QR branch); fit and prediction
+# parameterisations are then one and bam applies no G$P. A t2.smooth.spec is not a tensor.smooth.spec: tero leaves it
+# alone and discrete.mf (nmarg = 1) compresses its covariates jointly, one compress.df call on (x, z) (uniquecombs orders
+# multi-column rows by their text, paste0(x, "*", z), in the C locale). The term is built on the padded frame mf0.
+# 27c1, 27c2: 27b's two models (every (x, z) pair unique, so compress.df returns the data unshuffled). 27c3: x on a
+# 0.5 grid and z to one decimal, so pairs repeat: the unique pairs are shuffled and the columns padded. predict.bamd on
+# new data, rank, coefficient names and the constraint direction (con_dir). 27c4: compress.df on two columns with
+# repeated rows written in mixed notation, under set.seed(8547): the unique rows in mgcv's (shuffled) order.
+t2_disc_extra <- function(b, kn, nd) {
+  t2_sm <- b$smooth[[which(sapply(b$smooth, function(sm) inherits(sm, "t2.smooth")))]]
+  pr <- predict(b, nd, se.fit = TRUE)
+  list(knots = kn, rank = b$rank, coef_names = names(coef(b)), newdata = nd, fit_new = as.numeric(pr$fit),
+       se_new = as.numeric(pr$se.fit), constraint = con_dir(t2_sm))
+}
+b27c1 <- bam(as.formula(f27b1), family = binomial(link = "cloglog"), weights = n, data = d26b, knots = te_knots,
+             method = "fREML", discrete = TRUE)
+put("bam_discrete_binomial_cloglog_t2", bam_disc_case(b27c1, d26b, f27b1, "binomial(link='cloglog')",
+                                                      t2_disc_extra(b27c1, te_knots, nd26b)))
+b27c2 <- bam(as.formula(f27b2), family = binomial(link = "cloglog"), weights = n, data = d26b, method = "fREML",
+             discrete = TRUE)
+put("bam_discrete_binomial_cloglog_factor_t2", bam_disc_case(b27c2, d26b, f27b2, "binomial(link='cloglog')",
+                                                             t2_disc_extra(b27c2, NULL, nd26b)))
+set.seed(273); n <- 2000
+d27c <- data.frame(x = round(runif(n, 1, 21) * 2) / 2, z = round(rnorm(n), 1), n = sample(20:200, n, TRUE))
+d27c$p <- rbinom(n, d27c$n, 1 - exp(-exp(-4 + 0.08 * (d27c$x - 10) + 0.3 * sin(d27c$z) * cos(d27c$x / 4)))) / d27c$n
+nd27c <- data.frame(x = c(0.5, runif(40, 1, 21), 22), z = c(-3.5, rnorm(40), 3.5))
+f27c3 <- "p ~ t2(x, z, bs='cr', k=c(6, 5))"
+b27c3 <- bam(as.formula(f27c3), family = binomial(link = "cloglog"), weights = n, data = d27c, method = "fREML",
+             discrete = TRUE)
+put("bam_discrete_binomial_cloglog_t2_repeated", bam_disc_case(b27c3, d27c, f27c3, "binomial(link='cloglog')",
+    c(t2_disc_extra(b27c3, NULL, nd27c), list(n_unique_pairs = nrow(unique(d27c[c("x", "z")]))))))
+set.seed(274)
+dj <- data.frame(x = sample(c(1, 2.5, 10, 0.75, 1e5, 1e-4, -3, 12, 100, 0.001), 400, TRUE),
+                 z = sample(c(-1.5, 0.2, 7, 30, 1e-5, 123456), 400, TRUE))
+set.seed(8547); xu <- mgcv:::compress.df(dj)
+put("compress_df_joint_order", list(columns = as.list(dj), nr = nrow(xu), x = xu$x, z = xu$z,
+                                    index = as.integer(attr(xu, "index")), text = paste0(dj$x, "*", dj$z)))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

@@ -579,4 +579,28 @@ for (f24d in c("p ~ s(x, f, bs='fs', xt='cr', k=6)", "p ~ s(f, x, bs='fs', xt='c
                fit_new = as.numeric(pr24d$fit), se_new = as.numeric(pr24d$se.fit),
                s_table = unname(summary(b24d)$s.table)), bam_rank(b24d))))
 }
+# 24e. select = TRUE with fs (smoothCon's null.space.penalty branch, smooth.r): fs has several penalties, so mgcv takes
+# need.full, sums them and adds U U' only for eigenvalues below max * eps^0.66. The fs penalties sum to full rank, so the
+# fs term gets no extra penalty and the fit equals the select = FALSE one (recorded as n_penalties and eta_vs_noselect).
+# (i) 24b's REML fit, (ii) 24d's discrete bam in written order, (iii) 24c's s(x) + fs REML fit, where the cr smooth does
+# get its null-space penalty.
+m24e1 <- gam(as.formula(f24b), family = binomial(link = "cloglog"), weights = n, data = d24b,
+             knots = list(x = sz_knots), method = "REML", select = TRUE)
+put("gam_binomial_cloglog_fs_select_reml", c(gam_case(m24e1, d24b, f24b, "binomial(link='cloglog')"),
+  list(knots = list(x = sz_knots), select = TRUE, rank = m24e1$rank, coef_names = names(coef(m24e1)),
+       n_penalties = sapply(m24e1$smooth, function(s) length(s$S)),
+       eta_vs_noselect = max(abs(m24e1$linear.predictors - m24b$linear.predictors)))))
+f24e2 <- "p ~ s(x, f, bs='fs', xt='cr', k=6)"
+b24e2 <- bam(as.formula(f24e2), family = binomial(link = "cloglog"), weights = n, data = d24b,
+             knots = list(x = sz_knots), method = "fREML", discrete = TRUE, select = TRUE)
+b24e2n <- bam(as.formula(f24e2), family = binomial(link = "cloglog"), weights = n, data = d24b,
+              knots = list(x = sz_knots), method = "fREML", discrete = TRUE)
+put("bam_discrete_binomial_cloglog_fs_select", bam_disc_case(b24e2, d24b, f24e2, "binomial(link='cloglog')",
+  c(list(knots = list(x = sz_knots), select = TRUE, n_penalties = sapply(b24e2$smooth, function(s) length(s$S)),
+         eta_vs_noselect = max(abs(b24e2$linear.predictors - b24e2n$linear.predictors))), bam_rank(b24e2))))
+m24e3 <- gam(as.formula(f24c1), family = binomial(link = "cloglog"), weights = n, data = d24b,
+             knots = list(x = sz_knots), method = "REML", select = TRUE)
+put("gam_binomial_cloglog_cr_fs_select_reml", c(gam_case(m24e3, d24b, f24c1, "binomial(link='cloglog')"),
+  list(knots = list(x = sz_knots), select = TRUE, rank = m24e3$rank, coef_names = names(coef(m24e3)),
+       n_penalties = sapply(m24e3$smooth, function(s) length(s$S)))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

@@ -1,5 +1,5 @@
 """The ``fs`` factor-smooth term in a REML gam fit and in a discrete bam fit, held to mgcv
-(``make_fixtures.R`` sections 24b to 24d).
+(``make_fixtures.R`` sections 24b to 24e).
 
 mgcv counterpart: ``smooth.construct.fs.smooth.spec`` with ``xt = "cr"`` (smooth.r, mgcv 1.9-4), the
 non-``gamm``, non-tensor branch, fitted by ``gam(method = "REML")``; prediction through
@@ -150,12 +150,6 @@ def small() -> dict[str, np.ndarray]:
         ('p ~ s(x, f, bs="fs", xt="cr", by=z)', {}, "argument 'by'"),
         ('p ~ s(x, z, bs="fs", xt="cr")', {}, "exactly one factor"),
         ('p ~ s(f, g, bs="fs", xt="cr")', {}, "exactly one factor"),
-        ('p ~ s(x, f, bs="fs", xt="cr", k=6)', {"select": True}, "select=True"),
-        (
-            'p ~ s(x, f, bs="fs", xt="cr", k=6)',
-            {"method": "fREML", "discrete": True, "select": True},
-            "select=True",
-        ),
     ],
 )
 def test_fs_refusals(small, formula: str, kwargs: dict, match: str) -> None:
@@ -225,3 +219,47 @@ def test_fs_discrete_bam_meets_the_gates(name: str, load_fixture, margin) -> Non
     assert d_edf <= 1.0
     assert d_new < 1e-3
     assert d_se_new < 1e-2
+
+
+SELECT = {
+    "gam_binomial_cloglog_fs_select_reml": {"method": "REML"},
+    "bam_discrete_binomial_cloglog_fs_select": {"method": "fREML", "discrete": True},
+    "gam_binomial_cloglog_cr_fs_select_reml": {"method": "REML"},
+}
+
+
+@pytest.mark.parametrize("name", list(SELECT))
+def test_fs_select_meets_the_gates(name: str, load_fixture, margin) -> None:
+    """Section 24e: ``select=TRUE``. smoothCon's ``null.space.penalty`` branch takes ``need.full`` for
+    fs (three penalties), and their sum is full rank, so mgcv appends no penalty to the fs term: its
+    fit equals the ``select = FALSE`` one (``eta_vs_noselect`` is 0 in the fixture) and
+    ``null_space_penalty`` adds nothing either. Beside ``s(x, bs="cr")`` the cr smooth gets its
+    null-space penalty (five smoothing parameters)."""
+    fx = load_fixture(name)
+    data = _columns(fx["data"])
+    formula = fx["formula"].replace("'", '"')
+    fit = gam(formula, data, FAMILY, weights="n", select=True, knots=fx["knots"], **SELECT[name])
+    assert fit.converged
+    labels = fx["labels"] if isinstance(fx["labels"], list) else [fx["labels"]]
+    assert list(fit.smooth_labels) == labels
+    assert fit.coef.size == fx["n_coef"] == fx["rank"]
+    assert not fit.pivoted_columns
+    assert list(fit.coefficient_names) == fx["coef_names"]
+    # Structure: the number of smoothing parameters is mgcv's (fs keeps its three; a cr smooth
+    # gets a second). sp values are not gated (the two fs null-space directions are ordered by rounding).
+    assert len(fit.lambda_) == len(fx["sp"]) == int(np.sum(fx["n_penalties"]))
+    if "eta_vs_noselect" in fx:
+        assert fx["eta_vs_noselect"] == 0.0
+
+    eta, se = fit.predict(data, se_fit=True)
+    d_eta = float(np.max(np.abs(eta - np.asarray(fx["eta"]))))
+    d_se = float(np.max(np.abs(se / np.asarray(fx["se"]) - 1.0)))
+    ref_edf = np.atleast_1d(np.asarray(fx["edf"], dtype=np.float64))
+    got_edf = np.array([fit.edf_per_term[label] for label in labels])
+    d_edf = float(np.max(np.abs(got_edf - ref_edf) / np.maximum(0.05, 0.01 * ref_edf)))
+    margin("fs select", "eta, max abs", d_eta, "1e-3 abs", name)
+    margin("fs select", "se, max rel", d_se, "1e-2 rel", name)
+    margin("fs select", "edf, fraction of gate", d_edf, "0.05 abs or 1%", name)
+    assert d_eta < 1e-3
+    assert d_se < 1e-2
+    assert d_edf <= 1.0, (got_edf, ref_edf)

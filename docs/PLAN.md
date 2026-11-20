@@ -119,3 +119,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   penalty scaling over its rows, margins compressed in written order): eta 6.1e-14, se 3.7e-14, `P` 1.3e-14,
   predict on new data 6.3e-14, summary's Ref.df exact and Chi.sq 3e-14, both written orders (`tests/test_fs_fit.py`,
   section 24d). Next: `select=TRUE` with fs.
+- Widening, `fs` on cr, fourth step (2026-11-20): `select=TRUE`. smoothCon's `null.space.penalty` `need.full` branch
+  adds nothing to fs (its penalties sum to full rank; mgcv's fit equals the `select=FALSE` one), and neither does
+  `null_space_penalty`; the refusal is dropped. REML gam eta 1.1e-4, se 4.3e-4; discrete bam eta 6.1e-14; beside
+  `s(x, bs="cr")` (whose null-space penalty is added) eta 2.9e-5, se 4.4e-4, edf 1.6e-2 of the gate width
+  (`tests/test_fs_fit.py`, section 24e). `fs` on cr is done. Next: `re` beside fs and in discrete bam.

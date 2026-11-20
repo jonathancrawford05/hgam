@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-20 (thirty-first slice): `select=TRUE` with `fs` (fourth step of `fs`, PLAN step 3)
+
+No open PR at start (PR #38 had merged). smoothCon's `null.space.penalty` branch read: fs takes `need.full`, its three penalties sum to full rank, so mgcv adds nothing; `null_space_penalty` agrees, and the `select` refusal for fs is dropped. The two select refusal cases in `test_fs_refusals` retired (SETTINGS condition 5), replaced by `test_fs_select_meets_the_gates` (section 24e).
+Tests: 784 → 785 (three added, two refusal cases removed). `make lint` clean. Section 24e (tier 1, mgcv 1.9-1): REML gam eta 1.1e-4, se 4.3e-4, edf 1.3e-3 of gate; discrete bam eta 6.1e-14, se 3.7e-14; cr + fs eta 2.9e-5, se 4.4e-4, edf 1.6e-2 of gate; structure, rank, names exact; mgcv's fs fit equals its select=FALSE fit (eta difference 0).
+Deferred: the fs null-pair sp swap beside s(x) with select (DEFERRED). Next: `re` beside fs and in discrete bam.
+
 ## 2026-11-17 (thirtieth slice): `fs` in discrete bam (third step of `fs`, PLAN step 3)
 
 PR #37 auto-merged (six conditions posted; the branch delete was refused by the proxy). `bam(discrete=TRUE)` builds fs on `discrete.mf`'s `mf0`: `fs_basis(frame=)` takes `nat.param` and the penalty scaling over its rows (`fs_frame`, read through `constraint_frame`), and `TermSpec.margin_order` keeps the written order for compression. Refusal test `test_fs_refused_by_bam` retired (SETTINGS condition 5), replaced by `test_fs_discrete_bam_meets_the_gates`.

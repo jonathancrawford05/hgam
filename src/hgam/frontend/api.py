@@ -734,10 +734,9 @@ def _build_model(
                     f"covariate; {sum(is_factor)} of {list(call.variables)} are factor columns "
                     "(mgcv stops on two factors and builds a plain base smooth on none)."
                 )
-            if select:
-                raise HgamNotImplementedError(
-                    f"gam(): select=True with the fs term {call.text} is not measured against mgcv yet."
-                )
+            # select=True: smoothCon's null.space.penalty need.full branch (smooth.r, mgcv 1.9-4). fs's
+            # penalties sum to full rank, so mgcv appends nothing to this term, and neither does
+            # null_space_penalty (make_fixtures.R section 24e: mgcv's fit is the select=FALSE one).
             factor_name = call.variables[is_factor.index(True)]
             smoothed = call.variables[is_factor.index(False)]
             need_numeric(smoothed, call.text)
@@ -852,7 +851,7 @@ def gam(
             Supported: a bare ``s(x, k=)`` / ``s(x, bs="tp", k=)`` (thin-plate, ``mgcv``'s
             default, ADR-261), ``s(x, bs="cr", k=, by=)`` (numeric or factor ``by``),
             ``s(f, bs="re")``, ``s(f, x, bs="sz", k=, xt=list(bs="cr"))``,
-            ``s(x, f, bs="fs", k=, xt="cr")`` (no ``select``),
+            ``s(x, f, bs="fs", k=, xt="cr")``,
             ``ti(x, z, bs="cr", k=)``, factors ``a``, ``a:b``
             (with both main effects), ``offset(col)``. Anything else is refused by
             name (:class:`~hgam.errors.HgamValidationError`).

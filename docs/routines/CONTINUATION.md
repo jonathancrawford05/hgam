@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-17, by the development run's thirtieth slice: `fs` in discrete bam, the third step of `fs`
-(PLAN step 3). PR #37 (the fs REML fit) auto-merged earlier in this run. Read `docs/PRIORITIES.md` before choosing
+Last updated: 2026-11-20, by the development run's thirty-first slice: `select=TRUE` with `fs`, the fourth and last
+step of `fs` (PLAN step 3). PR #38 (fs in discrete bam) had merged before this run. Read `docs/PRIORITIES.md` before choosing
 work.
 
 ## State
@@ -164,17 +164,25 @@ rows is `Predict.matrix.fs.interaction` with that `P`. Both written orders: eta 
 mgcv's order, predict on new data 6.3e-14, summary Ref.df 17 exact, Chi.sq 3e-14, p 0. Built on the data rows instead,
 eta misses by 8.1e-3. Tests: 784 pass, no xfail.
 
-## Next slice: `select=TRUE` with fs
+`select=TRUE` with fs (section 24e, `tests/test_fs_fit.py`, this run's PR): smoothCon's `null.space.penalty` branch
+takes `need.full` for fs (three penalties) and appends `U U'` only for eigenvalues below `max * eps^0.66` of their sum;
+fs's sum is full rank, so mgcv adds nothing and its fit equals the `select=FALSE` one (eta difference 0, recorded in the
+fixture). `null_space_penalty` adds nothing either; the refusal in `api._build_model` is gone. REML gam eta 1.1e-4, se
+4.3e-4; discrete bam eta 6.1e-14; `s(x, bs="cr") + s(x, f, bs="fs")` with select (the cr smooth gets its null-space
+penalty, five sp in mgcv's order up to the fs null-pair swap) eta 2.9e-5, se 4.4e-4, edf 1.6e-2 of the gate width.
+Structure, rank and names exact. `fs` on cr is done. Tests: 785 pass, no xfail.
 
-`gam(..., select=True)` and `bam(..., discrete=True, select=True)` with `s(x, f, bs="fs", xt="cr", k=)`:
-- Read `smoothCon`'s `null.space.penalty` branch (smooth.r 1.9-4) for a term with several penalties whose sum is full
-  rank: fs's summed penalties have no null space, so mgcv may add nothing. Check `hgam.engine.gam_select_penalty`
-  (`null_space_penalty`) does the same (adds no block when the summed penalty is full rank), then drop the refusal in
-  `api._build_model` (`if select:` in the fs branch).
-- Fixture: section 24e, 24b's REML fit and 24d's discrete fit with `select = TRUE`, plus `s(x, bs="cr") + s(x, f,
-  bs="fs")` with `select = TRUE` (the cr smooth does get a null-space penalty); gate structure, eta, se, per-term edf.
-  If mgcv's fit equals the `select = FALSE` one for fs alone, say so in the test.
-After it: `re` per PLAN step 3 (`s(f, bs="re")` is already ported; measure it beside fs and in discrete bam first).
+## Next slice: `re` beside fs and in discrete bam
+
+PLAN step 3's next construct. `s(f, bs="re")` is already parsed and built (`api._build_model`, `discrete.py` treats it
+like a parametric column). First measure, no port expected:
+- Fixture section 25: on 24b's data, (a) `p ~ s(x, bs="cr", k=6) + s(f, bs="re")` as a REML gam, (b) the same as
+  `bam(method="fREML", discrete=TRUE)`, (c) `p ~ s(x, f, bs="fs", xt="cr", k=6) + s(g, bs="re")` with a second factor
+  g (a random intercept beside fs). Record rank, coef names, predict on new data. Gate structure, eta, se, per-term edf.
+- Read `smooth.construct.re.smooth.spec` (smooth.r 1.9-4) and `discrete.mf`'s handling of re (bam.r) first: if mgcv
+  discretises the re factor as a margin, check `discrete.py` does the same.
+- If a gate fails, port the piece mgcv's path takes; otherwise test only. `recov`'s re branch for `summary` stays
+  refused (DEFERRED).
 
 Carried PR #37 review nit: done (the 24c sp line in DEFERRED).
 

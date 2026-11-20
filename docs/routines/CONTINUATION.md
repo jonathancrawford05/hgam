@@ -192,8 +192,10 @@ knots and `Z` (`gam_predict`). `p ~ te(x, z, bs="cr", k=c(5, 4))` with x's knots
 relative, edf 1.4e-2 of the gate width, predict on new data (outside both knot ranges too) eta 2.2e-4, se 1.9e-3;
 `p ~ f + te(x, z)` at defaults: eta 4.9e-6, se 2.5e-3, edf 5.0e-4 of the gate, predict 8.7e-6. Structure, rank and
 names exact. Refused by name (`api._refuse_te`): `select=TRUE`, `bam(discrete=TRUE)`, and a te beside another smooth
-of one of its covariates (mgcv's `gam.side` would constrain the nested columns; not ported). `k_check` refuses te.
-`summary`'s `null_space_dim` for te is `None` (its smooth-term test is not measured). Tests: 806 pass, no xfail.
+of one of its covariates (not verified: mgcv's `gam.side` constrains nested columns for smooths with `side.constrain`,
+matched on `term` with `by` appended, and leaves fs, sz, re and by smooths alone; PR #42 review). A k below 3 or a k
+vector of the wrong length is refused (mgcv warns and resets k to 5 per margin). `k_check` refuses te. `summary`'s
+`null_space_dim` for te is `None` (its smooth-term test is not measured). Tests: 808 pass, no xfail.
 
 ## Next slice: `te` on cr, third step (discrete bam)
 

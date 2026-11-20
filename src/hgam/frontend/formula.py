@@ -405,6 +405,14 @@ def _parse_tensor(text: str, positional: list[str], keyword: dict[str, str], kin
     if basis != "cr":
         raise _refuse(f"bs={basis!r} in {text}", f'only bs="cr" margins are verified ({_COVERAGE} §2.1)')
     k = _k_vector(keyword["k"], text) if "k" in keyword else (_TI_DEFAULT_K,)
+    if kind == "te" and (len(k) not in (1, 2) or min(k) < 3):
+        # te() (smooth.r): "one or more supplied k too small" or a k vector of the wrong length makes
+        # mgcv warn and reset k to 5^d; that reset is not ported.
+        raise _refuse(
+            f"k={k!r} in {text}",
+            "mgcv warns and resets k to its default 5 per margin when a k is below 3 or the k vector's "
+            "length is not the number of margins; that reset is not ported, write k >= 3 per margin",
+        )
     if len(k) == 1:
         k = k * 2
     if len(k) != 2:

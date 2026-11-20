@@ -76,13 +76,14 @@ def test_te_meets_the_gates(name: str, load_fixture, margin) -> None:
     [
         ('p ~ te(x, z, bs="cr")', {"select": True}, "select=True"),
         ('p ~ te(x, z, bs="cr")', {"method": "fREML", "discrete": True}, "bam(discrete=True)"),
-        ('p ~ s(x, bs="cr") + te(x, z, bs="cr")', {}, "gam.side"),
-        ('p ~ te(x, z, bs="cr") + s(z, f, bs="fs", xt="cr")', {}, "gam.side"),
+        ('p ~ s(x, bs="cr") + te(x, z, bs="cr")', {}, "not verified"),
+        ('p ~ te(x, z, bs="cr") + s(z, f, bs="fs", xt="cr")', {}, "not verified"),
     ],
 )
 def test_te_refusals(formula: str, kwargs: dict, needle: str, load_fixture) -> None:
     """What te does not port yet is refused by name: select=TRUE, discrete bam, and a te beside another smooth
-    of one of its covariates (mgcv's gam.side would constrain the nested columns)."""
+    of one of its covariates, which is not measured (mgcv's gam.side constrains nested columns for some such
+    smooths, e.g. a bare s(x), and leaves others alone, e.g. fs; gam.side is not ported)."""
     data = _columns(load_fixture("gam_binomial_cloglog_factor_te_reml")["data"])
     with pytest.raises(HgamNotImplementedError, match=needle.replace("(", r"\(").replace(")", r"\)")):
         gam(formula, data, FAMILY, weights="n", **{"method": "REML", **kwargs})

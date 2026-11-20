@@ -91,6 +91,8 @@ def test_a_thin_plate_smooth_takes_no_by() -> None:
         ('y ~ te(x, z, bs="tp")', "bs='tp'"),
         ("y ~ te(x, z, by=w)", "argument 'by'"),
         ("y ~ te(x, z, d=2)", "argument 'd'"),
+        ("y ~ te(x, z, k=2)", "resets k"),
+        ("y ~ te(x, z, k=c(5, 4, 3))", "resets k"),
         ("y ~ a*b", "operator"),
         ("y ~ a^2", "operator"),
         ("y ~ a:b:c", "interaction"),

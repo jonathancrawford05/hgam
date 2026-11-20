@@ -183,7 +183,7 @@ unscaled; cr sets `noterp`, so `np = TRUE` does nothing; each margin penalty ove
 sum-to-zero constraint on the whole product, and `Predict.matrix.tensor.smooth` (`te_predict_design`, keeping `Z`). Any
 number of margins. `te(x, z, k=c(5, 4))` (x at supplied knots, z default) and `te(x, z, w, k=c(4, 4, 3))`: rank,
 null.space.dim and column count exact; X, S, PredictMat (points outside the knots too) at most 1.6e-14 relative.
-`gam()` still refuses te (`formula.py` `_REFUSED["te"]`). Tests: 793 pass, no xfail.
+`gam()` still refuses te (`formula.py` `_REFUSED["te"]`). `constraint_rows=` is tested (PR #41 review nit). Tests: 794 pass, no xfail.
 
 ## Next slice: `te` on cr, second step (the REML fit)
 

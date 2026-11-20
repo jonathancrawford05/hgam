@@ -9,6 +9,7 @@ exact, X, S and PredictMat at 1e-8 relative. ``gam()`` still refuses ``te`` (the
 import numpy as np
 import pytest
 
+from hgam.engine.gam_basis_cr import _cr_basis_raw
 from hgam.engine.gam_basis_te import te_basis, te_predict_design, tensor_prod_model_matrix
 
 GATE = 1e-8
@@ -63,6 +64,24 @@ def test_tensor_prod_model_matrix_row_kronecker() -> None:
     got = tensor_prod_model_matrix([a, b, c])
     for i in range(6):
         np.testing.assert_allclose(got[i], np.kron(np.kron(a[i], b[i]), c[i]), rtol=0, atol=1e-15)
+
+
+def test_te_basis_constraint_rows_are_forwarded() -> None:
+    """``constraint_rows`` replaces the rows ``colMeans`` is taken over (as ``bam(discrete=TRUE)``'s ``mf0``
+    will need): the data's own tensor rows reproduce the default, other rows give a constraint orthogonal to
+    their own column means."""
+    rng = np.random.default_rng(1)
+    x, z = rng.uniform(0.0, 1.0, 120), rng.uniform(0.0, 1.0, 120)
+    default = te_basis([x, z], [5, 4])
+    raw = tensor_prod_model_matrix(
+        [_cr_basis_raw(v, kn)[0] for v, kn in zip((x, z), default.knots, strict=True)]
+    )
+    same = te_basis([x, z], [5, 4], constraint_rows=raw)
+    np.testing.assert_allclose(same.design, default.design, rtol=0, atol=1e-13)
+    other_rows = raw[:40]
+    other = te_basis([x, z], [5, 4], constraint_rows=other_rows)
+    np.testing.assert_allclose(other_rows.mean(axis=0) @ other.z, 0.0, rtol=0, atol=1e-14)
+    assert not np.allclose(other.design, default.design)
 
 
 def test_te_basis_refuses_one_margin_and_wrong_knots() -> None:

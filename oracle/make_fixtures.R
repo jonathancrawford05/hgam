@@ -638,4 +638,22 @@ b25d <- bam(as.formula(f25c), family = binomial(link = "cloglog"), weights = n, 
             knots = list(x = sz_knots), method = "fREML", discrete = TRUE)
 put("bam_discrete_binomial_cloglog_fs_re", bam_disc_case(b25d, d25, f25c, "binomial(link='cloglog')",
                                                          c(re_extra(b25d), list(rank = b25d$rank))))
+# 26. the te tensor product smooth on cr margins (te, smooth.construct.tensor.smooth.spec, tensor.prod.model.matrix,
+# tensor.prod.penalties and Predict.matrix.tensor.smooth, smooth.r). Unlike ti, te builds each margin with
+# smooth.construct (no margin constraint, unscaled penalty); cr margins set noterp, so the np = TRUE
+# re-parameterisation is skipped; each margin penalty is divided by its largest eigenvalue; smoothCon then scales
+# the tensor penalties and absorbs one sum-to-zero constraint on the whole product. 26a: two margins, x at supplied
+# knots and z at default knots; 26a3: three margins at default knots. X, S, rank, null.space.dim, the margin knots
+# and PredictMat at new values (outside the knot range too).
+set.seed(26); n <- 300
+d26 <- data.frame(x = runif(n, 1, 21), z = rnorm(n), w = runif(n, -2, 5))
+nd26 <- data.frame(x = c(0.5, runif(25, 1, 21), 22), z = c(min(d26$z) - 0.3, rnorm(25), max(d26$z) + 0.2),
+                   w = c(-2.5, runif(25, -2, 5), 5.5))
+te_case <- function(sm, vars) list(data = d26[vars], newdata = nd26[vars], label = sm$label,
+  margin_knots = lapply(sm$margin, function(mg) mg$xp), X = sm$X, S = sm$S, rank = sm$rank,
+  null_space_dim = sm$null.space.dim, n_cons = attr(sm, "nCons"), X_new = PredictMat(sm, nd26))
+sm26 <- smoothCon(te(x, z, bs = "cr", k = c(5, 4)), d26, knots = list(x = c(1, 3, 7, 12, 21)), absorb.cons = TRUE)[[1]]
+put("smoothcon_te_cr", te_case(sm26, c("x", "z")))
+sm26c <- smoothCon(te(x, z, w, bs = "cr", k = c(4, 4, 3)), d26, absorb.cons = TRUE)[[1]]
+put("smoothcon_te_cr_three", te_case(sm26c, c("x", "z", "w")))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

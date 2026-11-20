@@ -1,8 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-second slice: `re` beside cr and fs (PLAN step 3). PR #39
-(`select=TRUE` with fs) auto-merged earlier in this run. Read `docs/PRIORITIES.md` before choosing
-work.
+Last updated: 2026-11-20, by the development run's thirty-third slice: `te` on cr, the basis (PLAN step 3). PR #40
+(`re`) had merged before this run. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -177,17 +176,28 @@ Structure, rank and names exact. `fs` on cr is done. Tests: 785 pass, no xfail.
 and beside `s(x, f, bs="fs")`, as a REML gam and a discrete bam: structure, rank and names exact, eta at most 1.6e-5, se
 7.2e-4 relative, edf 5.2e-3 of the gate width, predict on new data eta 2.7e-5 and se 3.5e-4. Tests: 789 pass, no xfail.
 
-## Next slice: `te` on cr, first step (the basis)
+`te` on cr, the basis (section 26, `tests/test_te_basis.py`, this run's PR): `hgam.engine.gam_basis_te` ports
+`smooth.construct.tensor.smooth.spec`'s te branch for cr margins (each margin by `smooth.construct`, unconstrained and
+unscaled; cr sets `noterp`, so `np = TRUE` does nothing; each margin penalty over its largest eigenvalue),
+`tensor.prod.model.matrix` (first margin slowest), `tensor.prod.penalties`, smoothCon's penalty scaling and the one
+sum-to-zero constraint on the whole product, and `Predict.matrix.tensor.smooth` (`te_predict_design`, keeping `Z`). Any
+number of margins. `te(x, z, k=c(5, 4))` (x at supplied knots, z default) and `te(x, z, w, k=c(4, 4, 3))`: rank,
+null.space.dim and column count exact; X, S, PredictMat (points outside the knots too) at most 1.6e-14 relative.
+`gam()` still refuses te (`formula.py` `_REFUSED["te"]`). `constraint_rows=` is tested (PR #41 review nit). Tests: 794 pass, no xfail.
 
-PLAN step 3's next construct. `te(...)` is refused by the parser today (`formula.py`, `_REFUSED` "te").
-- Read `smooth.construct.tensor.smooth.spec` (smooth.r 1.9-4) for `te(x, z, bs="cr", k=c(.,.))`: margins built by
-  `smoothCon`, the row tensor product `tensor.prod.model.matrix`, one penalty per margin `tensor.prod.penalties`, the
-  default `np = TRUE` reparameterisation of each margin (`nat.param`'s cousin: the margin is rebuilt on `XP`), and
-  `smoothCon`'s sum-to-zero constraint on the whole term. Compare with the existing ti build (`gam_basis_cr.py` and the ti
-  path), which shares the row product but differs in the margin constraints (ti absorbs them per margin; te constrains
-  the product).
-- Fixture section 26a: `smoothCon(te(x, z, bs="cr", k=c(5, 4)), ...)` X, S list, and `PredictMat` on new values; gate
-  structure exact and the basis at 1e-8 relative (deterministic piece). Keep `gam()` refusing te until 26b (the fit).
+## Next slice: `te` on cr, second step (the REML fit)
+
+- Parse `te(x, z, k=c(.,.), bs="cr")` in `formula.py` (today `_REFUSED["te"]`; ti is parsed at about line 482): a new
+  `TermSpec(basis="te")` (`gam_term_spec.py` `SUPPORTED_BASES`), label `te(x,z)` as mgcv writes it. Refuse by name
+  anything other than cr margins, `by=`, `d=`, `fx=`, `np=FALSE`, `select=TRUE` (smoothCon's null.space.penalty on a
+  multi-penalty term is a later step) and use in `bam(discrete=TRUE)` (`discrete.py` line 172 list).
+- Build it from `te_basis` the way `build_python_ti_term` (`gam_term_build.py`) builds ti: knots from `knots=` per
+  variable, design, one penalty per margin, `TermState` keeping `te_basis`'s result for prediction; add the te branch
+  beside ti in `gam_model.py` (line ~267) and `gam_predict.py` (lines ~118, ~183, via `te_predict_design`); k.check in
+  `gam_check.py` (ti branch at line 163) may refuse te for now.
+- Fixture section 26b: a binomial cloglog REML gam `p ~ te(x, z, bs="cr", k=c(5, 4))` on a frame like 24b's with
+  `knots=list(x=sz_knots)`, `gam_case` plus rank, coef_names, predict on new data with se. Gates: structure exact,
+  eta, se, edf, predict as in `docs/PRIORITIES.md`. Then 26c: te in discrete bam.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 

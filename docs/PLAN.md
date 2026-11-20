@@ -128,3 +128,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   beside fs, as a REML gam and a discrete bam (section 25, `tests/test_re_fit.py`): structure, rank and names exact,
   eta at most 1.6e-5, se 7.2e-4 relative, edf 5.2e-3 of the gate width, predict on new data eta 2.7e-5, se 3.5e-4.
   `summary`'s smooth-term row beside an re term stays `None` (`recov`'s re branch, DEFERRED). Next: `te` on cr.
+- Widening, `te` on cr, first step (2026-11-20): the basis. `hgam.engine.gam_basis_te` ports
+  `smooth.construct.tensor.smooth.spec`'s te branch (margins by `smooth.construct`; cr's `noterp` skips `np`),
+  `tensor.prod.model.matrix`, `tensor.prod.penalties`, smoothCon's scaling and whole-term constraint, and
+  `Predict.matrix.tensor.smooth`. Two and three margins (section 26, `tests/test_te_basis.py`): structure exact, X, S
+  and PredictMat at most 1.6e-14 relative. `gam()` still refuses te. Next: the te REML fit (section 26b).

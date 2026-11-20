@@ -44,6 +44,7 @@ from hgam.engine.gam_basis_cr import (
 from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
 from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
+from hgam.engine.gam_basis_t2 import t2_basis, t2_raw_design
 from hgam.engine.gam_basis_te import te_basis, tensor_prod_model_matrix
 from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
 from hgam.engine.gam_term_build import fs_frame, te_frame
@@ -79,6 +80,8 @@ class TermState:
     fs_p: np.ndarray | None = None
     """An ``fs`` term's ``nat.param`` re-parameterisation ``P`` (``smooth$P``), which
     ``Predict.matrix.fs.interaction`` applies to the base cr matrix; ``None`` for every other basis."""
+    t2_p: tuple[np.ndarray, ...] = ()
+    """A ``t2`` term's margin ``nat.param`` matrices (``smooth$P``); empty for every other basis."""
 
 
 def _knots_for(term: TermSpec, variable: str, k: int, x: np.ndarray) -> np.ndarray:
@@ -141,6 +144,16 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         ]
         built = te_basis(xs, term.k, knots, frame=te_frame(term))
         return TermState(term=term, knots=built.knots, constraint=(built.z,))
+    if term.basis == "t2":
+        # The fit's parameterisation (smoothCon's C, not Cp): see build_python_t2_term.
+        xs = [np.asarray(_column(data, v, term), dtype=np.float64) for v in term.variables]
+        supplied = term.knots_by_variable()
+        knots = [
+            None if supplied.get(v) is None else np.asarray(supplied[v], dtype=np.float64)
+            for v in term.variables
+        ]
+        t2 = t2_basis(xs, term.k, knots)
+        return TermState(term=term, knots=t2.knots, constraint=(t2.z_fit,), t2_p=t2.margin_p)
     if term.basis == "sz":
         smoothed = term.variables[1]
         x = np.asarray(_column(data, smoothed, term), dtype=np.float64)
@@ -157,7 +170,7 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         return TermState(term=term)
     raise HgamValidationError(
         f"fit_term_state: TermSpec {term.label!r} has basis={term.basis!r}, which "
-        "predict does not support — only 'cr', 'tp', 'ti', 'te', 'sz', 'fs', 're' and 'parametric'."
+        "predict does not support — only 'cr', 'tp', 'ti', 'te', 't2', 'sz', 'fs', 're' and 'parametric'."
     )
 
 
@@ -203,6 +216,9 @@ def predict_term_design(state: TermState, data: Mapping[str, np.ndarray]) -> np.
         xs = [np.asarray(_column(data, v, term), dtype=np.float64) for v in term.variables]
         designs = [cr_basis(x, kn)[0] for x, kn in zip(xs, state.knots, strict=True)]
         return np.asarray(tensor_prod_model_matrix(designs) @ state.constraint[0], dtype=np.float64)
+    if term.basis == "t2":
+        xs = [np.asarray(_column(data, v, term), dtype=np.float64) for v in term.variables]
+        return np.asarray(t2_raw_design(xs, state.knots, state.t2_p) @ state.constraint[0], dtype=np.float64)
     if term.basis == "sz":
         assert term.n_levels is not None
         factor_name, smoothed_name = term.variables

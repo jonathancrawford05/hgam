@@ -746,4 +746,28 @@ put("smoothcon_t2_cr", t2_case(sm27, raw27, c("x", "z")))
 sm27c <- smoothCon(t2(x, z, w, bs = "cr", k = c(4, 4, 3)), d26, absorb.cons = TRUE)[[1]]
 raw27c <- smoothCon(t2(x, z, w, bs = "cr", k = c(4, 4, 3)), d26, absorb.cons = FALSE)[[1]]
 put("smoothcon_t2_cr_three", t2_case(sm27c, raw27c, c("x", "z", "w")))
+# 27b. t2 on cr in a REML gam fit, on section 26b's data and new data (binomial cloglog, weights n): (i) p ~ t2(x, z,
+# k=c(5, 4)) with x's knots supplied; (ii) a factor main effect beside t2(x, z) at default knots. gam fits in smoothCon's
+# fit parameterisation (X, constraint C) and estimate.gam then maps coefficients, Vp and Ve to the prediction one (Xp,
+# constraint Cp) with gam.setup's G$P; edf, eta and se come from before that map, and predict.gam uses Xp with the mapped
+# coefficients. predict on new data with se, mgcv's rank and coefficient names.
+f27b1 <- "p ~ t2(x, z, bs='cr', k=c(5, 4))"
+m27b1 <- gam(as.formula(f27b1), family = binomial(link = "cloglog"), weights = n, data = d26b, knots = te_knots,
+             method = "REML")
+put("gam_binomial_cloglog_t2_reml", c(gam_case(m27b1, d26b, f27b1, "binomial(link='cloglog')"),
+                                      te_extra(m27b1, te_knots)))
+f27b2 <- "p ~ f + t2(x, z)"
+m27b2 <- gam(as.formula(f27b2), family = binomial(link = "cloglog"), weights = n, data = d26b, method = "REML")
+# mgcv's default newton stops short of its own REML optimum here: the rn block's sp (x's range by z's null space) is on
+# a flat ridge towards infinity (log sp 5.45 by default, 19.4 at a tight conv.tol, with a lower REML score), and the two
+# mgcv fits differ by 1.2e-3 on eta. The fit is repeated at a tight newton conv.tol, the reference for quantities at
+# estimated sp where its REML score is not higher than the default fit's (docs/PRIORITIES.md).
+m27b2t <- gam(as.formula(f27b2), family = binomial(link = "cloglog"), weights = n, data = d26b, method = "REML",
+              control = gam.control(newton = list(conv.tol = 1e-12)))
+pr27b2t <- predict(m27b2t, nd26b, se.fit = TRUE)
+put("gam_binomial_cloglog_factor_t2_reml", c(gam_case(m27b2, d26b, f27b2, "binomial(link='cloglog')"),
+    te_extra(m27b2, NULL),
+    list(tight = c(gam_case(m27b2t, d26b, f27b2, "binomial(link='cloglog')")[
+      c("sp", "edf", "eta", "se", "reml", "outer_iter", "outer_conv")],
+      list(conv_tol = 1e-12, fit_new = as.numeric(pr27b2t$fit), se_new = as.numeric(pr27b2t$se.fit))))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

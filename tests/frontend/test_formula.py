@@ -83,7 +83,9 @@ def test_a_thin_plate_smooth_takes_no_by() -> None:
         ('y ~ s(f, bs="re", k=3)', "takes no k"),
         ('y ~ s(f, by=g, bs="re")', "by= on a random-effect"),
         ("y ~ te(x, z, w)", "3 margin"),
-        ("y ~ t2(x, z)", "t2()"),
+        ("y ~ t2(x, z, w)", "3 margin"),
+        ("y ~ t2(x, z, full=TRUE)", "argument 'full'"),
+        ("y ~ t2(x, z, ord=1)", "argument 'ord'"),
         ('y ~ ti(x, z, w, bs="cr")', "3 margin"),
         ("y ~ ti(x, z)", "without bs="),
         ('y ~ ti(x, z, bs="tp")', "bs='tp'"),
@@ -124,7 +126,7 @@ def test_malformed_formulas_raise(formula: str) -> None:
         parse_formula(formula)
 
 
-@pytest.mark.parametrize("formula", ['y ~ s(x, bs="ps")', "y ~ t2(x, x2)"])
+@pytest.mark.parametrize("formula", ['y ~ s(x, bs="ps")', "y ~ t2(x, x2, full=TRUE)"])
 def test_an_unported_construct_raises_not_implemented(formula: str) -> None:
     """CLAUDE.md: a term, family or option that is not ported raises NotImplementedError naming it."""
     with pytest.raises(NotImplementedError):

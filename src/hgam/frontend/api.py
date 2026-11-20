@@ -202,6 +202,7 @@ class GamFit(EngineGAMFit):
         ``n`` and the outer search's convergence report. For a ``discrete=True`` fit, fully penalised
         smooths carry ``reTest``'s ``Chi.sq`` and ``Ref.df``; the p-value (``psum.chisq``) and
         ``testStat`` are not ported. ``print(fit.summary())`` renders it."""
+        self._refuse_t2_coefficients("summary()")
         return build_summary(self, self.formula, self.smooth_labels, self.n_parametric, self.parametric_names)
 
     @property
@@ -257,6 +258,7 @@ class GamFit(EngineGAMFit):
         """
         if sandwich:
             raise HgamNotImplementedError("vcov(): sandwich=True (gam.sandwich, mgcv.r) is not ported.")
+        self._refuse_t2_coefficients("vcov()")
         if freq and unconditional:
             raise HgamNotImplementedError(
                 "vcov(): freq=True with unconditional=True is not ported as a combination "
@@ -283,6 +285,17 @@ class GamFit(EngineGAMFit):
                 )
             vc = d * vc / sig2
         return vc
+
+    def _refuse_t2_coefficients(self, what: str) -> None:
+        """mgcv reports a fit with a t2 term in ``gam.setup``'s prediction parameterisation (``G$P``, applied
+        to coefficients, ``Vp`` and ``Ve`` by ``estimate.gam``, mgcv.r); hgam keeps the fit one
+        (``build_python_t2_term``), so a quantity read off the coefficients would not be mgcv's."""
+        t2 = [t.label for t in self.model.terms if t.basis == "t2"]
+        if t2:
+            raise HgamNotImplementedError(
+                f"{what}: the fit has {', '.join(t2)}; mgcv reports it in the prediction parameterisation "
+                "(gam.setup's G$P), which is not ported, so coefficient-level output is refused."
+            )
 
     def _expand(self, v: np.ndarray) -> np.ndarray:
         """``v`` from the fit's (pivoted) column layout to the full one, zero at pivoted-out columns."""
@@ -375,7 +388,11 @@ class GamFit(EngineGAMFit):
         covariates as given (``predict.bam`` falling through to ``predict.gam``). Parametric covariates
         need no binning: only factors are accepted there. A factor level the fit did not see is refused
         as not ported (``predict.gam`` warns and recodes it to ``NA``; ``predict.bamd`` sets its
-        dummies to zero)."""
+        dummies to zero). ``se_fit=True`` with ``unconditional=True`` on a fit with a ``t2`` term is refused:
+        mgcv's ``estimate.gam`` maps ``Vp`` and ``Ve`` through ``G$P`` but not ``Vc``, so ``predict.gam``
+        forms ``Xp Vc Xp'`` with ``Vc`` still in the fit parameterisation; ``G$P`` is not ported."""
+        if se_fit and unconditional:
+            self._refuse_t2_coefficients("predict(se_fit=True, unconditional=True)")
         data = newdata if encoded else self.encode(newdata)
         if discrete and self.fit_method == "fREML-discrete":
             data = discretise_frame(self.model, data)
@@ -564,10 +581,27 @@ def _refuse_te(call: TensorCall, parsed: ParsedFormula) -> None:
         shared = mine & set(_smooth_variables(other))
         if shared:
             raise HgamNotImplementedError(
-                f"gam(): {call.text} beside {other.text}, which also smooths {sorted(shared)}: a te term "
-                "beside another smooth of its covariates is not verified against mgcv (gam.side, mgcv.r, "
-                "is not ported). Use ti() for the interaction beside main-effect smooths."
+                f"gam(): {call.text} beside {other.text}, which also smooths {sorted(shared)}: a "
+                f"{call.kind} term beside another smooth of its covariates is not verified against mgcv "
+                "(gam.side, mgcv.r, is not ported). Use ti() for the interaction beside main-effect smooths."
             )
+
+
+def _refuse_t2(call: TensorCall, parsed: ParsedFormula, *, select: bool, discrete: bool) -> None:
+    """``t2(x, z, bs="cr")`` is ported for ``gam(method="REML")`` on its own covariates. Refused by
+    name: ``select=TRUE`` and ``bam(discrete=TRUE)`` (not measured yet), and a t2 beside another smooth of
+    one of its covariates (``gam.side``, as for te: :func:`_refuse_te`)."""
+    if select:
+        raise HgamNotImplementedError(
+            f"gam(): select=True with {call.text} is not verified against mgcv yet (smoothCon's "
+            "null.space.penalty on a t2 term)."
+        )
+    if discrete:
+        raise HgamNotImplementedError(
+            f"gam(): {call.text} in bam(discrete=True) is not ported (discrete.mf and mf0 for t2); "
+            'fit it with gam(method="REML").'
+        )
+    _refuse_te(call, parsed)
 
 
 def _smooth_variables(call: object) -> tuple[str, ...]:
@@ -718,6 +752,8 @@ def _build_model(
                 need_numeric(v, call.text)
             if call.kind == "te":
                 _refuse_te(call, parsed)
+            if call.kind == "t2":
+                _refuse_t2(call, parsed, select=select, discrete=tero)
             call = _tero(call) if tero else call
             margin_knots = tuple(
                 pair

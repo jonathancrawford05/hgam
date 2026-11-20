@@ -249,7 +249,10 @@ def test_fs_select_meets_the_gates(name: str, load_fixture, margin) -> None:
     # gets a second). sp values are not gated (the two fs null-space directions are ordered by rounding).
     assert len(fit.lambda_) == len(fx["sp"]) == int(np.sum(fx["n_penalties"]))
     if "eta_vs_noselect" in fx:
+        # mgcv's fs fit is its select=FALSE fit; hgam's must be too (PR #39 review nit).
         assert fx["eta_vs_noselect"] == 0.0
+        plain = gam(formula, data, FAMILY, weights="n", knots=fx["knots"], **SELECT[name])
+        np.testing.assert_array_equal(fit.predict(data), plain.predict(data))
 
     eta, se = fit.predict(data, se_fit=True)
     d_eta = float(np.max(np.abs(eta - np.asarray(fx["eta"]))))

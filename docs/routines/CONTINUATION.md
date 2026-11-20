@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-first slice: `select=TRUE` with `fs`, the fourth and last
-step of `fs` (PLAN step 3). PR #38 (fs in discrete bam) had merged before this run. Read `docs/PRIORITIES.md` before choosing
+Last updated: 2026-11-20, by the development run's thirty-second slice: `re` beside cr and fs (PLAN step 3). PR #39
+(`select=TRUE` with fs) auto-merged earlier in this run. Read `docs/PRIORITIES.md` before choosing
 work.
 
 ## State
@@ -164,27 +164,32 @@ rows is `Predict.matrix.fs.interaction` with that `P`. Both written orders: eta 
 mgcv's order, predict on new data 6.3e-14, summary Ref.df 17 exact, Chi.sq 3e-14, p 0. Built on the data rows instead,
 eta misses by 8.1e-3. Tests: 784 pass, no xfail.
 
-`select=TRUE` with fs (section 24e, `tests/test_fs_fit.py`, this run's PR): smoothCon's `null.space.penalty` branch
+`select=TRUE` with fs (section 24e, `tests/test_fs_fit.py`, PR #39, merged): smoothCon's `null.space.penalty` branch
 takes `need.full` for fs (three penalties) and appends `U U'` only for eigenvalues below `max * eps^0.66` of their sum;
 fs's sum is full rank, so mgcv adds nothing and its fit equals the `select=FALSE` one (eta difference 0, recorded in the
-fixture). `null_space_penalty` adds nothing either; the refusal in `api._build_model` is gone. REML gam eta 1.1e-4, se
+fixture; hgam's select and plain fits are asserted equal too). `null_space_penalty` adds nothing either; the refusal in `api._build_model` is gone. REML gam eta 1.1e-4, se
 4.3e-4; discrete bam eta 6.1e-14; `s(x, bs="cr") + s(x, f, bs="fs")` with select (the cr smooth gets its null-space
 penalty, five sp in mgcv's order up to the fs null-pair swap) eta 2.9e-5, se 4.4e-4, edf 1.6e-2 of the gate width.
 Structure, rank and names exact. `fs` on cr is done. Tests: 785 pass, no xfail.
 
-## Next slice: `re` beside fs and in discrete bam
+`re` (section 25, `tests/test_re_fit.py`, this run's second PR): `s(g, bs="re")` (`smooth.construct.re.smooth.spec`:
+`model.matrix(~ g - 1)`, identity penalty, not centred) needed no change. With an eight-level `g` beside `s(x, bs="cr")`
+and beside `s(x, f, bs="fs")`, as a REML gam and a discrete bam: structure, rank and names exact, eta at most 1.6e-5, se
+7.2e-4 relative, edf 5.2e-3 of the gate width, predict on new data eta 2.7e-5 and se 3.5e-4. Tests: 789 pass, no xfail.
 
-PLAN step 3's next construct. `s(f, bs="re")` is already parsed and built (`api._build_model`, `discrete.py` treats it
-like a parametric column). First measure, no port expected:
-- Fixture section 25: on 24b's data, (a) `p ~ s(x, bs="cr", k=6) + s(f, bs="re")` as a REML gam, (b) the same as
-  `bam(method="fREML", discrete=TRUE)`, (c) `p ~ s(x, f, bs="fs", xt="cr", k=6) + s(g, bs="re")` with a second factor
-  g (a random intercept beside fs). Record rank, coef names, predict on new data. Gate structure, eta, se, per-term edf.
-- Read `smooth.construct.re.smooth.spec` (smooth.r 1.9-4) and `discrete.mf`'s handling of re (bam.r) first: if mgcv
-  discretises the re factor as a margin, check `discrete.py` does the same.
-- If a gate fails, port the piece mgcv's path takes; otherwise test only. `recov`'s re branch for `summary` stays
-  refused (DEFERRED).
+## Next slice: `te` on cr, first step (the basis)
 
-Carried PR #37 review nit: done (the 24c sp line in DEFERRED).
+PLAN step 3's next construct. `te(...)` is refused by the parser today (`formula.py`, `_REFUSED` "te").
+- Read `smooth.construct.tensor.smooth.spec` (smooth.r 1.9-4) for `te(x, z, bs="cr", k=c(.,.))`: margins built by
+  `smoothCon`, the row tensor product `tensor.prod.model.matrix`, one penalty per margin `tensor.prod.penalties`, the
+  default `np = TRUE` reparameterisation of each margin (`nat.param`'s cousin: the margin is rebuilt on `XP`), and
+  `smoothCon`'s sum-to-zero constraint on the whole term. Compare with the existing ti build (`gam_basis_cr.py` and the ti
+  path), which shares the row product but differs in the margin constraints (ti absorbs them per margin; te constrains
+  the product).
+- Fixture section 26a: `smoothCon(te(x, z, bs="cr", k=c(5, 4)), ...)` X, S list, and `PredictMat` on new values; gate
+  structure exact and the basis at 1e-8 relative (deterministic piece). Keep `gam()` refusing te until 26b (the fit).
+
+Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 
 Carried review nit (PR #35, optional): an unused factor level fails as `HgamComputationError` where mgcv drops it
 (`drop.unused.levels`); recorded in DEFERRED. A clear refusal naming unused levels is a small later slice.

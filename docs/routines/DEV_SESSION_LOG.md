@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-20 (thirty-second slice): `re` beside cr and fs (PLAN step 3)
+
+PR #39 auto-merged in this run (six conditions posted). `s(g, bs="re")` measured, no code change: section 25 holds `s(x, bs="cr") + s(g, bs="re")` and `s(x, f, bs="fs") + s(g, bs="re")` as REML gam and discrete bam (`tests/test_re_fit.py`). PR #39 nits: hgam's fs select fit asserted equal to its no-select fit (exact); the `matrix_rank` vs `eps^0.66` tolerance is a DEFERRED line.
+Tests: 785 → 789. `make lint` clean. Section 25 (tier 1, mgcv 1.9-1): REML cr+re eta 1.6e-5, se 4.6e-4; discrete cr+re eta 2.3e-8; REML fs+re eta 6.6e-7, se 7.2e-4; discrete fs+re eta 5.8e-14; edf at most 5.2e-3 of the gate width; predict on new data eta 2.7e-5, se 3.5e-4; structure, rank and names exact.
+Deferred: nothing new. Next: `te` on cr.
+
 ## 2026-11-20 (thirty-first slice): `select=TRUE` with `fs` (fourth step of `fs`, PLAN step 3)
 
 No open PR at start (PR #38 had merged). smoothCon's `null.space.penalty` branch read: fs takes `need.full`, its three penalties sum to full rank, so mgcv adds nothing; `null_space_penalty` agrees, and the `select` refusal for fs is dropped. The two select refusal cases in `test_fs_refusals` retired (SETTINGS condition 5), replaced by `test_fs_select_meets_the_gates` (section 24e).

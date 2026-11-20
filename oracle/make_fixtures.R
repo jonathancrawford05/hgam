@@ -603,4 +603,39 @@ m24e3 <- gam(as.formula(f24c1), family = binomial(link = "cloglog"), weights = n
 put("gam_binomial_cloglog_cr_fs_select_reml", c(gam_case(m24e3, d24b, f24c1, "binomial(link='cloglog')"),
   list(knots = list(x = sz_knots), select = TRUE, rank = m24e3$rank, coef_names = names(coef(m24e3)),
        n_penalties = sapply(m24e3$smooth, function(s) length(s$S)))))
+# 25. the re random-effect term (smooth.construct.re.smooth.spec, smooth.r): model.matrix(~ g - 1), one identity
+# penalty, null.space.dim 0, not centred. On 24b's frame with an eight-level factor g whose level effects enter the
+# response. (a) beside a cr smooth as a REML gam; (b) the same as bam(method = "fREML", discrete = TRUE), where bam marks
+# re tensor.possible and discrete.mf compresses g as a one-variable margin; (c) and (d) beside the fs term, REML gam and
+# discrete bam. predict on new data (Predict.matrix.random.effect) with se; rank and coefficient names recorded.
+set.seed(251)
+d25 <- d24b[, c("x", "f", "n")]
+d25$g <- factor(sample(paste0("g", 1:8), n, TRUE), levels = paste0("g", 1:8))
+ge25 <- rnorm(8, 0, 0.3)
+d25$p <- rbinom(n, d25$n, 1 - exp(-exp(-4 + 0.08 * (d25$x - 10) + c(0, 0.3, -0.2)[as.integer(d25$f)] +
+                                       c(0.2, -0.1, 0.4)[as.integer(d25$f)] * sin(d25$x / 3) +
+                                       ge25[as.integer(d25$g)]))) / d25$n
+nd25 <- nd24b
+nd25$g <- factor(sample(paste0("g", 1:8), nrow(nd25), TRUE), levels = paste0("g", 1:8))
+re_extra <- function(m) {
+  pr <- predict(m, nd25, se.fit = TRUE)
+  list(knots = list(x = sz_knots), rank = m$rank, coef_names = names(coef(m)), newdata = nd25,
+       fit_new = as.numeric(pr$fit), se_new = as.numeric(pr$se.fit))
+}
+f25a <- "p ~ s(x, bs='cr', k=6) + s(g, bs='re')"
+f25c <- "p ~ s(x, f, bs='fs', xt='cr', k=6) + s(g, bs='re')"
+m25a <- gam(as.formula(f25a), family = binomial(link = "cloglog"), weights = n, data = d25,
+            knots = list(x = sz_knots), method = "REML")
+put("gam_binomial_cloglog_cr_re_reml", c(gam_case(m25a, d25, f25a, "binomial(link='cloglog')"), re_extra(m25a)))
+b25b <- bam(as.formula(f25a), family = binomial(link = "cloglog"), weights = n, data = d25,
+            knots = list(x = sz_knots), method = "fREML", discrete = TRUE)
+put("bam_discrete_binomial_cloglog_cr_re", bam_disc_case(b25b, d25, f25a, "binomial(link='cloglog')",
+                                                         c(re_extra(b25b), list(rank = b25b$rank))))
+m25c <- gam(as.formula(f25c), family = binomial(link = "cloglog"), weights = n, data = d25,
+            knots = list(x = sz_knots), method = "REML")
+put("gam_binomial_cloglog_fs_re_reml", c(gam_case(m25c, d25, f25c, "binomial(link='cloglog')"), re_extra(m25c)))
+b25d <- bam(as.formula(f25c), family = binomial(link = "cloglog"), weights = n, data = d25,
+            knots = list(x = sz_knots), method = "fREML", discrete = TRUE)
+put("bam_discrete_binomial_cloglog_fs_re", bam_disc_case(b25d, d25, f25c, "binomial(link='cloglog')",
+                                                         c(re_extra(b25d), list(rank = b25d$rank))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

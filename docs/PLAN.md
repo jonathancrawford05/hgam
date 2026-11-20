@@ -124,3 +124,7 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   `null_space_penalty`; the refusal is dropped. REML gam eta 1.1e-4, se 4.3e-4; discrete bam eta 6.1e-14; beside
   `s(x, bs="cr")` (whose null-space penalty is added) eta 2.9e-5, se 4.4e-4, edf 1.6e-2 of the gate width
   (`tests/test_fs_fit.py`, section 24e). `fs` on cr is done. Next: `re` beside fs and in discrete bam.
+- Widening, `re` (2026-11-20): `s(g, bs="re")` measured against mgcv with no code change, beside a cr smooth and
+  beside fs, as a REML gam and a discrete bam (section 25, `tests/test_re_fit.py`): structure, rank and names exact,
+  eta at most 1.6e-5, se 7.2e-4 relative, edf 5.2e-3 of the gate width, predict on new data eta 2.7e-5, se 3.5e-4.
+  `summary`'s smooth-term row beside an re term stays `None` (`recov`'s re branch, DEFERRED). Next: `te` on cr.

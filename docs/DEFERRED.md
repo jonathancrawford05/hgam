@@ -46,5 +46,5 @@ One line each: what differs or is missing, where it was seen, and why it did not
 - `t2` in discrete bam (section 27c): coefficient-level output (`vcov`, `summary`) still refuses a t2 fit there, though
   `modCon = 2` makes the fit and prediction parameterisations one; not measured. `r_double_string` (R's `as.character`
   on a double, behind `uniquecombs`' multi-column order) refuses `|x| >= 1e15` in fixed notation, where R prints more
-  than 15 digits by a rule not ported. The joint grid branch (more than 10000 unique pairs) is held by
-  `compress_df_cases` (partition and row values), not by a t2 fit.
+  than 15 digits by a rule not ported. On the joint grid branch (27c5) hgam's grid values differ from R's `seq` in the
+  last bit (2.7e-15 relative); the row order and index are exact there.

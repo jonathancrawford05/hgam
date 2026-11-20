@@ -808,4 +808,17 @@ dj <- data.frame(x = sample(c(1, 2.5, 10, 0.75, 1e5, 1e-4, -3, 12, 100, 0.001), 
 set.seed(8547); xu <- mgcv:::compress.df(dj)
 put("compress_df_joint_order", list(columns = as.list(dj), nr = nrow(xu), x = xu$x, z = xu$z,
                                     index = as.integer(attr(xu, "index")), text = paste0(dj$x, "*", dj$z)))
+# 27c5. more than 100^2 unique (x, z) pairs, so compress.df's grid branch fires on the joint term: each column is snapped
+# to 100 points over its range before uniquecombs' text order and the shuffle (PR #47 review). The fit, and compress.df's
+# shuffled rows and index under set.seed(8547).
+set.seed(275); n <- 12000
+d27e <- data.frame(x = runif(n, 1, 21), z = rnorm(n), n = sample(20:200, n, TRUE))
+d27e$p <- rbinom(n, d27e$n, 1 - exp(-exp(-4 + 0.08 * (d27e$x - 10) + 0.3 * sin(d27e$z) * cos(d27e$x / 4)))) / d27e$n
+f27c5 <- "p ~ t2(x, z, bs='cr', k=c(5, 4))"
+b27c5 <- bam(as.formula(f27c5), family = binomial(link = "cloglog"), weights = n, data = d27e, method = "fREML",
+             discrete = TRUE)
+set.seed(8547); xu27e <- mgcv:::compress.df(d27e[c("x", "z")])
+put("bam_discrete_binomial_cloglog_t2_binned", bam_disc_case(b27c5, d27e, f27c5, "binomial(link='cloglog')",
+    c(t2_disc_extra(b27c5, NULL, nd27c), list(compress_nr = nrow(xu27e), compress_x = xu27e$x, compress_z = xu27e$z,
+                                              compress_index = as.integer(attr(xu27e, "index"))))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

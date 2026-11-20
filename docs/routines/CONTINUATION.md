@@ -251,9 +251,11 @@ for doubles as `r_double_string`; |x| >= 1e15 in fixed notation refused). The te
 models and 27c3 (repeated (x, z) pairs, so the unique rows are shuffled and padded): eta at most 6.3e-12, se 2.8e-11,
 edf 4.8e-5 of the gate width, predict on new data 5.6e-12 / se 3.1e-11, structure, rank and names exact; mgcv's
 constraint |Cp| at 5.9e-15 (sign-free: nat.param's eigenvector signs; over the data rows 27c3 misses by 1.9e-2);
-27c4, joint `compress.df` under `set.seed(8547)`: shuffled rows and index exact. `vcov`/`summary` on a discrete t2 fit
+27c4, joint `compress.df` under `set.seed(8547)`: shuffled rows and index exact. 27c5 (PR #47 review: 12000 continuous rows, more than
+100^2 unique pairs, so compress.df's grid branch fires on the joint term): 4603 rows and every index exact, grid values
+2.7e-15 relative, fit eta 1.3e-12. `vcov`/`summary` on a discrete t2 fit
 still refuse (not measured). The refusal case `discrete=True` in `test_t2_refusals` is retired (SETTINGS condition 5),
-replaced by `test_discrete_t2_meets_the_gates`. Tests: 846 pass, no xfail.
+replaced by `test_discrete_t2_meets_the_gates`. Tests: 849 pass, no xfail.
 
 ## Next slice: `select=TRUE` with t2
 

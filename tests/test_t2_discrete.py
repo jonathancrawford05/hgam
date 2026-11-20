@@ -29,6 +29,7 @@ CASES = (
     "bam_discrete_binomial_cloglog_t2",
     "bam_discrete_binomial_cloglog_factor_t2",
     "bam_discrete_binomial_cloglog_t2_repeated",
+    "bam_discrete_binomial_cloglog_t2_binned",
 )
 
 
@@ -59,7 +60,8 @@ def _fit(fx: dict):
 @pytest.mark.parametrize("name", CASES)
 def test_discrete_t2_meets_the_gates(name: str, load_fixture, margin) -> None:
     """27c1 ``p ~ t2(x, z, k=c(5, 4))`` (x's knots supplied), 27c2 ``p ~ f + t2(x, z)``, and 27c3
-    ``p ~ t2(x, z, k=c(6, 5))`` on data whose (x, z) pairs repeat (the unique pairs are shuffled and padded).
+    ``p ~ t2(x, z, k=c(6, 5))`` on data whose (x, z) pairs repeat (the unique pairs are shuffled and
+    padded), and 27c5 with more than 100^2 unique pairs, so compress.df snaps both columns to its grid.
     Structure (label in written order, coefficient count, full rank, names, three sp) is exact; eta, se and
     edf meet their gates on the data and on new data."""
     fx = load_fixture(name)
@@ -139,6 +141,31 @@ def test_joint_compress_df_rows_are_mgcvs(load_fixture, margin) -> None:
     sorted_numeric = np.unique(np.column_stack([columns["x"], columns["z"]]), axis=0)
     text = sorted(set(fx["text"]))
     assert [f"{r_double_string(a)}*{r_double_string(b)}" for a, b in sorted_numeric] != text
+
+
+def test_joint_compress_df_grid_branch_is_mgcvs(load_fixture, margin) -> None:
+    """mgcv counterpart: ``compress.df`` on t2's two covariates with more than ``100^2`` unique pairs
+    (27c5, 12000 continuous rows, PR #47 review): each column is snapped to 100 points over its range, then
+    ``uniquecombs``' text order and ``sample()``'s shuffle. The row count and every index match exactly
+    (structure); the grid values agree to the deterministic gate (they differ from R's ``seq`` in the last
+    bit)."""
+    fx = load_fixture("bam_discrete_binomial_cloglog_t2_binned")
+    data = _columns(fx["data"])
+    term = compress_covariates({"x": data["x"], "z": data["z"]}, rng=RRandom(8547))
+    assert term.binned
+    assert term.nr == fx["compress_nr"]
+    np.testing.assert_array_equal(term.index + 1, fx["compress_index"])
+    for name in ("x", "z"):
+        want = np.asarray(fx[f"compress_{name}"], dtype=np.float64)
+        rel = float(np.max(np.abs(term.values[name] - want)) / np.max(np.abs(want)))
+        margin(
+            "t2 discrete",
+            "compress.df grid rows, max rel",
+            rel,
+            "1e-8 rel",
+            "bam_discrete_binomial_cloglog_t2_binned",
+        )
+        assert rel < 1e-8
 
 
 def test_r_double_string_is_paste0(load_fixture) -> None:

@@ -44,6 +44,7 @@ from hgam.engine.gam_basis_cr import (
 from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
 from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
+from hgam.engine.gam_basis_te import te_basis, tensor_prod_model_matrix
 from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
 from hgam.engine.gam_term_build import fs_frame
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec
@@ -128,6 +129,12 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
             knots=tuple(m[0] for m in margins),
             constraint=tuple(m[1] for m in margins),
         )
+    if term.basis == "te":
+        # Predict.matrix.tensor.smooth (smooth.r): margins' cr designs, row tensor product, the fit's Z.
+        xs = [np.asarray(_column(data, v, term), dtype=np.float64) for v in term.variables]
+        knots = tuple(_knots_for(term, v, k, x) for v, k, x in zip(term.variables, term.k, xs, strict=True))
+        built = te_basis(xs, term.k, list(knots))
+        return TermState(term=term, knots=built.knots, constraint=(built.z,))
     if term.basis == "sz":
         smoothed = term.variables[1]
         x = np.asarray(_column(data, smoothed, term), dtype=np.float64)
@@ -144,7 +151,7 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         return TermState(term=term)
     raise HgamValidationError(
         f"fit_term_state: TermSpec {term.label!r} has basis={term.basis!r}, which "
-        "predict does not support — only 'cr', 'tp', 'ti', 'sz', 'fs', 're' and 'parametric'."
+        "predict does not support — only 'cr', 'tp', 'ti', 'te', 'sz', 'fs', 're' and 'parametric'."
     )
 
 
@@ -186,6 +193,10 @@ def predict_term_design(state: TermState, data: Mapping[str, np.ndarray]) -> np.
         d1 = cr_basis(x1, state.knots[0])[0] @ state.constraint[0]
         d2 = cr_basis(x2, state.knots[1])[0] @ state.constraint[1]
         return np.einsum("ij,ik->ijk", d1, d2).reshape(d1.shape[0], d1.shape[1] * d2.shape[1])
+    if term.basis == "te":
+        xs = [np.asarray(_column(data, v, term), dtype=np.float64) for v in term.variables]
+        designs = [cr_basis(x, kn)[0] for x, kn in zip(xs, state.knots, strict=True)]
+        return np.asarray(tensor_prod_model_matrix(designs) @ state.constraint[0], dtype=np.float64)
     if term.basis == "sz":
         assert term.n_levels is not None
         factor_name, smoothed_name = term.variables

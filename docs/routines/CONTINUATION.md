@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-third slice: `te` on cr, the basis (PLAN step 3). PR #40
-(`re`) had merged before this run. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-20, by the development run's thirty-fourth slice: `te` on cr, the REML fit (PLAN step 3). PR #41
+(the te basis) auto-merged earlier in this run. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -185,19 +185,29 @@ number of margins. `te(x, z, k=c(5, 4))` (x at supplied knots, z default) and `t
 null.space.dim and column count exact; X, S, PredictMat (points outside the knots too) at most 1.6e-14 relative.
 `gam()` still refuses te (`formula.py` `_REFUSED["te"]`). `constraint_rows=` is tested (PR #41 review nit). Tests: 794 pass, no xfail.
 
-## Next slice: `te` on cr, second step (the REML fit)
+`te` on cr, the REML fit (section 26b, `tests/test_te_fit.py`, this run's second PR): `te(x, z, k=c(.,.))` is parsed
+(`TensorCall(kind="te")`; bs defaults to "cr" and k to 5 per margin, as mgcv's `te()`), built as
+`TermSpec(basis="te")` by `build_python_te_term` (`te_basis`, mgcv's rank vector), and predicted through the stored
+knots and `Z` (`gam_predict`). `p ~ te(x, z, bs="cr", k=c(5, 4))` with x's knots supplied: eta 3.0e-4, se 2.0e-3
+relative, edf 1.4e-2 of the gate width, predict on new data (outside both knot ranges too) eta 2.2e-4, se 1.9e-3;
+`p ~ f + te(x, z)` at defaults: eta 4.9e-6, se 2.5e-3, edf 5.0e-4 of the gate, predict 8.7e-6. Structure, rank and
+names exact. Refused by name (`api._refuse_te`): `select=TRUE`, `bam(discrete=TRUE)`, and a te beside another smooth
+of one of its covariates (not verified: mgcv's `gam.side` constrains nested columns for smooths with `side.constrain`,
+matched on `term` with `by` appended, and leaves fs, sz, re and by smooths alone; PR #42 review). A k below 3 or a k
+vector of the wrong length is refused (mgcv warns and resets k to 5 per margin). `k_check` refuses te. `summary`'s
+`null_space_dim` for te is `None` (its smooth-term test is not measured). Tests: 808 pass, no xfail.
 
-- Parse `te(x, z, k=c(.,.), bs="cr")` in `formula.py` (today `_REFUSED["te"]`; ti is parsed at about line 482): a new
-  `TermSpec(basis="te")` (`gam_term_spec.py` `SUPPORTED_BASES`), label `te(x,z)` as mgcv writes it. Refuse by name
-  anything other than cr margins, `by=`, `d=`, `fx=`, `np=FALSE`, `select=TRUE` (smoothCon's null.space.penalty on a
-  multi-penalty term is a later step) and use in `bam(discrete=TRUE)` (`discrete.py` line 172 list).
-- Build it from `te_basis` the way `build_python_ti_term` (`gam_term_build.py`) builds ti: knots from `knots=` per
-  variable, design, one penalty per margin, `TermState` keeping `te_basis`'s result for prediction; add the te branch
-  beside ti in `gam_model.py` (line ~267) and `gam_predict.py` (lines ~118, ~183, via `te_predict_design`); k.check in
-  `gam_check.py` (ti branch at line 163) may refuse te for now.
-- Fixture section 26b: a binomial cloglog REML gam `p ~ te(x, z, bs="cr", k=c(5, 4))` on a frame like 24b's with
-  `knots=list(x=sz_knots)`, `gam_case` plus rank, coef_names, predict on new data with se. Gates: structure exact,
-  eta, se, edf, predict as in `docs/PRIORITIES.md`. Then 26c: te in discrete bam.
+## Next slice: `te` on cr, third step (discrete bam)
+
+- bam marks te `tensor.possible`: `discrete.mf` compresses each margin covariate, `tero` may reorder the margins (bs.dim
+  largest last), and `gam.setup` builds the term on the padded frame `mf0`, so the constraint `colMeans(X)` is over
+  `mf0`'s rows. `te_basis(..., constraint_rows=)` takes those rows (tested): build them as the tensor product of each
+  margin's raw cr design over `frame_column(v)` inside `constraint_frame` (see `constraint_rows` and `fs_frame` in
+  `gam_term_build.py`); add "te" to `discrete.py`'s `_smooth_margins` list beside ti; drop the discrete refusal in
+  `api._refuse_te`, and let `_tero` apply to te.
+- Fixture section 26c: section 26b's two models as `bam(method="fREML", discrete=TRUE)` with `bam_disc_case`, predict on
+  new data. Gates as for the other discrete fits. Then: `select=TRUE` with te (smoothCon's `null.space.penalty`
+  `need.full` branch on the summed te penalties).
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 

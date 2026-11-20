@@ -133,3 +133,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   `tensor.prod.model.matrix`, `tensor.prod.penalties`, smoothCon's scaling and whole-term constraint, and
   `Predict.matrix.tensor.smooth`. Two and three margins (section 26, `tests/test_te_basis.py`): structure exact, X, S
   and PredictMat at most 1.6e-14 relative. `gam()` still refuses te. Next: the te REML fit (section 26b).
+- Widening, `te` on cr, second step (2026-11-20): the REML fit. `te(x, z, k=)` parsed and built as
+  `TermSpec(basis="te")` (section 26b, `tests/test_te_fit.py`): `te(x, z, k=c(5, 4))` eta 3.0e-4, se 2.0e-3, edf
+  1.4e-2 of the gate width; `f + te(x, z)` eta 4.9e-6, se 2.5e-3; predict on new data within gate; structure, rank and
+  names exact. Refused by name: select=TRUE, discrete bam, te beside another smooth of its covariates (gam.side). Next:
+  te in discrete bam (section 26c).

@@ -242,7 +242,7 @@ def test_a_raw_term_carries_no_k_and_no_knots() -> None:
     [
         ({"label": ""}, "non-empty label"),
         ({"variables": ()}, "names no variables"),
-        ({"basis": "te"}, "supported bases are"),
+        ({"basis": "t2"}, "supported bases are"),
         ({"k": (13, 6)}, r"names 2; one k per variable"),
         ({"k": ()}, r"names 0; one k per variable"),
     ],
@@ -254,9 +254,10 @@ def test_malformed_terms_are_refused(kwargs: dict[str, object], match: str) -> N
         TermSpec(**base)  # type: ignore[arg-type]
 
 
-def test_ti_needs_at_least_two_margins() -> None:
+@pytest.mark.parametrize("basis", ["ti", "te"])
+def test_tensors_need_at_least_two_margins(basis: str) -> None:
     with pytest.raises(HgamValidationError, match="at least two margins"):
-        TermSpec(label="ti(AttdAge)", variables=("AttdAge",), basis="ti", k=(13,))
+        TermSpec(label=f"{basis}(AttdAge)", variables=("AttdAge",), basis=basis, k=(13,))
 
 
 def test_a_raw_term_with_k_is_refused() -> None:
@@ -309,7 +310,7 @@ def test_every_supported_basis_constructs_a_minimal_term() -> None:
             TermSpec(label=f"term-{basis}", variables=("id",), basis=basis, n_levels=3)
         elif basis == "parametric":
             TermSpec(label=f"term-{basis}", variables=("id",), basis=basis, levels=(3,))
-        elif basis == "ti":
+        elif basis in ("ti", "te"):
             TermSpec(label=f"term-{basis}", variables=("x", "y"), basis=basis, k=(8, 6))
         else:
             TermSpec(label=f"term-{basis}", variables=("x",), basis=basis, k=(8,))

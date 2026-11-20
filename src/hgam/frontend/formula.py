@@ -116,14 +116,16 @@ class FsCall:
 
 @dataclass(frozen=True)
 class TensorCall:
-    """A parsed ``ti(x, z, bs="cr", k=...)`` call (two margins)."""
+    """A parsed ``ti(x, z, bs="cr", k=...)`` or ``te(x, z, bs="cr", k=...)`` call (two margins).
+    ``kind`` is the function written, ``"ti"`` or ``"te"``."""
 
     variables: tuple[str, ...]
     k: tuple[int, ...]
+    kind: str = "ti"
 
     @property
     def text(self) -> str:
-        return f"ti({','.join(self.variables)})"
+        return f"{self.kind}({','.join(self.variables)})"
 
 
 @dataclass(frozen=True)
@@ -376,38 +378,49 @@ def _parse_smooth(text: str, positional: list[str], keyword: dict[str, str]) -> 
     return SmoothCall(variable=variable, basis="cr", k=k, by=by)
 
 
-def _parse_tensor(text: str, positional: list[str], keyword: dict[str, str]) -> TensorCall:
+def _parse_tensor(text: str, positional: list[str], keyword: dict[str, str], kind: str = "ti") -> TensorCall:
+    """``ti(...)`` or ``te(...)`` (``kind``) with two cr margins. mgcv's ``te`` defaults to ``bs = "cr"``
+    (``te()``, smooth.r), so ``bs=`` may be left out there; ``k`` defaults to 5 per margin for both."""
     for key in keyword:
         if key not in ("bs", "k"):
             raise _refuse(
                 f"argument {key!r} in {text}",
-                f"only bs= and k= are verified for ti() ({_COVERAGE} §2.1)",
+                f"only bs= and k= are verified for {kind}() ({_COVERAGE} §2.1)",
             )
     if len(positional) != 2:
         raise _refuse(
             f"{text} with {len(positional)} margin(s)",
-            f"ti() is verified for exactly two margins ({_COVERAGE} §2.1; te/t2 are rung L8)",
+            f"{kind}() is verified for exactly two margins ({_COVERAGE} §2.1; t2 is rung L8)",
         )
     variables = tuple(_identifier(v, "variable", text) for v in positional)
-    if "bs" not in keyword:
+    if len(set(variables)) != 2:
+        raise HgamValidationError(f"gam(): {text} repeats a variable (mgcv stops here too).")
+    if "bs" not in keyword and kind == "ti":
         raise _refuse(
             f"{text} without bs=",
             "mgcv's default margin basis for ti() is 'tp', and tp as a ti margin is not built "
             '(ADR-261); write bs="cr"',
         )
-    basis = _string(keyword["bs"], "bs", text)
+    basis = _string(keyword["bs"], "bs", text) if "bs" in keyword else "cr"
     if basis != "cr":
         raise _refuse(f"bs={basis!r} in {text}", f'only bs="cr" margins are verified ({_COVERAGE} §2.1)')
     k = _k_vector(keyword["k"], text) if "k" in keyword else (_TI_DEFAULT_K,)
+    if kind == "te" and (len(k) not in (1, 2) or min(k) < 3):
+        # te() (smooth.r): "one or more supplied k too small" or a k vector of the wrong length makes
+        # mgcv warn and reset k to 5^d; that reset is not ported.
+        raise _refuse(
+            f"k={k!r} in {text}",
+            "mgcv warns and resets k to its default 5 per margin when a k is below 3 or the k vector's "
+            "length is not the number of margins; that reset is not ported, write k >= 3 per margin",
+        )
     if len(k) == 1:
         k = k * 2
     if len(k) != 2:
         raise HgamValidationError(f"gam(): k in {text} must be one value or c(k1, k2).")
-    return TensorCall(variables=variables, k=k)
+    return TensorCall(variables=variables, k=k, kind=kind)
 
 
 _REFUSED_CALLS: dict[str, str] = {
-    "te": f"full tensor product — {_COVERAGE} §2.1 / ladder rung L8",
     "t2": f"alternative tensor decomposition — {_COVERAGE} §2.1 / ladder rung L8",
     "factor": "wrap-free factors only: pass the column as a string/Enum column instead",
     "as.factor": "wrap-free factors only: pass the column as a string/Enum column instead",
@@ -479,8 +492,8 @@ def parse_formula(formula: str) -> ParsedFormula:
             name, positional, keyword = call
             if name == "s":
                 term = _parse_smooth(piece, positional, keyword)
-            elif name == "ti":
-                term = _parse_tensor(piece, positional, keyword)
+            elif name in ("ti", "te"):
+                term = _parse_tensor(piece, positional, keyword, kind=name)
             elif name == "offset":
                 if keyword or len(positional) != 1:
                     raise HgamValidationError(

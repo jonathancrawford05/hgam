@@ -32,6 +32,16 @@ def test_parses_the_verified_subset() -> None:
     )
 
 
+def test_te_parses_with_cr_default_and_k() -> None:
+    """mgcv's te() defaults to bs="cr" and k = 5 per margin (te, smooth.r); the label is te(x,z)."""
+    (term,) = parse_formula("y ~ te(x, z)").terms
+    assert term == TensorCall(("x", "z"), (5, 5), kind="te")
+    assert term.text == "te(x,z)"
+    assert parse_formula('y ~ te(x, z, bs="cr", k=c(5, 4))').terms == (
+        TensorCall(("x", "z"), (5, 4), kind="te"),
+    )
+
+
 def test_ti_defaults_and_scalar_k_recycle() -> None:
     assert parse_formula('y ~ ti(x, z, bs="cr")').terms == (TensorCall(("x", "z"), (5, 5)),)
     assert parse_formula('y ~ ti(x, z, bs="cr", k=7)').terms == (TensorCall(("x", "z"), (7, 7)),)
@@ -72,12 +82,17 @@ def test_a_thin_plate_smooth_takes_no_by() -> None:
         ('y ~ s(x, bs="cr", m=1)', "argument 'm'"),
         ('y ~ s(f, bs="re", k=3)', "takes no k"),
         ('y ~ s(f, by=g, bs="re")', "by= on a random-effect"),
-        ("y ~ te(x, z)", "te()"),
+        ("y ~ te(x, z, w)", "3 margin"),
         ("y ~ t2(x, z)", "t2()"),
         ('y ~ ti(x, z, w, bs="cr")', "3 margin"),
         ("y ~ ti(x, z)", "without bs="),
         ('y ~ ti(x, z, bs="tp")', "bs='tp'"),
         ('y ~ ti(x, z, bs="cr", by=w)', "argument 'by'"),
+        ('y ~ te(x, z, bs="tp")', "bs='tp'"),
+        ("y ~ te(x, z, by=w)", "argument 'by'"),
+        ("y ~ te(x, z, d=2)", "argument 'd'"),
+        ("y ~ te(x, z, k=2)", "resets k"),
+        ("y ~ te(x, z, k=c(5, 4, 3))", "resets k"),
         ("y ~ a*b", "operator"),
         ("y ~ a^2", "operator"),
         ("y ~ a:b:c", "interaction"),
@@ -109,7 +124,7 @@ def test_malformed_formulas_raise(formula: str) -> None:
         parse_formula(formula)
 
 
-@pytest.mark.parametrize("formula", ['y ~ s(x, bs="ps")', "y ~ te(x, x2)"])
+@pytest.mark.parametrize("formula", ['y ~ s(x, bs="ps")', "y ~ t2(x, x2)"])
 def test_an_unported_construct_raises_not_implemented(formula: str) -> None:
     """CLAUDE.md: a term, family or option that is not ported raises NotImplementedError naming it."""
     with pytest.raises(NotImplementedError):

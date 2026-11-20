@@ -46,7 +46,7 @@ from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
 from hgam.engine.gam_basis_te import te_basis, tensor_prod_model_matrix
 from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
-from hgam.engine.gam_term_build import fs_frame
+from hgam.engine.gam_term_build import fs_frame, te_frame
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 
@@ -133,7 +133,7 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         # Predict.matrix.tensor.smooth (smooth.r): margins' cr designs, row tensor product, the fit's Z.
         xs = [np.asarray(_column(data, v, term), dtype=np.float64) for v in term.variables]
         knots = tuple(_knots_for(term, v, k, x) for v, k, x in zip(term.variables, term.k, xs, strict=True))
-        built = te_basis(xs, term.k, list(knots))
+        built = te_basis(xs, term.k, list(knots), frame=te_frame(term))
         return TermState(term=term, knots=built.knots, constraint=(built.z,))
     if term.basis == "sz":
         smoothed = term.variables[1]

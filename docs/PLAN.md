@@ -138,3 +138,9 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   1.4e-2 of the gate width; `f + te(x, z)` eta 4.9e-6, se 2.5e-3; predict on new data within gate; structure, rank and
   names exact. Refused by name: select=TRUE, discrete bam, te beside another smooth of its covariates (gam.side). Next:
   te in discrete bam (section 26c).
+- Widening, `te` on cr, third step (2026-11-20): discrete bam. `tero` reorders te as ti (keeping the kind),
+  `discrete.mf` compresses each margin covariate, and the term is built on `mf0` (`te_basis(frame=)`: knots, penalty
+  scaling and constraint over its rows, design by `Predict.matrix.tensor.smooth` at the binned data). Section 26c,
+  `tests/test_te_fit.py`: eta 1.5e-13, se 7.5e-14, edf 3.9e-6 of the gate width, predict on new data 6.2e-13, the
+  constraint `C Z` 1.1e-15 (over the data rows it misses by 0.23); structure, rank and names exact (`te(z,x)` after
+  `tero`). Next: `select=TRUE` with te.

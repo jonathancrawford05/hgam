@@ -43,6 +43,7 @@ __all__ = [
     "build_python_sz_term",
     "build_python_fs_term",
     "fs_frame",
+    "te_frame",
     "build_python_te_term",
     "build_python_ti_term",
     "build_python_tp_term",
@@ -269,7 +270,9 @@ def build_python_ti_term(x1: np.ndarray, x2: np.ndarray, term: TermSpec) -> Term
 def build_python_te_term(xs: Sequence[np.ndarray], term: TermSpec) -> TermExtract:
     """mgcv counterpart: ``smoothCon(te(..., bs = "cr"), absorb.cons = TRUE)`` (smooth.r), mgcv 1.9-4, through
     :func:`~hgam.engine.gam_basis_te.te_basis`: one penalty per margin, mgcv's ``rank`` vector, and the one
-    sum-to-zero constraint on the whole product taken over the data rows.
+    sum-to-zero constraint on the whole product taken over the data rows, or, inside a
+    :func:`~hgam.engine.gam_basis_cr.constraint_frame`, the term built on that frame's rows
+    (:func:`te_frame`).
 
     Args:
         xs: One covariate per margin, in ``term.variables`` order.
@@ -290,6 +293,7 @@ def build_python_te_term(xs: Sequence[np.ndarray], term: TermSpec) -> TermExtrac
         [np.asarray(x, dtype=np.float64) for x in xs],
         term.k,
         [None if kn is None else np.asarray(kn, dtype=np.float64) for kn in supplied],
+        frame=te_frame(term),
     )
     return TermExtract(
         label=term.label,
@@ -300,6 +304,16 @@ def build_python_te_term(xs: Sequence[np.ndarray], term: TermSpec) -> TermExtrac
         rank=basis.rank,
         knots=None,
     )
+
+
+def te_frame(term: TermSpec) -> list[np.ndarray] | None:
+    """Each margin's column of an active :func:`~hgam.engine.gam_basis_cr.constraint_frame`
+    (``discrete.mf``'s ``mf0``, which ``gam.setup`` builds a ``te`` term on in ``bam(discrete = TRUE)``),
+    or ``None`` outside one."""
+    columns = [frame_column(v) for v in term.variables]
+    if all(c is None for c in columns):
+        return None
+    return [np.asarray(c, dtype=np.float64) for c in columns]
 
 
 def fs_frame(term: TermSpec) -> tuple[np.ndarray, np.ndarray] | None:

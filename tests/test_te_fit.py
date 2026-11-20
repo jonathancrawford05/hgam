@@ -1,9 +1,13 @@
-"""The ``te`` tensor product on cr margins in a REML gam fit, held to mgcv (``make_fixtures.R`` section 26b).
+"""The ``te`` tensor product on cr margins in a REML gam fit and a discrete bam fit, held to mgcv
+(``make_fixtures.R`` sections 26b and 26c).
 
 mgcv counterparts: ``te()`` and ``smooth.construct.tensor.smooth.spec`` with ``smoothCon``'s constraint
 (smooth.r, mgcv 1.9-4; the basis is held to ``smoothCon`` in ``tests/test_te_basis.py``), and
 ``Predict.matrix.tensor.smooth`` for prediction. hgam parses ``te(...)`` as a ``TensorCall(kind="te")`` and
-builds ``TermSpec(basis="te")`` through ``build_python_te_term``.
+builds ``TermSpec(basis="te")`` through ``build_python_te_term``. In ``bam(discrete = TRUE)`` (26c) ``tero``
+(bam.r) puts the margin with the largest ``bs.dim`` last (``te(x, z, k=c(5, 4))`` is fitted as ``te(z,x)``),
+``discrete.mf`` compresses each margin covariate on its own, and the term is constructed on the padded frame
+``mf0`` (penalty scaling and constraint over its rows; ``te_basis(frame=)``).
 
 Gates (``docs/PRIORITIES.md``): structure exact; the linear predictor to 1e-3 absolute; standard errors of the
 linear predictor 1% relative; per-term edf 0.05 absolute or 1%, whichever is larger. The same gates hold for
@@ -18,7 +22,12 @@ from hgam.frontend.api import gam
 
 FAMILY = 'binomial(link="cloglog")'
 
-CASES = ("gam_binomial_cloglog_te_reml", "gam_binomial_cloglog_factor_te_reml")
+CASES = {
+    "gam_binomial_cloglog_te_reml": {"method": "REML"},
+    "gam_binomial_cloglog_factor_te_reml": {"method": "REML"},
+    "bam_discrete_binomial_cloglog_te": {"method": "fREML", "discrete": True},
+    "bam_discrete_binomial_cloglog_factor_te": {"method": "fREML", "discrete": True},
+}
 
 
 def _columns(rows: list[dict]) -> dict[str, np.ndarray]:
@@ -35,13 +44,14 @@ def _as_list(value: object) -> list:
 
 @pytest.mark.parametrize("name", CASES)
 def test_te_meets_the_gates(name: str, load_fixture, margin) -> None:
-    """Section 26b: ``p ~ te(x, z, bs="cr", k=c(5, 4))`` with x's knots supplied, and ``p ~ f + te(x, z)`` at
-    te's defaults. Structure (label, coefficient count, full rank, coefficient names, one smoothing parameter
-    per margin) is exact; eta, se and edf meet their gates on the data and on new data."""
+    """Sections 26b (REML gam) and 26c (discrete bam): ``p ~ te(x, z, bs="cr", k=c(5, 4))`` with x's knots
+    supplied, and ``p ~ f + te(x, z)`` at te's defaults. Structure (label, coefficient count, full rank,
+    coefficient names, one smoothing parameter per margin) is exact; eta, se and edf meet their gates on
+    the data and on new data."""
     fx = load_fixture(name)
     data = _columns(fx["data"])
     formula = fx["formula"].replace("'", '"')
-    fit = gam(formula, data, FAMILY, weights="n", knots=fx["knots"] or None, method="REML")
+    fit = gam(formula, data, FAMILY, weights="n", knots=fx["knots"] or None, **CASES[name])
     labels = _as_list(fx["labels"])
     assert fit.converged
     assert list(fit.smooth_labels) == labels
@@ -71,17 +81,36 @@ def test_te_meets_the_gates(name: str, load_fixture, margin) -> None:
     assert d_se_new < 1e-2
 
 
+@pytest.mark.parametrize("name", [n for n, kw in CASES.items() if kw.get("discrete")])
+def test_discrete_te_constraint_is_mgcvs(name: str, load_fixture, margin) -> None:
+    """Section 26c: the te term's absorbed constraint (the fit's ``Z``, used for the design and
+    prediction) satisfies mgcv's, taken over ``discrete.mf``'s padded frame ``mf0``: ``C Z = 0`` for
+    mgcv's unit ``C``, at the deterministic-pieces gate (1e-8). Built over the data rows instead,
+    ``C Z`` misses by 5.1e-2 and 2.3e-1 while eta still agrees to 1.5e-8 (the constraint mostly trades
+    against the intercept), so this test, not the eta gate, holds the frame."""
+    fx = load_fixture(name)
+    data = _columns(fx["data"])
+    fit = gam(
+        fx["formula"].replace("'", '"'), data, FAMILY, weights="n", knots=fx["knots"] or None, **CASES[name]
+    )
+    state = next(s for s in fit.term_states if s.term.basis == "te")
+    assert state.term.label == fx["labels"]
+    want = np.asarray(fx["constraint"], dtype=np.float64)
+    miss = float(np.max(np.abs(want @ state.constraint[0])))
+    margin("te discrete", "C Z, max abs", miss, "1e-8 rel", name)
+    assert miss < 1e-8
+
+
 @pytest.mark.parametrize(
     ("formula", "kwargs", "needle"),
     [
         ('p ~ te(x, z, bs="cr")', {"select": True}, "select=True"),
-        ('p ~ te(x, z, bs="cr")', {"method": "fREML", "discrete": True}, "bam(discrete=True)"),
         ('p ~ s(x, bs="cr") + te(x, z, bs="cr")', {}, "not verified"),
         ('p ~ te(x, z, bs="cr") + s(z, f, bs="fs", xt="cr")', {}, "not verified"),
     ],
 )
 def test_te_refusals(formula: str, kwargs: dict, needle: str, load_fixture) -> None:
-    """What te does not port yet is refused by name: select=TRUE, discrete bam, and a te beside another smooth
+    """What te does not port yet is refused by name: select=TRUE, and a te beside another smooth
     of one of its covariates, which is not measured (mgcv's gam.side constrains nested columns for some such
     smooths, e.g. a bare s(x), and leaves others alone, e.g. fs; gam.side is not ported)."""
     data = _columns(load_fixture("gam_binomial_cloglog_factor_te_reml")["data"])

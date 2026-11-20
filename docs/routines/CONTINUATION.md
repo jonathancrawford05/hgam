@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-fourth slice: `te` on cr, the REML fit (PLAN step 3). PR #41
-(the te basis) auto-merged earlier in this run. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-20, by the development run's thirty-fifth slice: `te` on cr in discrete bam (PLAN step 3). PR #42
+(the te REML fit) had merged before this run. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -197,17 +197,27 @@ matched on `term` with `by` appended, and leaves fs, sz, re and by smooths alone
 vector of the wrong length is refused (mgcv warns and resets k to 5 per margin). `k_check` refuses te. `summary`'s
 `null_space_dim` for te is `None` (its smooth-term test is not measured). Tests: 808 pass, no xfail.
 
-## Next slice: `te` on cr, third step (discrete bam)
+`te` on cr in discrete bam (section 26c, `tests/test_te_fit.py`, this run's PR): `_tero` now keeps the call's `kind`
+(it returned a ti), so a te is reordered as mgcv's `tero` does (`te(x, z, k=c(5, 4))` is fitted as `te(z,x)`);
+`discrete.py` treats te margins as ti margins; `te_basis(..., frame=)` builds the term on `discrete.mf`'s `mf0` (default
+knots, smoothCon's penalty scaling and the constraint over its rows) and evaluates the design at the binned data rows by
+`te_predict_design`; `gam_term_build.te_frame` reads the frame, used by `build_python_te_term` and `fit_term_state`. The
+discrete refusal is gone. Both 26b models as discrete bam: eta at most 1.5e-13, se 7.5e-14, edf 3.9e-6 of the gate width,
+predict on new data 6.2e-13, structure, rank and names exact; mgcv's constraint direction (recorded in the fixture) is met
+at `C Z` 1.1e-15. Built over the data rows instead, eta still agrees (1.5e-8) but `C Z` misses by 0.23, so the constraint
+test is what holds the frame. Tests: 812 pass, no xfail.
 
-- bam marks te `tensor.possible`: `discrete.mf` compresses each margin covariate, `tero` may reorder the margins (bs.dim
-  largest last), and `gam.setup` builds the term on the padded frame `mf0`, so the constraint `colMeans(X)` is over
-  `mf0`'s rows. `te_basis(..., constraint_rows=)` takes those rows (tested): build them as the tensor product of each
-  margin's raw cr design over `frame_column(v)` inside `constraint_frame` (see `constraint_rows` and `fs_frame` in
-  `gam_term_build.py`); add "te" to `discrete.py`'s `_smooth_margins` list beside ti; drop the discrete refusal in
-  `api._refuse_te`, and let `_tero` apply to te.
-- Fixture section 26c: section 26b's two models as `bam(method="fREML", discrete=TRUE)` with `bam_disc_case`, predict on
-  new data. Gates as for the other discrete fits. Then: `select=TRUE` with te (smoothCon's `null.space.penalty`
-  `need.full` branch on the summed te penalties).
+## Next slice: `select=TRUE` with te (te on cr, fourth step)
+
+- `_refuse_te` still refuses `select=True`. smoothCon (smooth.r 1.9-4, lines 4228-4264) with `null.space.penalty`: a
+  multi-penalty term takes `need.full` and appends `U U'` for the eigenvectors of the summed (scaled, constrained)
+  penalties whose eigenvalues fall below `max * eps^0.66`. For te on two cr margins the sum's null space is 2 x 2 = 4
+  minus the constraint = 3, so mgcv adds a third penalty (fs added none). Check `hgam`'s `null_space_penalty` (used for
+  cr/sz/fs) on the te penalties against `smoothCon(te(...), null.space.penalty = TRUE)`, then drop the refusal.
+- Fixture section 26d: `smoothCon(te(x, z, bs="cr", k=c(5, 4)), null.space.penalty = TRUE)` (S list, rank) and 26b's
+  two models with `select = TRUE` as a REML gam and a discrete bam (three sp for the te). Gates as before.
+- After that, te is done unless a te beside another smooth of its covariates is wanted (`gam.side`, not ported); next in
+  PLAN step 3's order is `t2`.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 

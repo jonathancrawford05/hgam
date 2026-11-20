@@ -164,15 +164,16 @@ def compress_covariates(
 
 def _smooth_margins(term: TermSpec) -> tuple[str, ...]:
     """Every covariate ``discrete.mf`` compresses for one smooth, in its order: the ``by``
-    variable (numeric or factor) first, then each one-covariate margin. ``sz`` is a tensor of
+    variable (numeric or factor) first, then each one-covariate margin (``ti`` and ``te`` margins, after
+    ``tero``). ``sz`` is a tensor of
     one-covariate margins there (``tensor.possible``, bam.r), factor first; ``re`` is its factor. ``fs`` is
     ``tensor.possible`` too, with one margin per written term (``TermSpec.margin_order``)."""
     if term.basis == "parametric":
         return ()
-    if term.basis not in ("cr", "ti", "sz", "fs", "re"):
+    if term.basis not in ("cr", "ti", "te", "sz", "fs", "re"):
         raise HgamNotImplementedError(
             f"discrete_model_frame: {term.basis!r} terms are not discretised "
-            "(only cr, ti, sz, fs, re and factors)."
+            "(only cr, ti, te, sz, fs, re and factors)."
         )
     if term.basis == "fs":
         return term.margin_order if term.margin_order is not None else term.variables
@@ -251,19 +252,19 @@ def discrete_model_frame(
 
 def _numeric_margins(term: TermSpec) -> tuple[str, ...]:
     """The numeric covariates ``discrete.mf`` compresses for one term, in its order: a numeric
-    ``by`` first, then each margin. Every supported margin is one covariate: ``ti`` margins are
+    ``by`` first, then each margin. Every supported margin is one covariate: ``ti`` and ``te`` margins are
     marginal smooths, and ``bam(discrete=TRUE)`` gives ``sz`` (``tensor.possible``) one margin per
     variable (bam.r), of which the first is the factor and is not binned."""
     if term.basis in ("parametric", "re"):
         return ()
-    if term.basis in ("cr", "ti"):
+    if term.basis in ("cr", "ti", "te"):
         margins: tuple[str, ...] = term.variables
     elif term.basis in ("sz", "fs"):
         margins = term.variables[1:]
     else:
         raise HgamNotImplementedError(
             f"discretise_frame: {term.basis!r} terms are not discretised "
-            "(only cr, ti, sz, fs, re and factors)."
+            "(only cr, ti, te, sz, fs, re and factors)."
         )
     return ((term.by,) if term.by is not None else ()) + margins
 

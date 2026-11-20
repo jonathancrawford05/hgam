@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-20 (thirty-fifth slice): `te` on cr in discrete bam (third step of `te`, PLAN step 3)
+
+No open PR at start (PR #42 merged). te in `bam(discrete=TRUE)`: `_tero` keeps `kind` (it turned te into ti), `discrete.mf` margins include te, and `te_basis(frame=)` builds the term on `mf0` (knots, penalty scaling, constraint) with the design by `te_predict_design` at the binned rows. The discrete refusal case in `test_te_refusals` is retired (SETTINGS condition 5), replaced by the 26c cases of `test_te_meets_the_gates`.
+Tests: 808 → 812. `make lint` clean. Section 26c (tier 1, mgcv 1.9-1): te(z,x) after tero eta 1.5e-13, se 7.5e-14, edf 6.1e-7 of gate, predict 6.2e-13; f + te(x,z) eta 8.3e-14, se 3.6e-14, edf 3.9e-6, predict 5.6e-14; C Z 1.1e-15 (data rows: 5.1e-2, 2.3e-1); structure, rank, names exact.
+Deferred: nothing new. Next: `select=TRUE` with te.
+
 ## 2026-11-20 (thirty-fourth slice): `te` on cr, the REML fit (second step of `te`, PLAN step 3)
 
 PR #41 (te basis) auto-merged in this run (six conditions posted). `te(x, z, bs="cr", k=)` parsed (`TensorCall(kind="te")`, bs defaults to cr) and built as `TermSpec(basis="te")` via `build_python_te_term`; predict through the stored `Z`. Refused by name: select=TRUE, discrete bam, a te beside another smooth of its covariates (gam.side not ported), k.check. Refusal-only te cases retired (SETTINGS condition 5), replaced by `tests/test_te_fit.py`.

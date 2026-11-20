@@ -145,6 +145,7 @@ def te_basis(
     knots: Sequence[np.ndarray | None] | None = None,
     *,
     constraint_rows: np.ndarray | None = None,
+    frame: Sequence[np.ndarray] | None = None,
 ) -> TeBasis:
     """mgcv counterpart: ``smoothCon(te(..., bs = "cr"), absorb.cons = TRUE)``, i.e.
     ``smooth.construct.tensor.smooth.spec`` (smooth.r) then ``smoothCon``'s scaling and constraint, mgcv 1.9-4
@@ -155,7 +156,24 @@ def te_basis(
         ks: Each margin's ``k``.
         knots: Each margin's supplied knots, or ``None`` for mgcv's default; ``None`` for all defaults.
         constraint_rows: The tensor design rows to take ``colMeans`` over instead of the data's.
+        frame: One column per margin, the rows the term is constructed on when they are not the
+            data's: ``bam(discrete = TRUE)``'s ``gam.setup`` builds it on ``discrete.mf``'s padded frame
+            ``mf0``, so the default knots, the penalty scaling (``norm(X, "I")``) and the constraint come
+            from those rows, and the design at the data rows is ``Predict.matrix.tensor.smooth`` with that
+            ``Z`` (:func:`te_predict_design`).
     """
+    if frame is not None:
+        if constraint_rows is not None:
+            raise HgamValidationError("te basis: give frame= or constraint_rows=, not both.")
+        built = te_basis(frame, ks, knots)
+        return TeBasis(
+            te_predict_design(xs, built),
+            built.penalties,
+            built.rank,
+            built.null_space_dim,
+            built.knots,
+            built.z,
+        )
     xs = _check_margins(xs, ks)
     if knots is None:
         knots = [None] * len(xs)

@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-fifth slice: `te` on cr in discrete bam (PLAN step 3). PR #42
-(the te REML fit) had merged before this run. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-20, by the development run's thirty-sixth slice: `select=TRUE` with te (PLAN step 3). PR #43
+(te in discrete bam) auto-merged earlier in this run. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -207,17 +207,24 @@ predict on new data 6.2e-13, structure, rank and names exact; mgcv's constraint 
 at `C Z` 1.1e-15. Built over the data rows instead, eta still agrees (1.5e-8) but `C Z` misses by 0.23, so the constraint
 test is what holds the frame. Tests: 812 pass, no xfail.
 
-## Next slice: `select=TRUE` with te (te on cr, fourth step)
+`select=TRUE` with te (section 26d, this run's second PR): no engine change. smoothCon's `null.space.penalty` takes
+`need.full` for te and appends `U U'` over the null space of the summed penalties (rank 3: 2 x 2 less the constraint);
+`null_space_penalty` gives it at 1.6e-14 (`tests/test_te_basis.py`). `_refuse_te` no longer takes `select`. REML gam (26d2,
+26d3): eta 3.3e-5, se 2.7e-3 relative, edf 9.1e-4 of the gate width; discrete bam (26d4, 26d5): eta 3.6e-13, se 4.7e-13,
+`C Z` 1.1e-15; three sp, structure, rank and names exact; predict on new data within gate. PR #43's nit is done:
+`fit_term_state` passes only supplied knots to `te_basis`, as `build_python_te_term` does. **`te` on cr is done**; a te
+beside another smooth of its covariates stays refused (`gam.side`, not ported). Tests: 818 pass, no xfail.
 
-- `_refuse_te` still refuses `select=True`. smoothCon (smooth.r 1.9-4, lines 4228-4264) with `null.space.penalty`: a
-  multi-penalty term takes `need.full` and appends `U U'` for the eigenvectors of the summed (scaled, constrained)
-  penalties whose eigenvalues fall below `max * eps^0.66`. For te on two cr margins the sum's null space is 2 x 2 = 4
-  minus the constraint = 3, so mgcv adds a third penalty (fs added none). Check `hgam`'s `null_space_penalty` (used for
-  cr/sz/fs) on the te penalties against `smoothCon(te(...), null.space.penalty = TRUE)`, then drop the refusal.
-- Fixture section 26d: `smoothCon(te(x, z, bs="cr", k=c(5, 4)), null.space.penalty = TRUE)` (S list, rank) and 26b's
-  two models with `select = TRUE` as a REML gam and a discrete bam (three sp for the te). Gates as before.
-- After that, te is done unless a te beside another smooth of its covariates is wanted (`gam.side`, not ported); next in
-  PLAN step 3's order is `t2`.
+## Next slice: `t2` on cr, first step (the basis)
+
+- PLAN step 3's order after te is `t2`. mgcv 1.9-4 `smooth.r`: `t2()` builds a `t2.smooth.spec`;
+  `smooth.construct.t2.smooth.spec` takes each margin by `smooth.construct`, re-parameterises each margin so its
+  penalty is diagonal (`nat.param`-like, unpenalised columns last), and forms the row tensor product with one penalty
+  per combination of penalised/unpenalised margin parts (`t2.model.matrix`, `Predict.matrix.t2.smooth`); `full` and
+  `ord` options. Read those functions first and scope the first step to the basis held to `smoothCon(t2(x, z,
+  bs = "cr", k = c(5, 4)))` (X, S list, rank, PredictMat), with `gam()` still refusing t2.
+- Fixture section 27, a new test module `tests/test_t2_basis.py`. Then the REML fit, discrete bam (bam marks t2
+  `tensor.smooth.spec`?: check `tero` and `discrete.mf` for t2 before assuming it), select.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 

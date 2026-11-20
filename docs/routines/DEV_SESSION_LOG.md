@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-20 (thirty-sixth slice): `select=TRUE` with te (fourth step of `te`, PLAN step 3)
+
+PR #43 auto-merged in this run (six conditions posted). `select=TRUE` with te needed no engine change: `null_space_penalty` matches smoothCon's `need.full` third penalty; the refusal and its refusal-only test case are gone (SETTINGS condition 5, replaced by the four 26d fit cases). PR #43 nit: `fit_term_state` now passes only supplied knots to `te_basis`, so default knots come from the build rows in both builders.
+Tests: 812 → 818. `make lint` clean. Section 26d (tier 1, mgcv 1.9-1): null-space penalty 1.6e-14, S 3.7e-15, rank [12, 10, 3]; REML gam eta 3.3e-5, se 2.7e-3, edf 9.1e-4 of gate; discrete bam eta 3.6e-13, se 4.7e-13, C Z 1.1e-15; predict within gate; structure, rank, names exact.
+Deferred: nothing new. Next: `t2`.
+
 ## 2026-11-20 (thirty-fifth slice): `te` on cr in discrete bam (third step of `te`, PLAN step 3)
 
 No open PR at start (PR #42 merged). te in `bam(discrete=TRUE)`: `_tero` keeps `kind` (it turned te into ti), `discrete.mf` margins include te, and `te_basis(frame=)` builds the term on `mf0` (knots, penalty scaling, constraint) with the design by `te_predict_design` at the binned rows. The discrete refusal case in `test_te_refusals` is retired (SETTINGS condition 5), replaced by the 26c cases of `test_te_meets_the_gates`.

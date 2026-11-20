@@ -682,4 +682,21 @@ f26b2 <- "p ~ f + te(x, z)"
 m26b2 <- gam(as.formula(f26b2), family = binomial(link = "cloglog"), weights = n, data = d26b, method = "REML")
 put("gam_binomial_cloglog_factor_te_reml", c(gam_case(m26b2, d26b, f26b2, "binomial(link='cloglog')"),
                                              te_extra(m26b2, NULL)))
+# 26c. 26b's two models as bam(method = "fREML", discrete = TRUE). bam marks te tensor.smooth.spec: tero puts the
+# margin with the largest bs.dim last (k = c(5, 4) becomes te(z,x), k = c(4, 5)), discrete.mf compresses each margin
+# covariate on its own, and gam.setup builds the term on the padded frame mf0, so the penalty scaling and the
+# sum-to-zero constraint are taken over mf0's rows. predict.bamd on new data, mgcv's rank and coefficient names, and
+# the te term's constraint direction (con_dir, section 17), which over the data rows instead misses.
+te_disc_extra <- function(b, kn) {
+  te_sm <- b$smooth[[which(sapply(b$smooth, function(sm) inherits(sm, "tensor.smooth")))]]
+  c(te_extra(b, kn), list(constraint = con_dir(te_sm)))
+}
+b26c1 <- bam(as.formula(f26b1), family = binomial(link = "cloglog"), weights = n, data = d26b, knots = te_knots,
+             method = "fREML", discrete = TRUE)
+put("bam_discrete_binomial_cloglog_te", bam_disc_case(b26c1, d26b, f26b1, "binomial(link='cloglog')",
+                                                      te_disc_extra(b26c1, te_knots)))
+b26c2 <- bam(as.formula(f26b2), family = binomial(link = "cloglog"), weights = n, data = d26b, method = "fREML",
+             discrete = TRUE)
+put("bam_discrete_binomial_cloglog_factor_te", bam_disc_case(b26c2, d26b, f26b2, "binomial(link='cloglog')",
+                                                             te_disc_extra(b26c2, NULL)))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

@@ -549,10 +549,10 @@ def _refuse_select_with_bare_and_factor_by(smooth: Sequence[TermSpec]) -> None:
             )
 
 
-def _refuse_te(call: TensorCall, parsed: ParsedFormula, *, select: bool, discrete: bool) -> None:
-    """``te(x, z, bs="cr")`` is ported for ``gam(method="REML")`` on its own covariates. Refused by name:
-    ``select=TRUE`` (smoothCon's ``null.space.penalty`` on a multi-penalty term), ``bam(discrete=TRUE)``
-    (``discrete.mf``'s margins and ``mf0`` for te), and a te beside another smooth of one of its covariates.
+def _refuse_te(call: TensorCall, parsed: ParsedFormula, *, select: bool) -> None:
+    """``te(x, z, bs="cr")`` is ported for ``gam(method="REML")`` and ``bam(discrete=TRUE)`` on its own
+    covariates. Refused by name: ``select=TRUE`` (smoothCon's ``null.space.penalty`` on a multi-penalty term),
+    and a te beside another smooth of one of its covariates.
     That last one is not verified: for some such smooths mgcv's ``gam.side`` (mgcv.r) removes nested columns
     (smooths with ``side.constrain``, matched on ``term`` with ``by`` appended), for others (fs, sz, re, or a
     ``by`` smooth) it does nothing; neither case is measured here, and ``gam.side`` is not ported."""
@@ -560,11 +560,6 @@ def _refuse_te(call: TensorCall, parsed: ParsedFormula, *, select: bool, discret
         raise HgamNotImplementedError(
             f"gam(): select=True with {call.text}: smoothCon's null.space.penalty for a te term "
             "is not ported."
-        )
-    if discrete:
-        raise HgamNotImplementedError(
-            f"gam(): {call.text} in bam(discrete=True) is not ported (discrete.mf's te margins); "
-            'fit it with gam(method="REML").'
         )
     mine = set(call.variables)
     for other in parsed.terms:
@@ -596,7 +591,8 @@ def _tero(call: TensorCall) -> TensorCall:
 
     ``mgcv:::tero`` (applied by ``bam(discrete=TRUE)``): swap the margin with the largest
     ``bs.dim`` (the last one on ties) into the last position. For two margins that is a swap
-    exactly when ``k[0] > k[1]``. Deterministic, no RNG; it changes the coefficient order, the
+    exactly when ``k[0] > k[1]``. ``te`` and ``ti`` alike (both are ``tensor.smooth.spec``); the label
+    keeps the function written. Deterministic, no RNG; it changes the coefficient order, the
     penalty order and the label (``ti(age,dur)`` with ``k=c(13,6)`` becomes ``ti(dur,age)``), and
     through the path-dependent iteration, the answer."""
     ks = call.k
@@ -609,7 +605,9 @@ def _tero(call: TensorCall) -> TensorCall:
         return call
     order = list(range(len(ks)))
     order[maxi], order[last] = order[last], order[maxi]
-    return TensorCall(variables=tuple(call.variables[i] for i in order), k=tuple(ks[i] for i in order))
+    return TensorCall(
+        variables=tuple(call.variables[i] for i in order), k=tuple(ks[i] for i in order), kind=call.kind
+    )
 
 
 def _supplied_knots(knots: Mapping[str, Sequence[float]] | None) -> dict[str, tuple[float, ...]]:
@@ -723,7 +721,7 @@ def _build_model(
             for v in call.variables:
                 need_numeric(v, call.text)
             if call.kind == "te":
-                _refuse_te(call, parsed, select=select, discrete=tero)
+                _refuse_te(call, parsed, select=select)
             call = _tero(call) if tero else call
             margin_knots = tuple(
                 pair

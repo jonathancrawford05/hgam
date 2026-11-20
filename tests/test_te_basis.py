@@ -84,6 +84,26 @@ def test_te_basis_constraint_rows_are_forwarded() -> None:
     assert not np.allclose(other.design, default.design)
 
 
+def test_te_basis_frame_builds_on_the_frame_and_predicts_at_the_data() -> None:
+    """``frame=`` constructs the term on other rows (``bam(discrete=TRUE)``'s ``mf0``): knots, penalties and
+    ``Z`` are the frame's own basis, and the design is ``te_predict_design`` at the data rows. The data as
+    its own frame reproduces the default; ``frame=`` and ``constraint_rows=`` together are refused."""
+    rng = np.random.default_rng(2)
+    x, z = rng.uniform(0.0, 1.0, 150), rng.uniform(0.0, 1.0, 150)
+    x0, z0 = rng.uniform(0.0, 1.0, 90), rng.uniform(0.0, 1.0, 90)
+    default = te_basis([x, z], [5, 4])
+    same = te_basis([x, z], [5, 4], frame=[x, z])
+    np.testing.assert_allclose(same.design, default.design, rtol=0, atol=1e-13)
+    on_frame = te_basis([x0, z0], [5, 4])
+    built = te_basis([x, z], [5, 4], frame=[x0, z0])
+    np.testing.assert_allclose(built.z, on_frame.z, rtol=0, atol=0)
+    for got, want in zip(built.penalties, on_frame.penalties, strict=True):
+        np.testing.assert_allclose(got, want, rtol=0, atol=0)
+    np.testing.assert_allclose(built.design, te_predict_design([x, z], on_frame), rtol=0, atol=0)
+    with pytest.raises(ValueError, match="not both"):
+        te_basis([x, z], [5, 4], frame=[x0, z0], constraint_rows=np.ones((3, 20)))
+
+
 def test_te_basis_refuses_one_margin_and_wrong_knots() -> None:
     x = np.linspace(0.0, 1.0, 50)
     with pytest.raises(ValueError, match="at least two margins"):

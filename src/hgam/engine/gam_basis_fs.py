@@ -35,7 +35,7 @@ import numpy as np
 import scipy.linalg
 
 from hgam.engine.gam_basis_cr import _cr_basis_raw, _r_norm_inf, _r_norm_one
-from hgam.errors import HgamComputationError, HgamValidationError
+from hgam.errors import HgamComputationError, HgamNotImplementedError, HgamValidationError
 
 __all__ = ["FsBasis", "fs_basis", "fs_predict_design", "nat_param"]
 
@@ -43,9 +43,13 @@ _NAT_PARAM_TOL = float(np.finfo(np.float64).eps ** 0.8)
 
 
 def nat_param(
-    design: np.ndarray, penalty: np.ndarray, rank: int
+    design: np.ndarray, penalty: np.ndarray, rank: int, *, type: int = 1
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """mgcv counterpart: ``nat.param`` (smooth.r), mgcv 1.9-4, ``type = 1``, ``unit.fnorm = TRUE``.
+    """mgcv counterpart: ``nat.param`` (smooth.r), mgcv 1.9-4, ``type = 1`` or ``type = 3``,
+    ``unit.fnorm = TRUE``.
+
+    ``type = 1`` (``fs``) is the QR branch below. ``type = 3`` (``t2``'s margins) is
+    :func:`_nat_param_type3`. Types 0 and 2 are not ported.
 
     R's ``qr()`` is LINPACK's ``dqrdc2``; NumPy's is LAPACK's ``dgeqrf``. They may differ in the sign of
     rows of ``R``, which leaves ``X`` and ``P`` unchanged up to the sign of eigenvectors.
@@ -59,6 +63,10 @@ def nat_param(
         ``(X, D, P)``: the re-parameterised ``(n, p)`` design with the ``rank`` range columns first, the
         ``rank`` diagonal entries of the range penalty, and ``P`` with ``X = design @ P``.
     """
+    if type == 3:
+        return _nat_param_type3(design, penalty, rank)
+    if type != 1:
+        raise HgamNotImplementedError(f"nat_param: type = {type} is not ported (types 1 and 3 are).")
     design = np.asarray(design, dtype=np.float64)
     q, r = np.linalg.qr(design)
     diag = np.abs(np.diag(r))
@@ -91,6 +99,56 @@ def nat_param(
         x_new[:, rank:] *= scale_f
         p_mat[:, rank:] *= scale_f
     return x_new, d, p_mat
+
+
+def _nat_param_type3(
+    design: np.ndarray, penalty: np.ndarray, rank: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """mgcv counterpart: ``nat.param`` (smooth.r), mgcv 1.9-4, the ``type == 3`` branch with
+    ``unit.fnorm = TRUE``, line for line.
+
+    No QR: ``eigen(S, symmetric = TRUE)`` (``dsyevr``; SciPy's ``driver="evr"``) gives ``X V``; each range
+    column is divided by ``sqrt`` of its eigenvalue and each null column by ``sqrt(col.norm / av.norm)``, so
+    every column has the range columns' average norm. When the null space has two or more columns it is
+    rotated by the eigenvectors of its centred cross-product, written in reverse order (``rind``), so the
+    constant direction (eigenvalue 0) is the *first* null column. ``unit.fnorm`` then scales the range and
+    the null columns of ``X`` and the matching *rows* of ``P`` (as mgcv writes it; the two scales are equal
+    here, because the null columns were normalised to the range columns' average and the rotation is
+    orthogonal, so ``X = design @ P`` holds).
+    """
+    design = np.asarray(design, dtype=np.float64)
+    penalty = np.asarray(penalty, dtype=np.float64)
+    p = design.shape[1]
+    if not 1 <= rank <= p:
+        raise HgamValidationError(f"nat_param: rank must lie in [1, {p}]; got {rank}.")
+    values, vectors = scipy.linalg.eigh(penalty, driver="evr")
+    values, vectors = values[::-1], vectors[:, ::-1]  # eigen() returns decreasing values
+    null_exists = rank < p
+    e = np.ones(p)
+    e[:rank] = np.sqrt(values[:rank])
+    x_new = design @ vectors
+    col_norm = np.sum(x_new**2, axis=0) / e**2
+    av_norm = np.mean(col_norm[:rank])
+    if null_exists:
+        e[rank:] = np.sqrt(col_norm[rank:] / av_norm)
+    p_mat = vectors / e
+    x_new = x_new / e
+    if null_exists and rank < p - 1:
+        xn = x_new[:, rank:]
+        xn = xn - xn.mean(axis=0)
+        _, um = scipy.linalg.eigh(xn.T @ xn, driver="evr")
+        um = um[:, ::-1]
+        # X[, rind] <- X[, ind] %*% um$vectors, rind = ncol:(rank + 1)
+        x_new[:, rank:] = (x_new[:, rank:] @ um)[:, ::-1]
+        p_mat[:, rank:] = (p_mat[:, rank:] @ um)[:, ::-1]
+    scale = 1.0 / np.sqrt(np.mean(x_new[:, :rank] ** 2))
+    x_new[:, :rank] *= scale
+    p_mat[:rank, :] *= scale
+    if null_exists:
+        scale_f = 1.0 / np.sqrt(np.mean(x_new[:, rank:] ** 2))
+        x_new[:, rank:] *= scale_f
+        p_mat[rank:, :] *= scale_f
+    return x_new, np.full(rank, scale**2), p_mat
 
 
 class FsBasis:

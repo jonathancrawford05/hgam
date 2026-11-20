@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-20 (thirty-seventh slice): `t2` on cr, the basis (first step of `t2`, PLAN step 3)
+
+No open PR at start (PR #44 merged). Ported `smooth.construct.t2.smooth.spec`, `t2.model.matrix`, `Predict.matrix.t2.smooth`, `nat.param` type 3 and smoothCon's sparse fit constraint plus `Cp` prediction constraint (`hgam.engine.gam_basis_t2`); `gam()` still refuses t2. Section 27 added (two and three cr margins); every existing fixture regenerated unchanged.
+Tests: 818 → 823. `make lint` clean. Section 27 (tier 1, mgcv 1.9-1): rank, null.space.dim, p.lab exact; margin P 8.0e-15, raw X 1.8e-14, C and Cp 5.1e-15 (up to column signs: one k = 3 margin column has the opposite sign); X/S 2.3e-14, Xp/Sp 2.5e-14, PredictMat 3.7e-14 (up to an orthogonal map).
+Deferred: nothing new. Next: the t2 REML fit (gam.setup's `G$P`, fit to prediction parameterisation).
+
 ## 2026-11-20 (thirty-sixth slice): `select=TRUE` with te (fourth step of `te`, PLAN step 3)
 
 PR #43 auto-merged in this run (six conditions posted). `select=TRUE` with te needed no engine change: `null_space_penalty` matches smoothCon's `need.full` third penalty; the refusal and its refusal-only test case are gone (SETTINGS condition 5, replaced by the four 26d fit cases). PR #43 nit: `fit_term_state` now passes only supplied knots to `te_basis`, so default knots come from the build rows in both builders.

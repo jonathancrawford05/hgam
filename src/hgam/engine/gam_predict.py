@@ -132,8 +132,14 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
     if term.basis == "te":
         # Predict.matrix.tensor.smooth (smooth.r): margins' cr designs, row tensor product, the fit's Z.
         xs = [np.asarray(_column(data, v, term), dtype=np.float64) for v in term.variables]
-        knots = tuple(_knots_for(term, v, k, x) for v, k, x in zip(term.variables, term.k, xs, strict=True))
-        built = te_basis(xs, term.k, list(knots), frame=te_frame(term))
+        # Supplied knots only: te_basis takes the defaults from the rows the term is built on (the data, or
+        # discrete.mf's mf0 inside a constraint frame), as build_python_te_term does.
+        supplied = term.knots_by_variable()
+        knots = [
+            None if supplied.get(v) is None else np.asarray(supplied[v], dtype=np.float64)
+            for v in term.variables
+        ]
+        built = te_basis(xs, term.k, knots, frame=te_frame(term))
         return TermState(term=term, knots=built.knots, constraint=(built.z,))
     if term.basis == "sz":
         smoothed = term.variables[1]

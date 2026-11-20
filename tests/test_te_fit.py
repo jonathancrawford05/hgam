@@ -27,6 +27,10 @@ CASES = {
     "gam_binomial_cloglog_factor_te_reml": {"method": "REML"},
     "bam_discrete_binomial_cloglog_te": {"method": "fREML", "discrete": True},
     "bam_discrete_binomial_cloglog_factor_te": {"method": "fREML", "discrete": True},
+    "gam_binomial_cloglog_te_select_reml": {"method": "REML", "select": True},
+    "gam_binomial_cloglog_factor_te_select_reml": {"method": "REML", "select": True},
+    "bam_discrete_binomial_cloglog_te_select": {"method": "fREML", "discrete": True, "select": True},
+    "bam_discrete_binomial_cloglog_factor_te_select": {"method": "fREML", "discrete": True, "select": True},
 }
 
 
@@ -58,7 +62,8 @@ def test_te_meets_the_gates(name: str, load_fixture, margin) -> None:
     assert fit.coef.size == fx["n_coef"] == fx["rank"]
     assert not fit.pivoted_columns
     assert list(fit.coefficient_names) == fx["coef_names"]
-    assert len(fit.lambda_) == len(fx["sp"]) == 2
+    # One sp per margin, and with select=TRUE a third for the null-space penalty (smoothCon's need.full).
+    assert len(fit.lambda_) == len(fx["sp"]) == (3 if CASES[name].get("select") else 2)
 
     eta, se = fit.predict(data, se_fit=True)
     d_eta = float(np.max(np.abs(eta - np.asarray(fx["eta"]))))
@@ -104,13 +109,12 @@ def test_discrete_te_constraint_is_mgcvs(name: str, load_fixture, margin) -> Non
 @pytest.mark.parametrize(
     ("formula", "kwargs", "needle"),
     [
-        ('p ~ te(x, z, bs="cr")', {"select": True}, "select=True"),
         ('p ~ s(x, bs="cr") + te(x, z, bs="cr")', {}, "not verified"),
         ('p ~ te(x, z, bs="cr") + s(z, f, bs="fs", xt="cr")', {}, "not verified"),
     ],
 )
 def test_te_refusals(formula: str, kwargs: dict, needle: str, load_fixture) -> None:
-    """What te does not port yet is refused by name: select=TRUE, and a te beside another smooth
+    """What te does not port yet is refused by name: a te beside another smooth
     of one of its covariates, which is not measured (mgcv's gam.side constrains nested columns for some such
     smooths, e.g. a bare s(x), and leaves others alone, e.g. fs; gam.side is not ported)."""
     data = _columns(load_fixture("gam_binomial_cloglog_factor_te_reml")["data"])

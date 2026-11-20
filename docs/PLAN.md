@@ -144,3 +144,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   `tests/test_te_fit.py`: eta 1.5e-13, se 7.5e-14, edf 3.9e-6 of the gate width, predict on new data 6.2e-13, the
   constraint `C Z` 1.1e-15 (over the data rows it misses by 0.23); structure, rank and names exact (`te(z,x)` after
   `tero`). Next: `select=TRUE` with te.
+- Widening, `te` on cr, fourth step (2026-11-20): `select=TRUE`. smoothCon's `null.space.penalty` `need.full` branch
+  appends `U U'` over the null space of the summed te penalties (rank 3); `null_space_penalty` gives it at 1.6e-14
+  (section 26d, `tests/test_te_basis.py`) with no engine change, and the refusal is dropped. REML gam eta 3.3e-5, se
+  2.7e-3; discrete bam eta 3.6e-13, se 4.7e-13; three sp, structure, rank and names exact (`tests/test_te_fit.py`).
+  `te` on cr is done (a te beside another smooth of its covariates stays refused: `gam.side`). Next: `t2`.

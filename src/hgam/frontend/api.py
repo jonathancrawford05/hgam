@@ -549,18 +549,14 @@ def _refuse_select_with_bare_and_factor_by(smooth: Sequence[TermSpec]) -> None:
             )
 
 
-def _refuse_te(call: TensorCall, parsed: ParsedFormula, *, select: bool) -> None:
+def _refuse_te(call: TensorCall, parsed: ParsedFormula) -> None:
     """``te(x, z, bs="cr")`` is ported for ``gam(method="REML")`` and ``bam(discrete=TRUE)`` on its own
-    covariates. Refused by name: ``select=TRUE`` (smoothCon's ``null.space.penalty`` on a multi-penalty term),
-    and a te beside another smooth of one of its covariates.
-    That last one is not verified: for some such smooths mgcv's ``gam.side`` (mgcv.r) removes nested columns
-    (smooths with ``side.constrain``, matched on ``term`` with ``by`` appended), for others (fs, sz, re, or a
-    ``by`` smooth) it does nothing; neither case is measured here, and ``gam.side`` is not ported."""
-    if select:
-        raise HgamNotImplementedError(
-            f"gam(): select=True with {call.text}: smoothCon's null.space.penalty for a te term "
-            "is not ported."
-        )
+    covariates, with or without ``select=TRUE`` (smoothCon's ``null.space.penalty`` ``need.full`` branch,
+    which ``null_space_penalty`` follows). Refused by name: a te beside another smooth of one of its
+    covariates. That last one is not verified: for some such smooths mgcv's ``gam.side`` (mgcv.r) removes
+    nested columns (smooths with ``side.constrain``, matched on ``term`` with ``by`` appended), for others
+    (fs, sz, re, or a ``by`` smooth) it does nothing; neither case is measured here, and ``gam.side`` is not
+    ported."""
     mine = set(call.variables)
     for other in parsed.terms:
         if other is call or isinstance(other, ParametricCall):
@@ -721,7 +717,7 @@ def _build_model(
             for v in call.variables:
                 need_numeric(v, call.text)
             if call.kind == "te":
-                _refuse_te(call, parsed, select=select)
+                _refuse_te(call, parsed)
             call = _tero(call) if tero else call
             margin_knots = tuple(
                 pair

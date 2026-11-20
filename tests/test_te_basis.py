@@ -3,7 +3,8 @@
 mgcv counterparts: ``smooth.construct.tensor.smooth.spec``, ``tensor.prod.model.matrix``,
 ``tensor.prod.penalties``, ``Predict.matrix.tensor.smooth`` and ``smoothCon``'s scaling and constraint
 (smooth.r, mgcv 1.9-4), ported in ``hgam.engine.gam_basis_te``. The basis is a deterministic piece: structure
-exact, X, S and PredictMat at 1e-8 relative. ``gam()`` still refuses ``te`` (the fit is a later slice).
+exact, X, S and PredictMat at 1e-8 relative. ``select=TRUE``'s extra penalty (``null.space.penalty``,
+section 26d) is held to ``smoothCon`` the same way.
 """
 
 import numpy as np
@@ -11,6 +12,7 @@ import pytest
 
 from hgam.engine.gam_basis_cr import _cr_basis_raw
 from hgam.engine.gam_basis_te import te_basis, te_predict_design, tensor_prod_model_matrix
+from hgam.engine.gam_select_penalty import null_space_penalty
 
 GATE = 1e-8
 
@@ -56,6 +58,29 @@ def test_te_basis_matches_smoothcon(name, load_fixture, margin) -> None:
     assert rel_x < GATE
     assert rel_s < GATE
     assert rel_new < GATE
+
+
+def test_te_null_space_penalty_matches_smoothcon(load_fixture, margin) -> None:
+    """Section 26d: ``smoothCon(te(x, z, bs = "cr", k = c(5, 4)), null.space.penalty = TRUE)``. smoothCon's
+    ``need.full`` branch appends ``U U'`` over the null space of the summed penalties (rank 3: the 2 x 2 null
+    space of the two cr margins less the constraint) and sets ``null.space.dim`` to 0. hgam's
+    :func:`null_space_penalty` on the te penalties gives the same third penalty; the first two are
+    unchanged."""
+    fx = load_fixture("smoothcon_te_cr_select")
+    xs = [_column(fx["data"], v) for v in ("x", "z")]
+    got = te_basis(xs, (5, 4), [np.asarray([1.0, 3.0, 7.0, 12.0, 21.0]), None])
+    extra = null_space_penalty(got.penalties)
+    assert extra is not None
+    s_null, null_rank = extra
+    assert len(fx["S"]) == 3
+    assert list(fx["rank"]) == [*got.rank, null_rank] == [12, 10, 3]
+    assert fx["null_space_dim"] == 0
+    rel_s = max(_rel(g, np.asarray(r)) for g, r in zip(got.penalties, fx["S"][:2], strict=True))
+    rel_null = _rel(s_null, np.asarray(fx["S"][2]))
+    margin("te select", "S, max rel", rel_s, "1e-8 rel", "smoothcon_te_cr_select")
+    margin("te select", "null-space penalty, max rel", rel_null, "1e-8 rel", "smoothcon_te_cr_select")
+    assert rel_s < GATE
+    assert rel_null < GATE
 
 
 def test_tensor_prod_model_matrix_row_kronecker() -> None:

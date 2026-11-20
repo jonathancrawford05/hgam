@@ -656,4 +656,30 @@ sm26 <- smoothCon(te(x, z, bs = "cr", k = c(5, 4)), d26, knots = list(x = c(1, 3
 put("smoothcon_te_cr", te_case(sm26, c("x", "z")))
 sm26c <- smoothCon(te(x, z, w, bs = "cr", k = c(4, 4, 3)), d26, absorb.cons = TRUE)[[1]]
 put("smoothcon_te_cr_three", te_case(sm26c, c("x", "z", "w")))
+# 26b. te on cr in a REML gam fit (binomial cloglog, weights n): (i) p ~ te(x, z, k=c(5, 4)) with x's knots supplied;
+# (ii) a factor main effect beside te(x, z) at default knots (k = 5 per margin, te's default). gam.side has
+# nothing to do in either (no other smooth shares x or z). predict.gam on new data (Predict.matrix.tensor.smooth)
+# with se, mgcv's rank and coefficient names.
+set.seed(262); n <- 1500
+d26b <- data.frame(x = runif(n, 1, 21), z = rnorm(n), f = factor(sample(c("a", "b", "c"), n, TRUE),
+                   levels = c("a", "b", "c")), n = sample(20:200, n, TRUE))
+d26b$p <- rbinom(n, d26b$n, 1 - exp(-exp(-4 + 0.08 * (d26b$x - 10) + 0.3 * sin(d26b$z) * cos(d26b$x / 4) +
+                                         c(0, 0.25, -0.15)[as.integer(d26b$f)]))) / d26b$n
+set.seed(263); nd26b <- data.frame(x = c(0.5, runif(60, 1, 21), 22), z = c(-3.5, rnorm(60), 3.5),
+                                   f = factor(sample(c("a", "b", "c"), 62, TRUE), levels = c("a", "b", "c")))
+te_knots <- list(x = c(1, 3, 7, 12, 21))
+te_extra <- function(m, kn) {
+  pr <- predict(m, nd26b, se.fit = TRUE)
+  list(knots = kn, rank = m$rank, coef_names = names(coef(m)), newdata = nd26b,
+       fit_new = as.numeric(pr$fit), se_new = as.numeric(pr$se.fit))
+}
+f26b1 <- "p ~ te(x, z, bs='cr', k=c(5, 4))"
+m26b1 <- gam(as.formula(f26b1), family = binomial(link = "cloglog"), weights = n, data = d26b, knots = te_knots,
+             method = "REML")
+put("gam_binomial_cloglog_te_reml", c(gam_case(m26b1, d26b, f26b1, "binomial(link='cloglog')"),
+                                      te_extra(m26b1, te_knots)))
+f26b2 <- "p ~ f + te(x, z)"
+m26b2 <- gam(as.formula(f26b2), family = binomial(link = "cloglog"), weights = n, data = d26b, method = "REML")
+put("gam_binomial_cloglog_factor_te_reml", c(gam_case(m26b2, d26b, f26b2, "binomial(link='cloglog')"),
+                                             te_extra(m26b2, NULL)))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

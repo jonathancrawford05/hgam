@@ -160,6 +160,10 @@ def _k_check(
         if term.basis in ("sz", "fs", "re"):
             out.append(KCheckRow(label, k_prime, edf, None, None, "factor"))
             continue
+        if term.basis == "te":
+            raise HgamNotImplementedError(
+                f"k_check: {label} is a te term; k.check's tensor branch is ported for ti only."
+            )
         if term.basis == "ti":
             dat = {v: _covariate(data, v, label, n)[rows_index] for v in term.variables}
             ni = _ti_neighbours(fit, term_index[label], block, dat, label)

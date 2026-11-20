@@ -108,6 +108,7 @@ from hgam.engine.gam_term_build import (
     build_python_parametric_term,
     build_python_re_term,
     build_python_sz_term,
+    build_python_te_term,
     build_python_ti_term,
     build_python_tp_term,
 )
@@ -268,6 +269,8 @@ def _build_term_extract(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermE
         x1 = np.asarray(data[term.variables[0]], dtype=np.float64)
         x2 = np.asarray(data[term.variables[1]], dtype=np.float64)
         return build_python_ti_term(x1, x2, term)
+    if term.basis == "te":
+        return build_python_te_term([np.asarray(data[v], dtype=np.float64) for v in term.variables], term)
     if term.basis == "sz":
         # TermSpec's own documented order for basis="sz": (factor_name, smoothed_name).
         factor_name, smoothed_name = term.variables

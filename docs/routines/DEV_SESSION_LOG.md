@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-20 (thirty-fourth slice): `te` on cr, the REML fit (second step of `te`, PLAN step 3)
+
+PR #41 (te basis) auto-merged in this run (six conditions posted). `te(x, z, bs="cr", k=)` parsed (`TensorCall(kind="te")`, bs defaults to cr) and built as `TermSpec(basis="te")` via `build_python_te_term`; predict through the stored `Z`. Refused by name: select=TRUE, discrete bam, a te beside another smooth of its covariates (gam.side not ported), k.check. Refusal-only te cases retired (SETTINGS condition 5), replaced by `tests/test_te_fit.py`.
+Tests: 794 → 806. `make lint` clean. Section 26b (tier 1, mgcv 1.9-1): te(x,z) k=c(5,4) eta 3.0e-4, se 2.0e-3, edf 1.4e-2 of gate, predict eta 2.2e-4, se 1.9e-3; f + te(x,z) eta 4.9e-6, se 2.5e-3, edf 5.0e-4 of gate, predict 8.7e-6, se 2.3e-3; structure, rank, names exact.
+Deferred: nothing new. Next: te in discrete bam (26c).
+
 ## 2026-11-20 (thirty-third slice): `te` on cr, the basis (first step of `te`, PLAN step 3)
 
 No open PR at start (PR #40 had merged). `hgam.engine.gam_basis_te` ports `smooth.construct.tensor.smooth.spec` (te branch: margins by `smooth.construct`, cr's `noterp` skips the np reparameterisation), `tensor.prod.model.matrix`, `tensor.prod.penalties`, `Predict.matrix.tensor.smooth` and smoothCon's scaling and whole-term constraint, for any number of cr margins. `gam()` still refuses te.

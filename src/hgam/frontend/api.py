@@ -549,6 +549,46 @@ def _refuse_select_with_bare_and_factor_by(smooth: Sequence[TermSpec]) -> None:
             )
 
 
+def _refuse_te(call: TensorCall, parsed: ParsedFormula, *, select: bool, discrete: bool) -> None:
+    """``te(x, z, bs="cr")`` is ported for ``gam(method="REML")`` on its own covariates. Refused by name:
+    ``select=TRUE`` (smoothCon's ``null.space.penalty`` on a multi-penalty term), ``bam(discrete=TRUE)``
+    (``discrete.mf``'s margins and ``mf0`` for te), and a te beside another smooth of one of its covariates,
+    where mgcv's ``gam.side`` (mgcv.r) removes the nested columns; ``gam.side`` is not ported."""
+    if select:
+        raise HgamNotImplementedError(
+            f"gam(): select=True with {call.text}: smoothCon's null.space.penalty for a te term "
+            "is not ported."
+        )
+    if discrete:
+        raise HgamNotImplementedError(
+            f"gam(): {call.text} in bam(discrete=True) is not ported (discrete.mf's te margins); "
+            'fit it with gam(method="REML").'
+        )
+    mine = set(call.variables)
+    for other in parsed.terms:
+        if other is call or isinstance(other, ParametricCall):
+            continue
+        shared = mine & set(_smooth_variables(other))
+        if shared:
+            raise HgamNotImplementedError(
+                f"gam(): {call.text} beside {other.text}, which also smooths {sorted(shared)}: mgcv's "
+                "gam.side (mgcv.r) would constrain the nested columns, and gam.side is not ported. "
+                "Use ti() for the interaction beside main-effect smooths."
+            )
+
+
+def _smooth_variables(call: object) -> tuple[str, ...]:
+    """Every covariate a parsed smooth call reaches, its ``by`` included."""
+    names: list[str] = []
+    for attr in ("variables", "variable", "factor", "smoothed", "by"):
+        value = getattr(call, attr, None)
+        if isinstance(value, str):
+            names.append(value)
+        elif isinstance(value, tuple):
+            names.extend(value)
+    return tuple(names)
+
+
 def _tero(call: TensorCall) -> TensorCall:
     """mgcv counterpart: ``tero`` (bam.r), read from mgcv 1.9-1.
 
@@ -680,6 +720,8 @@ def _build_model(
         if isinstance(call, TensorCall):
             for v in call.variables:
                 need_numeric(v, call.text)
+            if call.kind == "te":
+                _refuse_te(call, parsed, select=select, discrete=tero)
             call = _tero(call) if tero else call
             margin_knots = tuple(
                 pair
@@ -690,7 +732,7 @@ def _build_model(
                 TermSpec(
                     label=call.text,
                     variables=call.variables,
-                    basis="ti",
+                    basis=call.kind,
                     k=call.k,
                     knots=margin_knots or None,
                 )

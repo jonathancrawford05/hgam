@@ -5,6 +5,7 @@
 PR #45 auto-merged in this run (six conditions posted; the branch could not be deleted, the git proxy cuts the push). t2 wired into `gam(method="REML")` in smoothCon's fit parameterisation; `G$P` not ported (spans agree to 1.1e-14), so `vcov`/`summary`/`k_check` refuse t2. Retired refusal-only t2 cases (SETTINGS condition 5): `test_gam_still_refuses_t2`, the `t2()` formula refusal and `TermSpec(basis="t2")` refusal, replaced by `test_t2_meets_the_gates` (the formula cases now refuse `full=`, `ord=` and three margins).
 Tests: 823 → 838. `make lint` clean. Section 27b (tier 1, mgcv 1.9-1): eta 2.4e-4 and 4.4e-4 (vs tight refit; 7.6e-4 vs default, reported), se 3.1e-3, edf 3.5e-2 of gate, predict 5.7e-4 / se 3.6e-3, fit at mgcv's sp 8.7e-12; structure exact.
 Deferred: `G$P`; the f + t2 flat ridge (mgcv default vs tight 1.2e-3). Next: t2 in discrete bam (joint compression).
+PR #46 review (742464d): unconditional se on a t2 fit refused (mgcv does not map `Vc` through `G$P`); nits done (`t2_raw_design` counterpart line, DEFERRED note on `fit.coef`). Tests stay 838.
 
 ## 2026-11-20 (thirty-seventh slice): `t2` on cr, the basis (first step of `t2`, PLAN step 3)
 

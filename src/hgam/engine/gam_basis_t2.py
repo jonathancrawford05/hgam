@@ -267,8 +267,8 @@ def t2_basis(
 def t2_raw_design(
     xs: Sequence[np.ndarray], knots: Sequence[np.ndarray], margin_p: Sequence[np.ndarray]
 ) -> np.ndarray:
-    """``Predict.matrix.t2.smooth`` (smooth.r), mgcv 1.9-4, for cr margins, before any constraint: each
-    margin's raw cr design at ``xs`` times its ``P``, then ``t2.model.matrix``."""
+    """mgcv counterpart: ``Predict.matrix.t2.smooth`` (smooth.r), mgcv 1.9-4, for cr margins, before any
+    constraint: each margin's raw cr design at ``xs`` times its ``P``, then ``t2.model.matrix``."""
     xs = _check_margins(xs, [len(kn) for kn in knots])
     if not len(xs) == len(knots) == len(margin_p):
         raise HgamValidationError(f"t2_raw_design: {len(xs)} margins for a {len(knots)}-margin t2.")

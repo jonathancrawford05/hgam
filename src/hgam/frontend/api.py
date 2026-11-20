@@ -388,7 +388,11 @@ class GamFit(EngineGAMFit):
         covariates as given (``predict.bam`` falling through to ``predict.gam``). Parametric covariates
         need no binning: only factors are accepted there. A factor level the fit did not see is refused
         as not ported (``predict.gam`` warns and recodes it to ``NA``; ``predict.bamd`` sets its
-        dummies to zero)."""
+        dummies to zero). ``se_fit=True`` with ``unconditional=True`` on a fit with a ``t2`` term is refused:
+        mgcv's ``estimate.gam`` maps ``Vp`` and ``Ve`` through ``G$P`` but not ``Vc``, so ``predict.gam``
+        forms ``Xp Vc Xp'`` with ``Vc`` still in the fit parameterisation; ``G$P`` is not ported."""
+        if se_fit and unconditional:
+            self._refuse_t2_coefficients("predict(se_fit=True, unconditional=True)")
         data = newdata if encoded else self.encode(newdata)
         if discrete and self.fit_method == "fREML-discrete":
             data = discretise_frame(self.model, data)

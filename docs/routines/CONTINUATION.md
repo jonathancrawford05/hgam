@@ -232,7 +232,8 @@ and other bases refused) and built as `TermSpec(basis="t2")` by `build_python_t2
 parameterisation (`T2Basis.design`, constraint `C`); prediction rebuilds it from the stored knots, margin `P`
 (`TermState.t2_p`) and `z_fit`. mgcv's `G$P` (fit to prediction parameterisation, applied to coefficients, Vp, Ve by
 `estimate.gam`) is not ported: `[1, X]` and `[1, Xp]` span the same space (1.1e-14), so predictions agree, and
-`vcov()`, `summary()` and `k_check` refuse a t2 fit (`GamFit._refuse_t2_coefficients`). `p ~ t2(x, z, k=c(5, 4))`: eta
+`vcov()`, `summary()`, `k_check` and `predict(se_fit=True, unconditional=True)` refuse a t2 fit
+(`GamFit._refuse_t2_coefficients`; mgcv does not map `Vc` through `G$P`, PR #46 review). `p ~ t2(x, z, k=c(5, 4))`: eta
 2.4e-4; `p ~ f + t2(x, z)`: eta 4.4e-4 against mgcv's tight-`conv.tol` refit (the rn block's sp is on a flat ridge to
 infinity; mgcv's default and tight fits differ by 1.2e-3; PR #12 rule), 7.6e-4 against the default (reported); se
 3.1e-3, edf 3.5e-2 of the gate width, predict on new data 5.7e-4 and se 3.6e-3; at mgcv's own sp eta 8.7e-12; structure,

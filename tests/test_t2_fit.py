@@ -183,7 +183,8 @@ def test_t2_refusals(formula: str, kwargs: dict, needle: str, load_fixture) -> N
 
 def test_coefficient_level_output_refuses_t2(load_fixture) -> None:
     """mgcv reports coefficients, Vp and Ve of a t2 fit in the prediction parameterisation (``G$P``, not
-    ported), so ``vcov``, ``summary`` and ``k_check`` refuse rather than report the fit parameterisation's."""
+    ported), so ``vcov``, ``summary``, ``k_check`` and the unconditional se refuse rather than report the fit
+    parameterisation's."""
     fx = load_fixture("gam_binomial_cloglog_t2_reml")
     fit = _fit(fx)
     with pytest.raises(HgamNotImplementedError, match=r"G\$P"):
@@ -192,3 +193,9 @@ def test_coefficient_level_output_refuses_t2(load_fixture) -> None:
         fit.summary()
     with pytest.raises(HgamNotImplementedError, match="t2 term"):
         fit.k_check(_columns(fx["data"]), seed=1)
+    # mgcv's estimate.gam maps Vp and Ve through G$P but not Vc, so its unconditional se differs from
+    # hgam's fit-parameterisation one (PR #46 review): refused. The conditional se is held above.
+    new = _columns(fx["newdata"])
+    with pytest.raises(HgamNotImplementedError, match=r"G\$P"):
+        fit.predict(new, se_fit=True, unconditional=True)
+    fit.predict(new, se_fit=True)

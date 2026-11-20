@@ -724,4 +724,26 @@ b26d5 <- bam(as.formula(f26b2), family = binomial(link = "cloglog"), weights = n
              discrete = TRUE, select = TRUE)
 put("bam_discrete_binomial_cloglog_factor_te_select",
     bam_disc_case(b26d5, d26b, f26b2, "binomial(link='cloglog')", c(te_disc_extra(b26d5, NULL), list(select = TRUE))))
+# 27. the t2 tensor product smooth on cr margins, the basis (t2, smooth.construct.t2.smooth.spec, t2.model.matrix and
+# Predict.matrix.t2.smooth, smooth.r). Each margin is built by smooth.construct (unconstrained, unscaled cr penalty) and
+# re-parameterised by nat.param(type = 3, unit.fnorm = TRUE): penalty the identity on its range columns, the null space
+# rotated so that the constant is its last column. t2.model.matrix forms the row products of range ("r") and null
+# ("n") parts, one identity penalty per penalised block (names(S) is p.lab); full = FALSE. The fit constraint C sums the
+# unpenalised (all-null) block only; smoothCon absorbs it by its sparse branch (indi, the nonzero columns), so the
+# range columns are untouched. Cp = colSums(X) is the prediction constraint: smoothCon keeps Xp and Sp under it, and
+# PredictMat uses it (attr qrc). 27a: two margins on section 26's data, x at supplied knots; 27a3: three margins at
+# default knots. Before absorption (absorb.cons = FALSE) too: X, S, C and Cp.
+t2_case <- function(sm, raw, vars) list(data = d26[vars], newdata = nd26[vars], label = sm$label,
+  margin_knots = lapply(sm$margin, function(mg) mg$xp), margin_P = raw$P, p_lab = names(raw$S),
+  X_raw = raw$X, S_raw = raw$S, C_raw = raw$C, Cp_raw = raw$Cp, rank_raw = raw$rank,
+  null_space_dim_raw = raw$null.space.dim, X = sm$X, S = unname(sm$S), Xp = sm$Xp, Sp = unname(sm$Sp),
+  rank = sm$rank, null_space_dim = sm$null.space.dim, n_cons = attr(sm, "nCons"), indi = attr(sm, "indi"),
+  X_new = PredictMat(sm, nd26))
+t2_kn <- list(x = c(1, 3, 7, 12, 21))
+sm27 <- smoothCon(t2(x, z, bs = "cr", k = c(5, 4)), d26, knots = t2_kn, absorb.cons = TRUE)[[1]]
+raw27 <- smoothCon(t2(x, z, bs = "cr", k = c(5, 4)), d26, knots = t2_kn, absorb.cons = FALSE)[[1]]
+put("smoothcon_t2_cr", t2_case(sm27, raw27, c("x", "z")))
+sm27c <- smoothCon(t2(x, z, w, bs = "cr", k = c(4, 4, 3)), d26, absorb.cons = TRUE)[[1]]
+raw27c <- smoothCon(t2(x, z, w, bs = "cr", k = c(4, 4, 3)), d26, absorb.cons = FALSE)[[1]]
+put("smoothcon_t2_cr_three", t2_case(sm27c, raw27c, c("x", "z", "w")))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

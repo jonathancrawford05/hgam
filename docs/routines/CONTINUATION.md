@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-sixth slice: `select=TRUE` with te (PLAN step 3). PR #43
-(te in discrete bam) auto-merged earlier in this run. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-20, by the development run's thirty-seventh slice: `t2` on cr, the basis (PLAN step 3). PR #44
+(`select=TRUE` with te) had merged before this run. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -215,16 +215,33 @@ test is what holds the frame. Tests: 812 pass, no xfail.
 `fit_term_state` passes only supplied knots to `te_basis`, as `build_python_te_term` does. **`te` on cr is done**; a te
 beside another smooth of its covariates stays refused (`gam.side`, not ported). Tests: 818 pass, no xfail.
 
-## Next slice: `t2` on cr, first step (the basis)
+`t2` on cr, the basis (section 27, `tests/test_t2_basis.py`, this run's PR): `hgam.engine.gam_basis_t2` ports
+`smooth.construct.t2.smooth.spec` (margins by `smooth.construct`, each re-parameterised by `nat.param(type = 3)`, now
+in `gam_basis_fs.nat_param(..., type=3)`), `t2.model.matrix` (`full = FALSE`, `ord = NULL`; both refused otherwise),
+`Predict.matrix.t2.smooth` (`t2_predict_design`), and smoothCon's penalty scaling, its sparse fit-constraint branch
+(`C` nonzero only on the unpenalised block, so the range columns are untouched; `T2Basis.design`, `.penalties`) and the
+`Cp = colSums(X)` prediction constraint (`T2Basis.design_p`, `.penalties_p`; `PredictMat` uses `Cp`'s QR, so
+predictions are in the `Xp` parameterisation). On `t2(x, z, k=c(5, 4))` (x knots supplied) and `t2(x, z, w,
+k=c(4, 4, 3))`: rank, null.space.dim and p.lab exact; margin P, raw X, C, Cp at most 1.8e-14 up to column signs (on the
+three-margin case one column of the k = 3 margin has the opposite sign to mgcv's, an eigenvector sign); X/S, Xp/Sp and
+PredictMat at most 3.7e-14 up to an orthogonal map that the test solves for. `gam()` still refuses t2 (`formula.py`
+`_REFUSED["t2"]`). Tests: 823 pass, no xfail.
 
-- PLAN step 3's order after te is `t2`. mgcv 1.9-4 `smooth.r`: `t2()` builds a `t2.smooth.spec`;
-  `smooth.construct.t2.smooth.spec` takes each margin by `smooth.construct`, re-parameterises each margin so its
-  penalty is diagonal (`nat.param`-like, unpenalised columns last), and forms the row tensor product with one penalty
-  per combination of penalised/unpenalised margin parts (`t2.model.matrix`, `Predict.matrix.t2.smooth`); `full` and
-  `ord` options. Read those functions first and scope the first step to the basis held to `smoothCon(t2(x, z,
-  bs = "cr", k = c(5, 4)))` (X, S list, rank, PredictMat), with `gam()` still refusing t2.
-- Fixture section 27, a new test module `tests/test_t2_basis.py`. Then the REML fit, discrete bam (bam marks t2
-  `tensor.smooth.spec`?: check `tero` and `discrete.mf` for t2 before assuming it), select.
+## Next slice: `t2` on cr, second step (the REML fit)
+
+- Wire `t2(x, z, bs="cr", k=c(.,.))` into `gam(method="REML")` as te was (PR #42): parse it (mgcv's `t2()` defaults:
+  bs "cr", k 5 per margin, `full=FALSE`; refuse `full=`, `ord=`, `d=`, `by=`, `pc=`, other bases), build
+  `TermSpec(basis="t2")` from `t2_basis` (one penalty per block, rank `T2Basis.rank`), predict with
+  `t2_predict_design`.
+- The new piece: t2 fits in the `C` parameterisation (`X`) but `gam.setup` (mgcv.r ~1339-1374) also builds `Xp` and
+  `G$P`, the map from fit to prediction coefficients (QR of `Xp` with `LAPACK=TRUE`, pivoted), and `gam()` (mgcv.r
+  ~2102) applies it after fitting: `coefficients <- P b`, `Vp <- P Vp P'`, `Ve` likewise. So coefficients, Vp and
+  predict all come out in the `Xp` parameterisation. Port that step at its boundary and hold it to a fixture.
+- Fixture section 27b: `p ~ t2(x, z, bs='cr', k=c(5, 4))` (x knots supplied) and `p ~ f + t2(x, z)` on section 26b's
+  data, binomial cloglog, REML; gam_case plus te_extra (predict with se on nd26b, rank, names). Gate as 26b. Because of
+  the eigenvector signs, compare coefficients only through eta/se/predict, not element for element.
+- Then discrete bam (check `tero` and `discrete.mf` for t2 first: bam.r does not mention t2 by name, so look at how
+  `gam.setup` and `discrete.mf` treat a `t2.smooth.spec`), then select.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 

@@ -149,3 +149,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   (section 26d, `tests/test_te_basis.py`) with no engine change, and the refusal is dropped. REML gam eta 3.3e-5, se
   2.7e-3; discrete bam eta 3.6e-13, se 4.7e-13; three sp, structure, rank and names exact (`tests/test_te_fit.py`).
   `te` on cr is done (a te beside another smooth of its covariates stays refused: `gam.side`). Next: `t2`.
+- Widening, `t2` on cr, first step (2026-11-20): the basis. `hgam.engine.gam_basis_t2` ports
+  `smooth.construct.t2.smooth.spec`, `t2.model.matrix` (`full = FALSE`, no `ord`), `Predict.matrix.t2.smooth`, and
+  smoothCon's scaling, sparse fit-constraint branch and `Cp` prediction constraint; `nat_param` gains type 3. Section
+  27, `tests/test_t2_basis.py`: structure exact; margin P, raw X, C and Cp at 1.8e-14 up to column signs; X/S, Xp/Sp
+  and PredictMat at 3.7e-14 up to an orthogonal map. `gam()` still refuses t2. Next: the REML fit.

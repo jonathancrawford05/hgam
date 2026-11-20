@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-seventh slice: `t2` on cr, the basis (PLAN step 3). PR #44
-(`select=TRUE` with te) had merged before this run. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-20, by the development run's thirty-eighth slice: `t2` on cr, the REML fit (PLAN step 3). PR #45
+(the t2 basis) auto-merged earlier in this run. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -224,24 +224,31 @@ in `gam_basis_fs.nat_param(..., type=3)`), `t2.model.matrix` (`full = FALSE`, `o
 predictions are in the `Xp` parameterisation). On `t2(x, z, k=c(5, 4))` (x knots supplied) and `t2(x, z, w,
 k=c(4, 4, 3))`: rank, null.space.dim and p.lab exact; margin P, raw X, C, Cp at most 1.8e-14 up to column signs (on the
 three-margin case one column of the k = 3 margin has the opposite sign to mgcv's, an eigenvector sign); X/S, Xp/Sp and
-PredictMat at most 3.7e-14 up to an orthogonal map that the test solves for. `gam()` still refuses t2 (`formula.py`
-`_REFUSED["t2"]`). Tests: 823 pass, no xfail.
+PredictMat at most 3.7e-14 up to an orthogonal map that the test solves for (PR #45, merged).
 
-## Next slice: `t2` on cr, second step (the REML fit)
+`t2` on cr, the REML fit (section 27b, `tests/test_t2_fit.py`, this run's second PR): `t2(x, z, k=)` is parsed as
+`TensorCall(kind="t2")` (bs "cr" and k 5 per margin by default; `full=`, `ord=`, `d=`, `by=`, `pc=`, k < 3, three margins
+and other bases refused) and built as `TermSpec(basis="t2")` by `build_python_t2_term` in smoothCon's fit
+parameterisation (`T2Basis.design`, constraint `C`); prediction rebuilds it from the stored knots, margin `P`
+(`TermState.t2_p`) and `z_fit`. mgcv's `G$P` (fit to prediction parameterisation, applied to coefficients, Vp, Ve by
+`estimate.gam`) is not ported: `[1, X]` and `[1, Xp]` span the same space (1.1e-14), so predictions agree, and
+`vcov()`, `summary()` and `k_check` refuse a t2 fit (`GamFit._refuse_t2_coefficients`). `p ~ t2(x, z, k=c(5, 4))`: eta
+2.4e-4; `p ~ f + t2(x, z)`: eta 4.4e-4 against mgcv's tight-`conv.tol` refit (the rn block's sp is on a flat ridge to
+infinity; mgcv's default and tight fits differ by 1.2e-3; PR #12 rule), 7.6e-4 against the default (reported); se
+3.1e-3, edf 3.5e-2 of the gate width, predict on new data 5.7e-4 and se 3.6e-3; at mgcv's own sp eta 8.7e-12; structure,
+rank and names exact. Refused by name: `select=TRUE`, `bam(discrete=TRUE)`, a t2 beside another smooth of its
+covariates. Tests: 838 pass, no xfail.
 
-- Wire `t2(x, z, bs="cr", k=c(.,.))` into `gam(method="REML")` as te was (PR #42): parse it (mgcv's `t2()` defaults:
-  bs "cr", k 5 per margin, `full=FALSE`; refuse `full=`, `ord=`, `d=`, `by=`, `pc=`, other bases), build
-  `TermSpec(basis="t2")` from `t2_basis` (one penalty per block, rank `T2Basis.rank`), predict with
-  `t2_predict_design`.
-- The new piece: t2 fits in the `C` parameterisation (`X`) but `gam.setup` (mgcv.r ~1339-1374) also builds `Xp` and
-  `G$P`, the map from fit to prediction coefficients (QR of `Xp` with `LAPACK=TRUE`, pivoted), and `gam()` (mgcv.r
-  ~2102) applies it after fitting: `coefficients <- P b`, `Vp <- P Vp P'`, `Ve` likewise. So coefficients, Vp and
-  predict all come out in the `Xp` parameterisation. Port that step at its boundary and hold it to a fixture.
-- Fixture section 27b: `p ~ t2(x, z, bs='cr', k=c(5, 4))` (x knots supplied) and `p ~ f + t2(x, z)` on section 26b's
-  data, binomial cloglog, REML; gam_case plus te_extra (predict with se on nd26b, rank, names). Gate as 26b. Because of
-  the eigenvector signs, compare coefficients only through eta/se/predict, not element for element.
-- Then discrete bam (check `tero` and `discrete.mf` for t2 first: bam.r does not mention t2 by name, so look at how
-  `gam.setup` and `discrete.mf` treat a `t2.smooth.spec`), then select.
+## Next slice: `t2` on cr, third step (discrete bam)
+
+- bam.r 1.9-4 treats t2 differently from te: a `t2.smooth.spec` is not a `tensor.smooth.spec`, so `tero` does not
+  reorder it and `discrete.mf` (bam.r ~240-270, `nmarg <- 1` unless tensor) compresses its covariates **jointly**, as
+  one two-column term (like a 2-D smooth), not margin by margin. Read `discrete.mf` and `compress.df` for a
+  multi-column term first; `hgam.frontend.discrete` compresses one covariate at a time today, so this is the new piece.
+  Then `gam.setup` builds the term on `mf0` (knots, `nat.param`'s P, penalty scaling, both constraints over its rows)
+  and `Xd` holds the design at the binned rows. Does bam's discrete path apply `G$P`? (check `bam` / `bgam.fitd` for
+  `G$P` / `Xp` before assuming).
+- Fixture 27c: 27b's two models as `bam(method="fREML", discrete=TRUE)`; gates as 26c. Then `select=TRUE`.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 

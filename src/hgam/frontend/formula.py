@@ -116,8 +116,8 @@ class FsCall:
 
 @dataclass(frozen=True)
 class TensorCall:
-    """A parsed ``ti(x, z, bs="cr", k=...)`` or ``te(x, z, bs="cr", k=...)`` call (two margins).
-    ``kind`` is the function written, ``"ti"`` or ``"te"``."""
+    """A parsed ``ti(x, z, bs="cr", k=...)``, ``te(...)`` or ``t2(...)`` call (two margins).
+    ``kind`` is the function written, ``"ti"``, ``"te"`` or ``"t2"``."""
 
     variables: tuple[str, ...]
     k: tuple[int, ...]
@@ -379,8 +379,10 @@ def _parse_smooth(text: str, positional: list[str], keyword: dict[str, str]) -> 
 
 
 def _parse_tensor(text: str, positional: list[str], keyword: dict[str, str], kind: str = "ti") -> TensorCall:
-    """``ti(...)`` or ``te(...)`` (``kind``) with two cr margins. mgcv's ``te`` defaults to ``bs = "cr"``
-    (``te()``, smooth.r), so ``bs=`` may be left out there; ``k`` defaults to 5 per margin for both."""
+    """``ti(...)``, ``te(...)`` or ``t2(...)`` (``kind``) with two cr margins. mgcv's ``te`` and ``t2``
+    default to ``bs = "cr"`` (``te()``, ``t2()``, smooth.r), so ``bs=`` may be left out there; ``k``
+    defaults to 5 per margin for all three. ``t2``'s ``full=``, ``ord=``, ``d=``, ``by=`` and ``pc=`` are
+    refused with every other argument but ``bs=`` and ``k=``."""
     for key in keyword:
         if key not in ("bs", "k"):
             raise _refuse(
@@ -390,7 +392,7 @@ def _parse_tensor(text: str, positional: list[str], keyword: dict[str, str], kin
     if len(positional) != 2:
         raise _refuse(
             f"{text} with {len(positional)} margin(s)",
-            f"{kind}() is verified for exactly two margins ({_COVERAGE} §2.1; t2 is rung L8)",
+            f"{kind}() is verified for exactly two margins ({_COVERAGE} §2.1)",
         )
     variables = tuple(_identifier(v, "variable", text) for v in positional)
     if len(set(variables)) != 2:
@@ -405,8 +407,8 @@ def _parse_tensor(text: str, positional: list[str], keyword: dict[str, str], kin
     if basis != "cr":
         raise _refuse(f"bs={basis!r} in {text}", f'only bs="cr" margins are verified ({_COVERAGE} §2.1)')
     k = _k_vector(keyword["k"], text) if "k" in keyword else (_TI_DEFAULT_K,)
-    if kind == "te" and (len(k) not in (1, 2) or min(k) < 3):
-        # te() (smooth.r): "one or more supplied k too small" or a k vector of the wrong length makes
+    if kind in ("te", "t2") and (len(k) not in (1, 2) or min(k) < 3):
+        # te() and t2() (smooth.r): "one or more supplied k too small" or a k vector of the wrong length makes
         # mgcv warn and reset k to 5^d; that reset is not ported.
         raise _refuse(
             f"k={k!r} in {text}",
@@ -421,7 +423,6 @@ def _parse_tensor(text: str, positional: list[str], keyword: dict[str, str], kin
 
 
 _REFUSED_CALLS: dict[str, str] = {
-    "t2": f"alternative tensor decomposition — {_COVERAGE} §2.1 / ladder rung L8",
     "factor": "wrap-free factors only: pass the column as a string/Enum column instead",
     "as.factor": "wrap-free factors only: pass the column as a string/Enum column instead",
     "poly": "no parametric numeric terms are verified",
@@ -492,7 +493,7 @@ def parse_formula(formula: str) -> ParsedFormula:
             name, positional, keyword = call
             if name == "s":
                 term = _parse_smooth(piece, positional, keyword)
-            elif name in ("ti", "te"):
+            elif name in ("ti", "te", "t2"):
                 term = _parse_tensor(piece, positional, keyword, kind=name)
             elif name == "offset":
                 if keyword or len(positional) != 1:

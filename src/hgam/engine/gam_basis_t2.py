@@ -45,7 +45,7 @@ from hgam.engine.gam_basis_fs import nat_param
 from hgam.engine.gam_basis_te import tensor_prod_model_matrix
 from hgam.errors import HgamComputationError, HgamNotImplementedError, HgamValidationError
 
-__all__ = ["T2Basis", "t2_basis", "t2_model_matrix", "t2_predict_design"]
+__all__ = ["T2Basis", "t2_basis", "t2_model_matrix", "t2_predict_design", "t2_raw_design"]
 
 _CR_NULL_SPACE_DIM = 2  # smooth.construct.cr.smooth.spec: rank = k - 2, null.space.dim = 2
 
@@ -264,14 +264,21 @@ def t2_basis(
     )
 
 
+def t2_raw_design(
+    xs: Sequence[np.ndarray], knots: Sequence[np.ndarray], margin_p: Sequence[np.ndarray]
+) -> np.ndarray:
+    """``Predict.matrix.t2.smooth`` (smooth.r), mgcv 1.9-4, for cr margins, before any constraint: each
+    margin's raw cr design at ``xs`` times its ``P``, then ``t2.model.matrix``."""
+    xs = _check_margins(xs, [len(kn) for kn in knots])
+    if not len(xs) == len(knots) == len(margin_p):
+        raise HgamValidationError(f"t2_raw_design: {len(xs)} margins for a {len(knots)}-margin t2.")
+    designs = [_cr_basis_raw(x, kn)[0] @ p for x, kn, p in zip(xs, knots, margin_p, strict=True)]
+    ranks = [kn.shape[0] - _CR_NULL_SPACE_DIM for kn in knots]
+    return t2_model_matrix(designs, ranks)[0]
+
+
 def t2_predict_design(xs: Sequence[np.ndarray], basis: T2Basis) -> np.ndarray:
     """mgcv counterpart: ``PredictMat`` -> ``Predict.matrix.t2.smooth`` (smooth.r), mgcv 1.9-4, for cr
-    margins: each margin's raw cr design at the new values times its ``P``, ``t2.model.matrix``, then
-    ``Cp``'s ``Zp`` (``PredictMat`` uses ``Cp``'s QR, so the result is in the ``Xp`` parameterisation)."""
-    xs = _check_margins(xs, [len(kn) for kn in basis.knots])
-    if len(xs) != len(basis.knots):
-        raise HgamValidationError(f"t2_predict_design: {len(xs)} margins for a {len(basis.knots)}-margin t2.")
-    designs = [_cr_basis_raw(x, kn)[0] @ p for x, kn, p in zip(xs, basis.knots, basis.margin_p, strict=True)]
-    ranks = [kn.shape[0] - _CR_NULL_SPACE_DIM for kn in basis.knots]
-    x, _, _ = t2_model_matrix(designs, ranks)
-    return x @ basis.z_pred
+    margins: :func:`t2_raw_design` then ``Cp``'s ``Zp`` (``PredictMat`` uses ``Cp``'s QR, so the result is in
+    the ``Xp`` parameterisation)."""
+    return t2_raw_design(xs, basis.knots, basis.margin_p) @ basis.z_pred

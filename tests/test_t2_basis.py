@@ -156,11 +156,3 @@ def test_nat_param_type3_constant_first_null_column() -> None:
     assert np.ptp(x_np[:, 4]) < 1e-12 * np.max(np.abs(x_np[:, 4]))
     with pytest.raises(HgamNotImplementedError, match="type = 2"):
         nat_param(raw, penalty, 4, type=2)
-
-
-def test_gam_still_refuses_t2() -> None:
-    """The basis alone is ported; the term is not wired into ``gam()`` yet, so the formula refuses it."""
-    from hgam.frontend.formula import parse_formula
-
-    with pytest.raises(HgamNotImplementedError, match=r"t2\(\)"):
-        parse_formula("p ~ t2(x, z, bs='cr', k=c(5, 4))")

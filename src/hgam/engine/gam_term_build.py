@@ -29,6 +29,7 @@ from hgam.engine.gam_basis_cr import (
 from hgam.engine.gam_basis_fs import fs_basis
 from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
+from hgam.engine.gam_basis_t2 import t2_basis
 from hgam.engine.gam_basis_te import te_basis
 from hgam.engine.gam_basis_tp import tp_basis
 from hgam.engine.gam_term_spec import TermSpec
@@ -44,6 +45,7 @@ __all__ = [
     "build_python_fs_term",
     "fs_frame",
     "te_frame",
+    "build_python_t2_term",
     "build_python_te_term",
     "build_python_ti_term",
     "build_python_tp_term",
@@ -314,6 +316,45 @@ def te_frame(term: TermSpec) -> list[np.ndarray] | None:
     if all(c is None for c in columns):
         return None
     return [np.asarray(c, dtype=np.float64) for c in columns]
+
+
+def build_python_t2_term(xs: Sequence[np.ndarray], term: TermSpec) -> TermExtract:
+    """mgcv counterpart: ``smoothCon(t2(..., bs = "cr"), absorb.cons = TRUE)`` (smooth.r), mgcv 1.9-4, through
+    :func:`~hgam.engine.gam_basis_t2.t2_basis`: one identity penalty per penalised block, mgcv's ``rank``
+    vector, in the **fit** parameterisation (``X``, smoothCon's sparse ``C`` constraint).
+
+    mgcv fits in that parameterisation too, and only afterwards maps coefficients, ``Vp`` and ``Ve`` to
+    the ``Cp`` one with ``gam.setup``'s ``G$P`` (``estimate.gam``, mgcv.r); edf, the linear predictor and
+    its se are computed before that map. ``G$P`` is not ported: hgam keeps the fit parameterisation and
+    predicts in it
+    (``gam_predict``). Because the term's unpenalised block holds the constant, ``[1, X]`` and ``[1, Xp]``
+    span the same space, so predictions agree (``tests/test_t2_fit.py`` measures it); coefficient-level
+    outputs (``vcov``, ``summary``, ``k_check``) refuse a t2 fit.
+    """
+    if term.basis != "t2":
+        raise HgamValidationError(
+            f"build_python_t2_term only handles basis='t2'; {term.label!r} is basis={term.basis!r}."
+        )
+    if len(xs) != len(term.variables) or len(term.k) != len(term.variables):
+        raise HgamValidationError(
+            f"build_python_t2_term: {term.label!r} needs one covariate and one k per margin; got "
+            f"{len(xs)} covariate(s), variables={term.variables!r}, k={term.k!r}."
+        )
+    supplied = [term.knots_by_variable().get(v) for v in term.variables]
+    basis = t2_basis(
+        [np.asarray(x, dtype=np.float64) for x in xs],
+        term.k,
+        [None if kn is None else np.asarray(kn, dtype=np.float64) for kn in supplied],
+    )
+    return TermExtract(
+        label=term.label,
+        index_start=0,
+        index_end=basis.design.shape[1],
+        design=basis.design,
+        s=basis.penalties,
+        rank=basis.rank,
+        knots=None,
+    )
 
 
 def fs_frame(term: TermSpec) -> tuple[np.ndarray, np.ndarray] | None:

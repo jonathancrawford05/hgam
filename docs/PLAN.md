@@ -154,3 +154,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   smoothCon's scaling, sparse fit-constraint branch and `Cp` prediction constraint; `nat_param` gains type 3. Section
   27, `tests/test_t2_basis.py`: structure exact; margin P, raw X, C and Cp at 1.8e-14 up to column signs; X/S, Xp/Sp
   and PredictMat at 3.7e-14 up to an orthogonal map. `gam()` still refuses t2. Next: the REML fit.
+- Widening, `t2` on cr, second step (2026-11-20): the REML fit. `t2(x, z, k=)` is parsed (`TensorCall(kind="t2")`) and
+  built as `TermSpec(basis="t2")` in smoothCon's fit parameterisation; `G$P` is not ported (predictions agree:
+  `[1, X]` and `[1, Xp]` span the same space, 1.1e-14), and `vcov`, `summary`, `k_check` refuse t2. Section 27b,
+  `tests/test_t2_fit.py`: eta 2.4e-4 and 4.4e-4 (the second against mgcv's tight refit, PR #12 rule), se 3.1e-3,
+  edf 3.5e-2 of the gate, predict 5.7e-4; fit at mgcv's sp 8.7e-12; structure exact. Next: discrete bam.

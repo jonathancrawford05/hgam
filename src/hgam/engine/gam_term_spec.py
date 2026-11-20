@@ -37,14 +37,16 @@ __all__ = [
     "factor_by_terms",
 ]
 
-SUPPORTED_BASES: tuple[str, ...] = ("cr", "tp", "ti", "te", "sz", "fs", "re", "parametric", "raw")
+SUPPORTED_BASES: tuple[str, ...] = ("cr", "tp", "ti", "te", "t2", "sz", "fs", "re", "parametric", "raw")
 """The basis kinds PLAN §3 puts in scope, plus ``"raw"``.
 
 ``"cr"`` — Wood's cubic regression spline (slice 2). ``"tp"`` — Wood's thin-plate
 regression spline of one covariate, ``mgcv``'s default basis (Slice R4, ADR-261; see
 :mod:`hgam.engine.gam_basis_tp`). ``"ti"`` — tensor interaction with
 marginal main effects excluded (slice 5). ``"te"`` — the full tensor product on cr margins, one
-sum-to-zero constraint on the whole product (:mod:`hgam.engine.gam_basis_te`). ``"sz"`` — sum-to-zero
+sum-to-zero constraint on the whole product (:mod:`hgam.engine.gam_basis_te`). ``"t2"`` — the type 2
+tensor product on cr margins, one identity penalty per range/null block (:mod:`hgam.engine.gam_basis_t2`).
+``"sz"`` — sum-to-zero
 factor-smooth
 interaction (slice 6). ``"fs"`` — the uncentred factor-smooth interaction on a cr base
 (:mod:`hgam.engine.gam_basis_fs`; ``variables`` is ``(factor_name, smoothed_name)`` as for
@@ -207,7 +209,7 @@ class TermSpec:
                     f"TermSpec {self.label!r} is basis='tp' and must not carry knots, "
                     "by or factor=True — a plain thin-plate smooth takes none of them."
                 )
-        elif self.basis in ("ti", "te") and len(self.variables) < 2:
+        elif self.basis in ("ti", "te", "t2") and len(self.variables) < 2:
             raise HgamValidationError(
                 f"TermSpec {self.label!r} is basis={self.basis!r} with variables "
                 f"{self.variables}; a tensor interaction needs at least two margins."

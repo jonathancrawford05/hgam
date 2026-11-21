@@ -175,3 +175,17 @@ def test_control_refusals(control, kwargs, error, needle, load_fixture) -> None:
             control=control,
             **{"method": "REML", **kwargs},
         )
+
+
+def test_empty_control_on_discrete_bam_is_the_default(load_fixture) -> None:
+    """An empty ``control`` (mgcv's ``control = list()``) sets nothing, so discrete bam accepts it and fits as
+    with no ``control``; only ``control={"newton": ...}`` is refused there (``test_control_refusals``)."""
+    fx = load_fixture("gam_binomial_cloglog_factor_t2_reml")
+    data = _columns(fx["data"])
+    formula = fx["formula"].replace("'", '"')
+    fits = [
+        frontend_api.gam(formula, data, FAMILY, weights="n", method="fREML", discrete=True, control=control)
+        for control in (None, {})
+    ]
+    np.testing.assert_array_equal(fits[1].lambda_, fits[0].lambda_)
+    np.testing.assert_array_equal(fits[1].coef, fits[0].coef)

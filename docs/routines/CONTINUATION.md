@@ -278,7 +278,8 @@ eta 1.2e-9, predict 1.9e-9, se 2.5e-3. On 27d3 hgam reports `converged=False` (s
 
 PR #49 review nits (done): `control={}` (mgcv's `control = list()`) now keeps every default instead of raising
 (`test_default_conv_tol_is_unchanged`); the unported inner P-IRLS tightening (`control$epsilon <- conv.tol/100`,
-gam.fit3.r:1308) has a line in DEFERRED for follow-up (b). Tests: 865 pass.
+gam.fit3.r:1308) has a line in DEFERRED for follow-up (b). PR #50 review nit (done): `control={}` on discrete bam is
+accepted as the default (`test_empty_control_on_discrete_bam_is_the_default`). Tests: 866 pass.
 
 ## Next slice: port mgcv's `newton` (gam.fit3.r), first step (PR #48 follow-up (b))
 

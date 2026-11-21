@@ -3,7 +3,7 @@
 ## 2026-11-21 (PR #49 review nits)
 
 Jonathan asked for PR #49's two nits after it merged. `control={}` (mgcv `control = list()`) returns the default `conv.tol` instead of a misleading validation error; the inner P-IRLS `conv.tol/100` tightening (gam.fit3.r:1308, not ported) is recorded in DEFERRED for follow-up (b).
-Tests: 865 → 865 (one case added inside `test_default_conv_tol_is_unchanged`). `make lint` clean. No key result changes; no fixture change.
+Tests: 865 → 866 (one case inside `test_default_conv_tol_is_unchanged`; PR #50 review nit: `test_empty_control_on_discrete_bam_is_the_default`). `make lint` clean. No key result changes; no fixture change.
 Next: follow-up (b), the `newton` port.
 
 ## 2026-11-21 (forty-first slice): `gam.control(newton = list(conv.tol = ))` (PR #48 follow-up (c))

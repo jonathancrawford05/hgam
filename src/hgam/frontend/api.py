@@ -923,8 +923,10 @@ def _newton_conv_tol(control: Mapping[str, object] | None, *, discrete: bool) ->
     (gam.fit3.r) as its relative gradient tolerance; hgam hands it to its own Newton search
     (:func:`~hgam.engine.gam_reml_newton.newton_select_lambdas`), whose stopping test is not mgcv's (that
     port is PLAN step 3's follow-up (b)). ``control`` is written as mgcv names it:
-    ``{"newton": {"conv.tol": 1e-12}}``. Every other ``gam.control`` entry, and the option on
-    ``bam(discrete=TRUE)`` (whose performance iteration does not run ``newton``), is refused by name."""
+    ``{"newton": {"conv.tol": 1e-12}}``; ``{}``, like mgcv's ``control = list()``, keeps every default. Every
+    other ``gam.control`` entry, and the option on ``bam(discrete=TRUE)`` (whose performance iteration does
+    not run ``newton``), is refused by name. Not ported: ``newton`` also tightens the inner P-IRLS tolerance,
+    ``control$epsilon <- conv.tol/100`` when larger (gam.fit3.r:1308); hgam's stays at ``_IRLS_TOL``."""
     if control is None:
         return MGCV_NEWTON_CONV_TOL
     if not isinstance(control, Mapping):
@@ -937,6 +939,9 @@ def _newton_conv_tol(control: Mapping[str, object] | None, *, discrete: bool) ->
             f"gam(): control entries {other} are not ported; only "
             "control={'newton': {'conv.tol': ...}} is."
         )
+    if "newton" not in control:
+        # mgcv's ``control = list()`` means every gam.control default, so an empty mapping sets nothing.
+        return MGCV_NEWTON_CONV_TOL
     if discrete:
         raise HgamNotImplementedError(
             "gam(): control={'newton': ...} sets the REML Newton search's tolerance; bam(method='fREML', "

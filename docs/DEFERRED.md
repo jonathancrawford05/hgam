@@ -53,3 +53,6 @@ One line each: what differs or is missing, where it was seen, and why it did not
   conv.tol` and the score change within `score.scale * conv.tol`; a step failure counts as converged). On 27d3 at
   1e-12 hgam stalls with gradient 9.7e-10 against 8.0e-10 and reports `converged=False` where mgcv reports full
   convergence; every key result is inside its gate. Follow-up (b), the `newton` port, replaces the test.
+  Also not ported: `newton` tightens the inner P-IRLS tolerance to `conv.tol/100` (gam.fit3.r:1308); hgam's stays at
+  `_IRLS_TOL = 1e-10`. PR #49 review measured it is not the 27d3 stall (IRLS tol 1e-10/1e-12/1e-14: gradient
+  9.7e-10/6.5e-10/1.0e-9 against 8.0e-10, every gate holds). Follow-up (b) ports it with `newton`.

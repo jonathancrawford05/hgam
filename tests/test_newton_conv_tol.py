@@ -120,13 +120,14 @@ def test_tight_conv_tol_on_the_select_ridge(load_fixture, margin, monkeypatch) -
 
 
 def test_default_conv_tol_is_unchanged(load_fixture) -> None:
-    """No ``control``, an empty ``newton`` list and an explicit ``conv.tol = 1e-6`` are one fit."""
+    """No ``control``, an empty ``control`` (mgcv's ``control = list()``), an empty ``newton`` list and an
+    explicit ``conv.tol = 1e-6`` are one fit."""
     fx = load_fixture("gam_binomial_cloglog_factor_t2_reml")
     data = _columns(fx["data"])
     formula = fx["formula"].replace("'", '"')
     fits = [
         hgam.gam(formula, data, FAMILY, weights="n", method="REML", control=control)
-        for control in (None, {"newton": {}}, {"newton": {"conv.tol": 1e-6}})
+        for control in (None, {}, {"newton": {}}, {"newton": {"conv.tol": 1e-6}})
     ]
     for fit in fits[1:]:
         np.testing.assert_array_equal(fit.lambda_, fits[0].lambda_)

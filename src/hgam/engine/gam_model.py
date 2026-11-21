@@ -93,7 +93,7 @@ from hgam.engine.gam_family import (
 from hgam.engine.gam_initial_sp import initial_log10_lambda
 from hgam.engine.gam_predict import TermState, fit_term_state, predict_design
 from hgam.engine.gam_rank_pivot import pivot_out, unidentified_directions
-from hgam.engine.gam_reml_newton import NewtonLambdaSelection, newton_select_lambdas
+from hgam.engine.gam_reml_newton import MGCV_NEWTON_CONV_TOL, NewtonLambdaSelection, newton_select_lambdas
 from hgam.engine.gam_reml_optimize import (
     ContinuousLambdaSelection,
     select_lambdas_continuous,
@@ -785,6 +785,7 @@ def fit_engine_gam(
     step_halving: bool = False,
     initial_sp_start: bool = False,
     outer: Literal["lbfgsb", "newton"] = "newton",
+    conv_tol: float = MGCV_NEWTON_CONV_TOL,
     warn_stacklevel: int = 2,
 ) -> EngineGAMFit:
     """Fit ``model`` to ``data``/``y``, selecting every smoothing parameter by
@@ -796,6 +797,9 @@ def fit_engine_gam(
     when ``multistart=True``).
 
     Args:
+        conv_tol: the Newton search's relative gradient tolerance, mgcv's
+            ``gam.control(newton = list(conv.tol = ))`` (mgcv.r, mgcv 1.9-4; default
+            ``1e-6``). Only for ``outer="newton"``.
         warn_stacklevel: ``warnings.warn`` stack level, relative to the caller of this
             function (2 = the caller); a wrapper such as ``gam()`` passes 3 so the
             rank-deficiency warning points at *its* caller (ADR-256).
@@ -963,6 +967,13 @@ def fit_engine_gam(
             "analytic_gradient, max_gtol_restarts and initial_sp_start -- it always uses the "
             "analytic gradient and its one start is mgcv's initial.spg."
         )
+    if outer != "newton" and conv_tol != MGCV_NEWTON_CONV_TOL:
+        raise HgamValidationError(
+            f"fit_engine_gam: conv_tol={conv_tol!r} is the Newton search's tolerance; outer={outer!r} "
+            "does not use it."
+        )
+    if not (np.isfinite(conv_tol) and conv_tol > 0.0):
+        raise HgamValidationError(f"fit_engine_gam: conv_tol must be finite and positive, got {conv_tol!r}.")
     if bounds is None:
         bounds = (
             TP_LOG10_BOUNDS if any(term.basis == "tp" for term in model.terms) else PRODUCTION_LOG10_BOUNDS
@@ -1001,6 +1012,7 @@ def fit_engine_gam(
             gamma=gamma,
             bounds=bounds,
             maxiter=maxiter,
+            conv_tol=conv_tol,
             step_halving=step_halving,
         )
         n_function_evals = selection.n_function_evals

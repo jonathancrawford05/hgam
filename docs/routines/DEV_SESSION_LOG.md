@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-21 (forty-first slice): `gam.control(newton = list(conv.tol = ))` (PR #48 follow-up (c))
+
+Same run: PR #48 auto-merged after the Ready review of `b232be4` (six conditions posted; branch delete cut by the git proxy). `control={"newton": {"conv.tol": x}}` on `gam(method="REML")` and `hgam.gam`, threaded to `newton_select_lambdas`; default 1e-6; other entries and discrete bam refused; `summary().epsilon_rel` reports the tolerance used.
+Tests: 855 → 865. `make lint` clean. At 1e-12 against mgcv's tight refits (tier 1, mgcv 1.9-1): 27b2 eta 4.8e-10, predict 7.7e-10, se 2.6e-3; 27d3 eta 1.2e-9, predict 1.9e-9, se 2.5e-3, edf 1.4e-7 of gate.
+Deferred: hgam's Newton stop test is not mgcv's (27d3 reports converged=False at 1e-12 where mgcv converges). Next: follow-up (b), the `newton` port.
+
 ## 2026-11-21 (fortieth slice): `select=TRUE` with t2 (fourth step of `t2`, PLAN step 3)
 
 No open PR at start (PR #47 merged). No engine change: `null_space_penalty` gives smoothCon's t2 null-space penalty at modCon 0 and 2 (27d1: 2.3e-14, rank 3). `select=TRUE` with t2 lifted for discrete bam only; a REML gam keeps a narrower refusal (no test removed).

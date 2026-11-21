@@ -38,6 +38,7 @@ def gam(
     select: bool = False,
     knots: Mapping[str, Sequence[float]] | None = None,
     method: str = "GCV.Cp",
+    control: Mapping[str, object] | None = None,
 ) -> GamFit:
     """Fit a GAM by REML. mgcv counterpart: ``gam`` (mgcv.r), mgcv 1.9-4.
 
@@ -45,6 +46,10 @@ def gam(
     or ``family="binomial", link="cloglog"``; ``weights`` and ``offset`` name columns of ``data``). Only
     ``method="REML"`` is ported for ``gam``, so it must be written out: mgcv's default, ``method="GCV.Cp"``,
     is refused by name rather than fitted by REML.
+
+    ``control`` is mgcv's ``control = gam.control(...)`` as a mapping; only
+    ``{"newton": {"conv.tol": value}}`` is ported (default ``1e-6``, as ``gam.control``), and every other
+    entry is refused by name.
     """
     if method != "REML":
         raise HgamNotImplementedError(
@@ -61,6 +66,7 @@ def gam(
         knots=knots,
         method="REML",
         discrete=False,
+        control=control,
     )
 
 

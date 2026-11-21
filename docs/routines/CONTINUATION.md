@@ -1,7 +1,7 @@
 # Continuation
 
 Last updated: 2026-11-21, by the development run's fortieth slice: `select=TRUE` with t2 (PLAN step 3). No open pull
-request at the start (PR #47 merged); this run's PR carries a question for Jonathan. Read `docs/PRIORITIES.md` before choosing work.
+request at the start (PR #47 merged); Jonathan decided PR #48's question (option (a), follow-ups (c) then (b)). Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -268,11 +268,20 @@ at 5.66: eta 1.0e-3 and predict 1.3e-3 from the tight fit (gate 1e-3). 27d2 meet
 `conv_tol` at 1e-12 both meet the tight fit at 1.9e-9, so the design and the four penalties are mgcv's; only the stop
 point differs. Fixtures 27d2, 27d3 are committed for the follow-up. Tests: 855 pass, no xfail.
 
-## Next slice
+## Next slice: `gam.control(newton = list(conv.tol = ))` on `gam(method="REML")` (PR #48 follow-up (c))
 
-- If Jonathan answers the t2 question (below) with (b) or (c), that is the slice. Otherwise (a) holds, and the next
-  slice is PLAN step 3's next basis: `tp` (`smooth.construct.tp.smooth.spec`, smooth.r 1.9-4) on one covariate,
-  first measuring what the moved engine already does against a fixture (k.check already handles one-covariate tp).
+- Jonathan's decision on PR #48: option (a) for that PR. Then (c), then (b) (`docs/PLAN.md` step 3).
+- (c): expose mgcv's `gam.control(newton = list(conv.tol = ))` as a user-facing option on `gam(method="REML")`, for
+  example `control={"newton": {"conv_tol": ...}}`. Read `gam.control` (gam.fit3.r / mgcv.r, 1.9-4) for the argument's
+  name and shape. Default unchanged at `MGCV_NEWTON_CONV_TOL = 1e-6`. Pass it to `newton_select_lambdas(conv_tol=)`
+  through `fit_engine_gam`. Refuse any other `gam.control` entry by name, and refuse the option on discrete bam.
+- Acceptance: on 27d3 (`gam_binomial_cloglog_factor_t2_select_reml`) with `conv_tol=1e-12`, hgam meets every gate
+  against the fixture's `tight` refit. This run measured eta 1.2e-9 and predict 1.9e-9, with log sp 19.2 against
+  mgcv's 18.8. Note that hgam reported `converged=False` there, so check why first. 27b2 at 1e-12 gave eta 4.8e-10.
+  The select refusal for t2 in a REML gam stays until (b), unless the user opts in by passing the tight tolerance.
+  Whether to lift it under the option is a question for Jonathan, not this slice's call.
+- Then (b): port mgcv's `newton` (gam.fit3.r) in slices. Done when 27d3 meets every gate against mgcv's default fit
+  and the refusal is lifted.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 
@@ -321,10 +330,7 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 ## Open questions
 
-- (PR for `select=TRUE` with t2) REML gam `select=TRUE` with t2 misses the 1e-3 eta gate on 27d3 by stopping on a flat
-  ridge (above). Options: (a) keep it refused, ship discrete bam only (this PR; recommended); (b) port mgcv's `newton`
-  (reopens PR #12's option A) so hgam stops where mgcv's default does; (c) gate quantities on such a ridge at a
-  tighter hgam `conv_tol` in gam (changes every REML fit's stop point; would need re-measuring all REML fixtures).
+None. PR #48's question was decided on 2026-11-21: option (a), with follow-ups (c) then (b) (Next slice).
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

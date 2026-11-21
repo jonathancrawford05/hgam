@@ -32,6 +32,9 @@ About 40 pull-request-sized slices. The slice counts are rough estimates.
    - **(b) Port mgcv's `newton` (gam.fit3.r).** The re-port trigger below now applies: 27d3 misses the predict gate
      on the search. Split into slices. Done when 27d3 meets every gate against mgcv's default fit and the
      `select=TRUE` refusal for t2 in a REML gam is lifted.
+     First slice (2026-11-21): the port, opt in as `newton_select_lambdas(iteration="mgcv")`, held to section 27e;
+     27d3 meets every gate against mgcv's default fit through it. Next: make it the default and lift the refusal,
+     once Jonathan decides which mgcv fit the ridge cases are gated against.
 4. **Packaging** (documentation, first release) comes after the widening, unless Jonathan asks for it sooner.
 
 ## M0, second slice: move the engine (done 2026-11-15)

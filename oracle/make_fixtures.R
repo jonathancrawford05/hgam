@@ -857,4 +857,16 @@ b27d5 <- bam(as.formula(f27b2), family = binomial(link = "cloglog"), weights = n
              discrete = TRUE, select = TRUE)
 put("bam_discrete_binomial_cloglog_factor_t2_select", bam_disc_case(b27d5, d26b, f27b2, "binomial(link='cloglog')",
     c(t2_disc_extra(b27d5, NULL, nd26b), list(select = TRUE))))
+# 27e. mgcv's newton (gam.fit3.r) trajectory on REML gam fits whose stop depends on the search: the iteration count,
+# the convergence message, the REML score after every iteration (outer.info$score.hist), the gradient at the stop and
+# the log smoothing parameters. Data, formulas and default fits are in the named fixtures.
+newton_case <- function(name, m) list(fixture = name, iter = m$outer.info$iter, conv = m$outer.info$conv,
+                                      score_hist = m$outer.info$score.hist, grad = as.numeric(m$outer.info$grad),
+                                      lsp = as.numeric(log(m$sp)))
+put("gam_newton_trajectories", list(cases = list(
+  newton_case("gam_binomial_cloglog_factor_t2_reml", m27b2),
+  newton_case("gam_binomial_cloglog_factor_t2_select_reml", m27d3),
+  newton_case("gam_binomial_cloglog_sz_select_reml", m10s),
+  newton_case("gam_binomial_cloglog_cr_fs_select_reml", m24e3),
+  newton_case("gam_binomial_cloglog_by_numeric_reml", m14))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

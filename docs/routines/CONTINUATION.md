@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-21, by the development run's forty-first slice: PR #48's follow-up (c), `gam.control(newton =
-list(conv.tol = ))` (PLAN step 3). PR #48 (select with t2) was merged in this run. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-21, by a review-nit slice after PR #49 (`gam.control(newton = list(conv.tol = ))`, merged). Jonathan
+asked for PR #49's two review nits; both are done here. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -276,6 +276,11 @@ tight refits: 27b2 eta 4.8e-10, predict 7.7e-10, se 2.6e-3; 27d3 (the t2 select 
 eta 1.2e-9, predict 1.9e-9, se 2.5e-3. On 27d3 hgam reports `converged=False` (stalled, gradient 9.7e-10 against tol
 8.0e-10) where mgcv's `newton` reports full convergence: its stopping test is looser (DEFERRED). Tests: 865 pass.
 
+PR #49 review nits (done): `control={}` (mgcv's `control = list()`) now keeps every default instead of raising
+(`test_default_conv_tol_is_unchanged`); the unported inner P-IRLS tightening (`control$epsilon <- conv.tol/100`,
+gam.fit3.r:1308) has a line in DEFERRED for follow-up (b). PR #50 review nit (done): `control={}` on discrete bam is
+accepted as the default (`test_empty_control_on_discrete_bam_is_the_default`). Tests: 866 pass.
+
 ## Next slice: port mgcv's `newton` (gam.fit3.r), first step (PR #48 follow-up (b))
 
 - Done when (Jonathan, PR #48): 27d3 meets every gate against mgcv's **default** fit and `_refuse_t2`'s REML select
@@ -286,6 +291,7 @@ eta 1.2e-9, predict 1.9e-9, se 2.5e-3. On 27d3 hgam reports `converged=False` (s
   after `maxHalf` halvings counts as converged with a warning); `uconv.ind` (gradients below `0.1 * score.scale *
   conv.tol` are dropped, with the `0.001 * max|grad|` refinement at line 1430); the indefinite-Hessian handling;
   `qerror` and the step-length logic. Also the start (`initial.sp`) and `maxNstep = 5`.
+  Also the inner P-IRLS tolerance `conv.tol/100` (gam.fit3.r:1308; PR #49 review measured it is not the 27d3 stall).
 - First step: measure. Record mgcv's `newton` iterates on 27d3 and 27b2 (`trace` or `gam.control(trace = TRUE)`;
   `outer.info`), fixture 27e, and compare hgam's path. Port the convergence test first if that alone moves the stop.
 - Then the bases (`tp` first), PLAN step 3.

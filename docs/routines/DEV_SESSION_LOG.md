@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-21 (fortieth slice): `select=TRUE` with t2 (fourth step of `t2`, PLAN step 3)
+
+No open PR at start (PR #47 merged). No engine change: `null_space_penalty` gives smoothCon's t2 null-space penalty at modCon 0 and 2 (27d1: 2.3e-14, rank 3). `select=TRUE` with t2 lifted for discrete bam only; a REML gam keeps a narrower refusal (no test removed).
+Tests: 849 → 855. `make lint` clean. Section 27d (tier 1, mgcv 1.9-1 local): discrete bam eta 1.4e-11, se 3.5e-11, edf 2.4e-5 of gate, predict 7.2e-12 / se 3.3e-11, |Cp| 5.7e-15; four sp, structure exact.
+Question for Jonathan: REML gam `p ~ f + t2(x, z)` with select misses predict by 1.3e-3 against mgcv's tight refit (hgam log sp 5.66; mgcv 4.85 default, 18.8 tight). At conv_tol 1e-12 hgam meets it (1.9e-9). Next: his answer, then `tp`.
+
 ## 2026-11-20 (thirty-ninth slice): `t2` on cr in discrete bam (third step of `t2`, PLAN step 3)
 
 No open PR at start (PR #46 merged). bam's `modCon = 2` (t2 fit constraint = `Cp`, built on `mf0`), joint `compress.df` for t2's covariates, `uniquecombs`' multi-column text order with R's `as.character` (`r_double_string`); `tero` skips t2. Retired refusal case: `test_t2_refusals[discrete=True]`, replaced by `test_discrete_t2_meets_the_gates`.

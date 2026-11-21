@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-ninth slice: `t2` on cr in discrete bam (PLAN step 3). No
-open pull request at the start (PR #46 merged). Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-21, by the development run's fortieth slice: `select=TRUE` with t2 (PLAN step 3). No open pull
+request at the start (PR #47 merged); this run's PR carries a question for Jonathan. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -257,17 +257,22 @@ constraint |Cp| at 5.9e-15 (sign-free: nat.param's eigenvector signs; over the d
 still refuse (not measured). The refusal case `discrete=True` in `test_t2_refusals` is retired (SETTINGS condition 5),
 replaced by `test_discrete_t2_meets_the_gates`. Tests: 849 pass, no xfail.
 
-## Next slice: `select=TRUE` with t2
+`select=TRUE` with t2 (section 27d, this run's PR): no engine change. smoothCon's `null.space.penalty` takes `need.full`
+for t2 and appends `U U'` over the null space of the summed penalties (rank 3) in the fit parameterisation (gam's sparse
+`C`, bam's `Cp`); `null_space_penalty` gives it at both modCon (27d1, 2.3e-14 up to the orthogonal map,
+`tests/test_t2_basis.py`). Discrete bam (27d4, 27d5, `tests/test_t2_discrete.py`): eta 1.4e-11, se 3.5e-11, edf 2.4e-5
+of the gate width, predict on new data 7.2e-12 / se 3.3e-11, four sp, structure, rank and names exact. In a REML gam
+select stays refused by name (`api._refuse_t2(select=, discrete=)`): on 27d3 (`p ~ f + t2(x, z)`) the rn block's sp is
+on a flat ridge again, mgcv's default stops at log sp 4.85 and its tight refit at 18.8 (lower score), hgam's Newton
+at 5.66: eta 1.0e-3 and predict 1.3e-3 from the tight fit (gate 1e-3). 27d2 meets every gate (eta 2.2e-4). With hgam's
+`conv_tol` at 1e-12 both meet the tight fit at 1.9e-9, so the design and the four penalties are mgcv's; only the stop
+point differs. Fixtures 27d2, 27d3 are committed for the follow-up. Tests: 855 pass, no xfail.
 
-- smoothCon's `null.space.penalty` branch (smooth.r 1.9-4): t2 has several penalties, so `need.full`; St sums the
-  scaled, constrained identities and `U U'` is appended for eigenvalues below `max * eps^0.66`. For t2 on two cr
-  margins the unpenalised block is 2 x 2 = 4 columns less the constraint: expect rank 3. Check whether the penalty is
-  built in the fit (C) or prediction (Cp) parameterisation for gam (modCon = 0) and bam (modCon = 2), and whether
-  `null_space_penalty` (`hgam.engine.gam_select_penalty`) already gives it (te needed no change).
-- Fixture 27d: `smoothCon(t2(...), null.space.penalty = TRUE)` on section 26's data, then 27b's two models with
-  `select = TRUE` as a REML gam and as a discrete bam; gates as 26d. Then lift `_refuse_t2`'s select refusal (and
-  retire its refusal case under condition 5).
-- After t2: the PLAN's next widening item.
+## Next slice
+
+- If Jonathan answers the t2 question (below) with (b) or (c), that is the slice. Otherwise (a) holds, and the next
+  slice is PLAN step 3's next basis: `tp` (`smooth.construct.tp.smooth.spec`, smooth.r 1.9-4) on one covariate,
+  first measuring what the moved engine already does against a fixture (k.check already handles one-covariate tp).
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 
@@ -316,7 +321,10 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 ## Open questions
 
-None.
+- (PR for `select=TRUE` with t2) REML gam `select=TRUE` with t2 misses the 1e-3 eta gate on 27d3 by stopping on a flat
+  ridge (above). Options: (a) keep it refused, ship discrete bam only (this PR; recommended); (b) port mgcv's `newton`
+  (reopens PR #12's option A) so hgam stops where mgcv's default does; (c) gate quantities on such a ridge at a
+  tighter hgam `conv_tol` in gam (changes every REML fit's stop point; would need re-measuring all REML fixtures).
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

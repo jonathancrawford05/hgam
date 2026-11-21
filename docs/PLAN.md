@@ -164,3 +164,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   (`uniquecombs`' text order ported with R's `as.character`, `r_double_string`) and the term is built on `mf0`
   (`t2_basis(frame=, mod_con=2)`). Section 27c, `tests/test_t2_discrete.py`: eta at most 6.3e-12, se 2.8e-11, predict
   5.6e-12, edf 4.8e-5 of the gate, |Cp| 5.9e-15, joint compress.df rows and index exact; structure exact. Next: `select=TRUE` with t2.
+- Widening, `t2` on cr, fourth step (2026-11-21): `select=TRUE`. smoothCon's `null.space.penalty` (`need.full`, rank 3)
+  is what `null_space_penalty` builds, at modCon 0 and 2 (section 27d1, 2.3e-14). Ported for discrete bam (27d4, 27d5:
+  eta 1.4e-11, se 3.5e-11, edf 2.4e-5 of the gate, predict 7.2e-12). Still refused in a REML gam: on 27d3 the
+  null-space sp's flat ridge leaves hgam's Newton search 1.3e-3 from mgcv's tight refit on prediction (question on
+  the PR). Next: Jonathan's answer, then the bases (`tp` first).

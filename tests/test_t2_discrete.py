@@ -8,7 +8,9 @@ fit and prediction parameterisations are one; bam applies no ``G$P``. A ``t2.smo
 covariates jointly, one ``compress.df`` call, whose ``uniquecombs(ordered = TRUE)`` orders multi-column rows
 by their text (``paste0(x, "*", z)``, C locale) before ``sample()`` shuffles them. ``gam.setup`` builds the
 term on the padded frame ``mf0``: default knots, each margin's ``nat.param`` ``P``, the penalty scaling and
-the constraint come from its rows (``t2_basis(frame=, mod_con=2)``).
+the constraint come from its rows (``t2_basis(frame=, mod_con=2)``). With ``select=TRUE`` (section 27d)
+smoothCon's ``null.space.penalty`` appends a fourth penalty over the null space of the summed three, which
+``null_space_penalty`` builds (``tests/test_t2_basis.py``).
 
 Gates (``docs/PRIORITIES.md``): structure exact; the linear predictor to 1e-3 absolute; standard errors of the
 linear predictor 1% relative; per-term edf 0.05 absolute or 1%, whichever is larger; the same on new data
@@ -30,6 +32,8 @@ CASES = (
     "bam_discrete_binomial_cloglog_factor_t2",
     "bam_discrete_binomial_cloglog_t2_repeated",
     "bam_discrete_binomial_cloglog_t2_binned",
+    "bam_discrete_binomial_cloglog_t2_select",
+    "bam_discrete_binomial_cloglog_factor_t2_select",
 )
 
 
@@ -54,6 +58,7 @@ def _fit(fx: dict):
         knots=fx["knots"] or None,
         method="fREML",
         discrete=True,
+        select=bool(fx.get("select")),
     )
 
 
@@ -61,7 +66,8 @@ def _fit(fx: dict):
 def test_discrete_t2_meets_the_gates(name: str, load_fixture, margin) -> None:
     """27c1 ``p ~ t2(x, z, k=c(5, 4))`` (x's knots supplied), 27c2 ``p ~ f + t2(x, z)``, and 27c3
     ``p ~ t2(x, z, k=c(6, 5))`` on data whose (x, z) pairs repeat (the unique pairs are shuffled and
-    padded), and 27c5 with more than 100^2 unique pairs, so compress.df snaps both columns to its grid.
+    padded), 27c5 with more than 100^2 unique pairs, so compress.df snaps both columns to its grid, and 27d4,
+    27d5: 27c1 and 27c2 with ``select=TRUE``.
     Structure (label in written order, coefficient count, full rank, names, three sp) is exact; eta, se and
     edf meet their gates on the data and on new data."""
     fx = load_fixture(name)
@@ -73,7 +79,8 @@ def test_discrete_t2_meets_the_gates(name: str, load_fixture, margin) -> None:
     assert fit.coef.size == fx["n_coef"] == fx["rank"]
     assert not fit.pivoted_columns
     assert list(fit.coefficient_names) == fx["coef_names"]
-    assert len(fit.lambda_) == len(fx["sp"]) == 3
+    # rr, nr, rn, and with select=TRUE a fourth for the null-space penalty (smoothCon's need.full, 27d).
+    assert len(fit.lambda_) == len(fx["sp"]) == (4 if fx.get("select") else 3)
 
     eta, se = fit.predict(data, se_fit=True)
     d_eta = float(np.max(np.abs(eta - np.asarray(fx["eta"]))))

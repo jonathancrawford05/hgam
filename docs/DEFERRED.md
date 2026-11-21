@@ -48,3 +48,8 @@ One line each: what differs or is missing, where it was seen, and why it did not
   on a double, behind `uniquecombs`' multi-column order) refuses `|x| >= 1e15` in fixed notation, where R prints more
   than 15 digits by a rule not ported. On the joint grid branch (27c5) hgam's grid values differ from R's `seq` in the
   last bit (2.7e-15 relative); the row order and index are exact there.
+- `gam.control(newton = list(conv.tol = ))` (PR #48 follow-up (c)): hgam's Newton stopping test is its own
+  (projected gradient within `conv.tol * (1 + |score|)`), not mgcv's (gradient within 5 times `score.scale *
+  conv.tol` and the score change within `score.scale * conv.tol`; a step failure counts as converged). On 27d3 at
+  1e-12 hgam stalls with gradient 9.7e-10 against 8.0e-10 and reports `converged=False` where mgcv reports full
+  convergence; every key result is inside its gate. Follow-up (b), the `newton` port, replaces the test.

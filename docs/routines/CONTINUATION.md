@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-21, by the development run's fortieth slice: `select=TRUE` with t2 (PLAN step 3). No open pull
-request at the start (PR #47 merged); Jonathan decided PR #48's question (option (a), follow-ups (c) then (b)). Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-21, by the development run's forty-first slice: PR #48's follow-up (c), `gam.control(newton =
+list(conv.tol = ))` (PLAN step 3). PR #48 (select with t2) was merged in this run. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -268,20 +268,27 @@ at 5.66: eta 1.0e-3 and predict 1.3e-3 from the tight fit (gate 1e-3). 27d2 meet
 `conv_tol` at 1e-12 both meet the tight fit at 1.9e-9, so the design and the four penalties are mgcv's; only the stop
 point differs. Fixtures 27d2, 27d3 are committed for the follow-up. Tests: 855 pass, no xfail.
 
-## Next slice: `gam.control(newton = list(conv.tol = ))` on `gam(method="REML")` (PR #48 follow-up (c))
+`gam.control(newton = list(conv.tol = ))` (this run's second PR, `tests/test_newton_conv_tol.py`): `gam()` and `hgam.gam`
+take `control={"newton": {"conv.tol": x}}` (mgcv's `gam.control`, mgcv.r 1.9-4, default 1e-6, unchanged), passed through
+`fit_engine_gam(conv_tol=)` to `newton_select_lambdas`. Every other `gam.control` entry, other `newton` entries and the
+option on discrete bam are refused by name. `summary().epsilon_rel` reports the tolerance used. At 1e-12 against mgcv's
+tight refits: 27b2 eta 4.8e-10, predict 7.7e-10, se 2.6e-3; 27d3 (the t2 select refusal bypassed in that test only)
+eta 1.2e-9, predict 1.9e-9, se 2.5e-3. On 27d3 hgam reports `converged=False` (stalled, gradient 9.7e-10 against tol
+8.0e-10) where mgcv's `newton` reports full convergence: its stopping test is looser (DEFERRED). Tests: 865 pass.
 
-- Jonathan's decision on PR #48: option (a) for that PR. Then (c), then (b) (`docs/PLAN.md` step 3).
-- (c): expose mgcv's `gam.control(newton = list(conv.tol = ))` as a user-facing option on `gam(method="REML")`, for
-  example `control={"newton": {"conv_tol": ...}}`. Read `gam.control` (gam.fit3.r / mgcv.r, 1.9-4) for the argument's
-  name and shape. Default unchanged at `MGCV_NEWTON_CONV_TOL = 1e-6`. Pass it to `newton_select_lambdas(conv_tol=)`
-  through `fit_engine_gam`. Refuse any other `gam.control` entry by name, and refuse the option on discrete bam.
-- Acceptance: on 27d3 (`gam_binomial_cloglog_factor_t2_select_reml`) with `conv_tol=1e-12`, hgam meets every gate
-  against the fixture's `tight` refit. This run measured eta 1.2e-9 and predict 1.9e-9, with log sp 19.2 against
-  mgcv's 18.8. Note that hgam reported `converged=False` there, so check why first. 27b2 at 1e-12 gave eta 4.8e-10.
-  The select refusal for t2 in a REML gam stays until (b), unless the user opts in by passing the tight tolerance.
-  Whether to lift it under the option is a question for Jonathan, not this slice's call.
-- Then (b): port mgcv's `newton` (gam.fit3.r) in slices. Done when 27d3 meets every gate against mgcv's default fit
-  and the refusal is lifted.
+## Next slice: port mgcv's `newton` (gam.fit3.r), first step (PR #48 follow-up (b))
+
+- Done when (Jonathan, PR #48): 27d3 meets every gate against mgcv's **default** fit and `_refuse_t2`'s REML select
+  refusal is lifted. Split into slices.
+- Read `newton` (gam.fit3.r 1.9-4, line 1290 on) side by side with `hgam.engine.gam_reml_newton.newton_select_lambdas`.
+  Known differences so far: mgcv's convergence test (line 1647 on: `score.scale = abs(log(scale.est)) + abs(score)`
+  under REML; gradient within `5 * score.scale * conv.tol`; score change within `score.scale * conv.tol`; step failure
+  after `maxHalf` halvings counts as converged with a warning); `uconv.ind` (gradients below `0.1 * score.scale *
+  conv.tol` are dropped, with the `0.001 * max|grad|` refinement at line 1430); the indefinite-Hessian handling;
+  `qerror` and the step-length logic. Also the start (`initial.sp`) and `maxNstep = 5`.
+- First step: measure. Record mgcv's `newton` iterates on 27d3 and 27b2 (`trace` or `gam.control(trace = TRUE)`;
+  `outer.info`), fixture 27e, and compare hgam's path. Port the convergence test first if that alone moves the stop.
+- Then the bases (`tp` first), PLAN step 3.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 
@@ -330,7 +337,7 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 ## Open questions
 
-None. PR #48's question was decided on 2026-11-21: option (a), with follow-ups (c) then (b) (Next slice).
+None. PR #48's question was decided on 2026-11-21: option (a), follow-up (c) done, (b) next.
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

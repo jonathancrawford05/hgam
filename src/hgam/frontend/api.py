@@ -46,6 +46,7 @@ import numpy as np
 
 from hgam.engine.gam_model import EngineGAMFit, fit_engine_gam, resolve_family
 from hgam.engine.gam_rank_pivot import unidentified_directions
+from hgam.engine.gam_reml_newton import MGCV_NEWTON_CONV_TOL
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec, factor_by_terms
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 from hgam.frontend.bam_fit import fit_engine_bam
@@ -916,6 +917,54 @@ def _build_model(
     return model, data, codings, smooth_meta
 
 
+def _newton_conv_tol(control: Mapping[str, object] | None, *, discrete: bool) -> float:
+    """mgcv counterpart: ``gam.control(newton = list(conv.tol = ))`` (mgcv.r, mgcv 1.9-4), whose default is
+    ``newton$conv.tol <- 1e-6`` (``MGCV_NEWTON_CONV_TOL``). ``gam(method = "REML")`` hands it to ``newton``
+    (gam.fit3.r) as its relative gradient tolerance; hgam hands it to its own Newton search
+    (:func:`~hgam.engine.gam_reml_newton.newton_select_lambdas`), whose stopping test is not mgcv's (that
+    port is PLAN step 3's follow-up (b)). ``control`` is written as mgcv names it:
+    ``{"newton": {"conv.tol": 1e-12}}``. Every other ``gam.control`` entry, and the option on
+    ``bam(discrete=TRUE)`` (whose performance iteration does not run ``newton``), is refused by name."""
+    if control is None:
+        return MGCV_NEWTON_CONV_TOL
+    if not isinstance(control, Mapping):
+        raise HgamValidationError(
+            f"gam(): control must be a mapping such as {{'newton': {{'conv.tol': 1e-12}}}}, got {control!r}."
+        )
+    other = sorted(set(control) - {"newton"})
+    if other:
+        raise HgamNotImplementedError(
+            f"gam(): control entries {other} are not ported; only "
+            "control={'newton': {'conv.tol': ...}} is."
+        )
+    if discrete:
+        raise HgamNotImplementedError(
+            "gam(): control={'newton': ...} sets the REML Newton search's tolerance; bam(method='fREML', "
+            "discrete=True) does not run newton, and its own controls are not ported."
+        )
+    newton = control.get("newton")
+    if not isinstance(newton, Mapping):
+        raise HgamValidationError(
+            f"gam(): control['newton'] must be a mapping such as {{'conv.tol': 1e-12}}, got {newton!r}."
+        )
+    other = sorted(set(newton) - {"conv.tol"})
+    if other:
+        raise HgamNotImplementedError(
+            f"gam(): gam.control(newton = list(...)) entries {other} are not ported; only 'conv.tol' is."
+        )
+    if "conv.tol" not in newton:
+        return MGCV_NEWTON_CONV_TOL
+    value = newton["conv.tol"]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise HgamValidationError(f"gam(): control['newton']['conv.tol'] must be a number, got {value!r}.")
+    tol = float(value)
+    if not (np.isfinite(tol) and tol > 0.0):
+        raise HgamValidationError(
+            f"gam(): control['newton']['conv.tol'] must be finite and positive, got {tol!r}."
+        )
+    return tol
+
+
 def gam(
     formula: str,
     data: Mapping[str, object],
@@ -929,6 +978,7 @@ def gam(
     method: str = "REML",
     discrete: bool = False,
     knots: Mapping[str, Sequence[float]] | None = None,
+    control: Mapping[str, object] | None = None,
 ) -> GamFit:
     """Fit an ``mgcv`` GAM formula from the verified subset by REML (or fREML, ``discrete=True``).
 
@@ -970,11 +1020,14 @@ def gam(
             smooth of it (mgcv counterpart: ``smooth.construct.cr.smooth.spec``, smooth.r, mgcv 1.9-4, which
             stops when the count is not ``k``). Knots for a variable reached only by a ``tp`` or ``re``
             term are refused, and so are names no smooth uses (mgcv ignores those).
+        control: ``mgcv``'s ``control = gam.control(...)``, as a mapping. Only
+            ``{"newton": {"conv.tol": value}}`` is ported (:func:`_newton_conv_tol`), for
+            ``method="REML"``; anything else is refused by name.
 
     Returns:
         a :class:`GamFit` (a :class:`~hgam.engine.gam_model.EngineGAMFit`
         whose ``predict`` encodes new data with the fitted factor coding). The smoothing parameters come
-        from the deterministic Newton REML search; there are no solver options.
+        from the deterministic Newton REML search; its one option is ``control``'s ``conv.tol``.
     """
     if scale is not None:
         raise HgamNotImplementedError(
@@ -988,6 +1041,7 @@ def gam(
             "Supported: method='REML' with discrete=False (exact Laplace REML), or "
             "method='fREML' with discrete=True (bam's performance iteration, ADR-260)."
         )
+    conv_tol = _newton_conv_tol(control, discrete=discrete)
     if not (isinstance(data, Mapping) or hasattr(data, "columns")):
         raise HgamValidationError("gam(): data must be a mapping from column name to array.")
     parsed = parse_formula(formula)
@@ -1017,7 +1071,7 @@ def gam(
     if discrete:
         fit = fit_engine_bam(model, arrays, y)
     else:
-        fit = fit_engine_gam(model, arrays, y, warn_stacklevel=3)
+        fit = fit_engine_gam(model, arrays, y, conv_tol=conv_tol, warn_stacklevel=3)
     if not fit.converged:
         warnings.warn(
             "gam(): the "

@@ -329,7 +329,11 @@ def build_summary(
         n_iterations=fit.n_iterations,
         max_abs_projected_gradient=fit.max_abs_projected_gradient,
         rel_projected_gradient=rel_grad,
-        epsilon_rel=EPSILON_REL,
+        epsilon_rel=(
+            EPSILON_REL
+            if fit.gradient_tolerance is None
+            else fit.gradient_tolerance / (1.0 + abs(float(fit.reml_score)))
+        ),
         n_function_evals=int(fit.n_function_evals),
         at_bound_blocks=fit.at_bound_blocks,
     )

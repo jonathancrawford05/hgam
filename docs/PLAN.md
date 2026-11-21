@@ -175,3 +175,8 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   eta 1.4e-11, se 3.5e-11, edf 2.4e-5 of the gate, predict 7.2e-12). Still refused in a REML gam: on 27d3 the
   null-space sp's flat ridge leaves hgam's Newton search 1.3e-3 from mgcv's tight refit on prediction. Jonathan chose
   option (a) on PR #48. Next: follow-up (c), then (b) (step 3 above), then the bases (`tp` first).
+- PR #48 follow-up (c) (2026-11-21): `control={"newton": {"conv.tol": ...}}` on `gam(method="REML")` (mgcv's
+  `gam.control`, mgcv.r; default 1e-6 unchanged), through `fit_engine_gam(conv_tol=)` to the Newton search; every other
+  `gam.control` entry and the option on discrete bam are refused. `tests/test_newton_conv_tol.py`: at 1e-12 against
+  mgcv's tight refits, 27b2 eta 4.8e-10, predict 7.7e-10, se 2.6e-3; 27d3 (refusal bypassed in the test only) eta
+  1.2e-9, predict 1.9e-9, se 2.5e-3, edf 1.4e-7 of the gate. Next: follow-up (b), the `newton` port.

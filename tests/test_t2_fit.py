@@ -165,7 +165,6 @@ def test_t2_prediction_matches_the_basis(load_fixture) -> None:
     ("formula", "kwargs", "needle"),
     [
         ('p ~ t2(x, z, bs="cr")', {"select": True}, "select=True"),
-        ('p ~ t2(x, z, bs="cr")', {"method": "fREML", "discrete": True}, "discrete=True"),
         ('p ~ s(x, bs="cr") + t2(x, z, bs="cr")', {}, "not verified"),
         ('p ~ t2(x, z, bs="cr", full=TRUE)', {}, "full"),
         ('p ~ t2(x, z, bs="cr", k=2)', {}, "k="),
@@ -173,7 +172,7 @@ def test_t2_prediction_matches_the_basis(load_fixture) -> None:
     ],
 )
 def test_t2_refusals(formula: str, kwargs: dict, needle: str, load_fixture) -> None:
-    """What t2 does not port yet is refused by name: select=TRUE and discrete bam (not measured), a t2
+    """What t2 does not port yet is refused by name: select=TRUE (not measured), a t2
     beside another smooth of its covariates (gam.side), and t2()'s other arguments, small k and other
     margin bases."""
     data = _columns(load_fixture("gam_binomial_cloglog_factor_t2_reml")["data"])

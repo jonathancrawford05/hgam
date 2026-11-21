@@ -44,10 +44,10 @@ from hgam.engine.gam_basis_cr import (
 from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
 from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
-from hgam.engine.gam_basis_t2 import t2_basis, t2_raw_design
+from hgam.engine.gam_basis_t2 import t2_raw_design
 from hgam.engine.gam_basis_te import te_basis, tensor_prod_model_matrix
 from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
-from hgam.engine.gam_term_build import fs_frame, te_frame
+from hgam.engine.gam_term_build import fs_frame, t2_term_basis, te_frame
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 
@@ -145,14 +145,9 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         built = te_basis(xs, term.k, knots, frame=te_frame(term))
         return TermState(term=term, knots=built.knots, constraint=(built.z,))
     if term.basis == "t2":
-        # The fit's parameterisation (smoothCon's C, not Cp): see build_python_t2_term.
+        # The fit's parameterisation (gam: smoothCon's C, not Cp; bam: Cp over mf0): see build_python_t2_term.
         xs = [np.asarray(_column(data, v, term), dtype=np.float64) for v in term.variables]
-        supplied = term.knots_by_variable()
-        knots = [
-            None if supplied.get(v) is None else np.asarray(supplied[v], dtype=np.float64)
-            for v in term.variables
-        ]
-        t2 = t2_basis(xs, term.k, knots)
+        t2 = t2_term_basis(xs, term)
         return TermState(term=term, knots=t2.knots, constraint=(t2.z_fit,), t2_p=t2.margin_p)
     if term.basis == "sz":
         smoothed = term.variables[1]

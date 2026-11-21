@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-eighth slice: `t2` on cr, the REML fit (PLAN step 3). PR #45
-(the t2 basis) auto-merged earlier in this run. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-20, by the development run's thirty-ninth slice: `t2` on cr in discrete bam (PLAN step 3). No
+open pull request at the start (PR #46 merged). Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -240,16 +240,34 @@ infinity; mgcv's default and tight fits differ by 1.2e-3; PR #12 rule), 7.6e-4 a
 rank and names exact. Refused by name: `select=TRUE`, `bam(discrete=TRUE)`, a t2 beside another smooth of its
 covariates. Tests: 838 pass, no xfail.
 
-## Next slice: `t2` on cr, third step (discrete bam)
+`t2` on cr in discrete bam (section 27c, `tests/test_t2_discrete.py`, this run's PR): `bam` calls `gam.setup(...,
+modCon = 2)` (bam.r), so smoothCon sets t2's fit constraint to the prediction one (`sm$C <- sm$Cp`, `colSums(X)`, dense:
+the full QR branch); fit and prediction parameterisations are one and bam applies no `G$P` (`t2_basis(mod_con=2)`).
+A t2 is not a `tensor.smooth.spec`: not `tero`-reordered (`api._tero` skips it), and `discrete.mf` compresses its
+covariates jointly (`discrete._smooth_groups`, `_new_groups` for `check.term`). `uniquecombs(ordered = TRUE)` orders
+multi-column rows by their text `paste0(x, "*", z)` in the C locale (`discrete._unique_rows`, with R's `as.character`
+for doubles as `r_double_string`; |x| >= 1e15 in fixed notation refused). The term is built on `mf0`
+(`t2_basis(frame=)`, through `gam_term_build.t2_term_basis`, used by the builder and `fit_term_state`). 27b's two
+models and 27c3 (repeated (x, z) pairs, so the unique rows are shuffled and padded): eta at most 6.3e-12, se 2.8e-11,
+edf 4.8e-5 of the gate width, predict on new data 5.6e-12 / se 3.1e-11, structure, rank and names exact; mgcv's
+constraint |Cp| at 5.9e-15 (sign-free: nat.param's eigenvector signs; over the data rows 27c3 misses by 1.9e-2);
+27c4, joint `compress.df` under `set.seed(8547)`: shuffled rows and index exact. 27c5 (PR #47 review: 12000 continuous rows, more than
+100^2 unique pairs, so compress.df's grid branch fires on the joint term): 4603 rows and every index exact, grid values
+2.7e-15 relative, fit eta 1.3e-12. `vcov`/`summary` on a discrete t2 fit
+still refuse (not measured). The refusal case `discrete=True` in `test_t2_refusals` is retired (SETTINGS condition 5),
+replaced by `test_discrete_t2_meets_the_gates`. Tests: 849 pass, no xfail.
 
-- bam.r 1.9-4 treats t2 differently from te: a `t2.smooth.spec` is not a `tensor.smooth.spec`, so `tero` does not
-  reorder it and `discrete.mf` (bam.r ~240-270, `nmarg <- 1` unless tensor) compresses its covariates **jointly**, as
-  one two-column term (like a 2-D smooth), not margin by margin. Read `discrete.mf` and `compress.df` for a
-  multi-column term first; `hgam.frontend.discrete` compresses one covariate at a time today, so this is the new piece.
-  Then `gam.setup` builds the term on `mf0` (knots, `nat.param`'s P, penalty scaling, both constraints over its rows)
-  and `Xd` holds the design at the binned rows. Does bam's discrete path apply `G$P`? (check `bam` / `bgam.fitd` for
-  `G$P` / `Xp` before assuming).
-- Fixture 27c: 27b's two models as `bam(method="fREML", discrete=TRUE)`; gates as 26c. Then `select=TRUE`.
+## Next slice: `select=TRUE` with t2
+
+- smoothCon's `null.space.penalty` branch (smooth.r 1.9-4): t2 has several penalties, so `need.full`; St sums the
+  scaled, constrained identities and `U U'` is appended for eigenvalues below `max * eps^0.66`. For t2 on two cr
+  margins the unpenalised block is 2 x 2 = 4 columns less the constraint: expect rank 3. Check whether the penalty is
+  built in the fit (C) or prediction (Cp) parameterisation for gam (modCon = 0) and bam (modCon = 2), and whether
+  `null_space_penalty` (`hgam.engine.gam_select_penalty`) already gives it (te needed no change).
+- Fixture 27d: `smoothCon(t2(...), null.space.penalty = TRUE)` on section 26's data, then 27b's two models with
+  `select = TRUE` as a REML gam and as a discrete bam; gates as 26d. Then lift `_refuse_t2`'s select refusal (and
+  retire its refusal case under condition 5).
+- After t2: the PLAN's next widening item.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 

@@ -196,9 +196,14 @@ def _fit_constraint_null_space(c: np.ndarray) -> np.ndarray:
 
 
 def t2_basis(
-    xs: Sequence[np.ndarray], ks: Sequence[int], knots: Sequence[np.ndarray | None] | None = None
+    xs: Sequence[np.ndarray],
+    ks: Sequence[int],
+    knots: Sequence[np.ndarray | None] | None = None,
+    *,
+    mod_con: int = 0,
+    frame: Sequence[np.ndarray] | None = None,
 ) -> T2Basis:
-    """mgcv counterpart: ``smoothCon(t2(..., bs = "cr"), absorb.cons = TRUE)``, i.e.
+    """mgcv counterpart: ``smoothCon(t2(..., bs = "cr"), absorb.cons = TRUE, modCon = )``, i.e.
     ``smooth.construct.t2.smooth.spec`` (smooth.r) then ``smoothCon``'s scaling and constraints, mgcv 1.9-4
     (module docstring).
 
@@ -206,7 +211,35 @@ def t2_basis(
         xs: One covariate per margin, each ``(n,)``, in written order.
         ks: Each margin's ``k``.
         knots: Each margin's supplied knots, or ``None`` for mgcv's default; ``None`` for all defaults.
+        mod_con: smoothCon's ``modCon``. 0 (``gam``): fit under the sparse ``C``, keep ``Xp`` under ``Cp``.
+            2 (``bam``, which calls ``gam.setup(..., modCon = 2)``): ``sm$C <- sm$Cp``, so the fit
+            constraint is ``Cp = colSums(X)``, which is dense, so smoothCon takes its full QR branch;
+            ``design``, ``penalties`` and ``z_fit`` are then ``Xp``'s (``design_p``, ``penalties_p``,
+            ``z_pred``).
+        frame: One column per margin, the rows the term is built on when they are not the data's:
+            ``bam(discrete = TRUE)``'s ``gam.setup`` builds it on ``discrete.mf``'s padded frame ``mf0``, so
+            the default knots, each margin's ``nat.param`` ``P``, the penalty scaling and the constraints come
+            from those rows, and the design at ``xs`` is ``Predict.matrix.t2.smooth`` with them.
     """
+    if mod_con not in (0, 2):
+        raise HgamNotImplementedError(f"t2 basis: modCon = {mod_con} is not ported (0 for gam, 2 for bam).")
+    if frame is not None:
+        built = t2_basis(frame, ks, knots, mod_con=mod_con)
+        raw = t2_raw_design(_check_margins(xs, ks), built.knots, built.margin_p)
+        return T2Basis(
+            raw @ built.z_fit,
+            built.penalties,
+            raw @ built.z_pred,
+            built.penalties_p,
+            built.rank,
+            built.null_space_dim,
+            built.p_lab,
+            built.knots,
+            built.margin_p,
+            built.z_fit,
+            built.z_pred,
+            raw,
+        )
     xs = _check_margins(xs, ks)
     if knots is None:
         knots = [None] * len(xs)
@@ -246,7 +279,7 @@ def t2_basis(
     penalties = [s / (_r_norm_one(s) / max_xx) for s in penalties]
 
     z_pred = _qr_null_space(cp)
-    z_fit = _fit_constraint_null_space(c)
+    z_fit = z_pred if mod_con == 2 else _fit_constraint_null_space(c)
     n_cons = 1
     return T2Basis(
         x_raw @ z_fit,

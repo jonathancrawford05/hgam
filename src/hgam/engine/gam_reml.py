@@ -171,12 +171,19 @@ figures and the term-by-term audit against eq. (4).
 """
 
 import numpy as np
+from scipy.special import gammaln, xlogy
+from scipy.stats import binom
 
 from hgam.engine.gam_family import Family
 from hgam.engine.gam_reml_appendix_b import appendix_b_transform
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 
-__all__ = ["penalty_block_square_roots", "reml_score_general"]
+__all__ = [
+    "mgcv_reml_score_offset",
+    "penalty_block_square_roots",
+    "reml_score_general",
+    "saturated_log_likelihood",
+]
 
 _SQRT_RANK_RELTOL = 1.0e-14
 """Relative eigenvalue floor for :func:`penalty_block_square_roots`'s own
@@ -444,3 +451,67 @@ def reml_score_general(
     return float(
         0.5 * residual_df * (1.0 + np.log(phi_hat)) + k_term + 0.5 * residual_df * np.log(2.0 * np.pi)
     )
+
+
+def saturated_log_likelihood(family: Family, y: np.ndarray, weights: np.ndarray | None = None) -> float:
+    """The saturated log-likelihood ``ls`` of a known-scale family at scale 1.
+
+    mgcv counterpart: the ``ls`` that ``fix.family.ls`` (gam.fit3.r, mgcv 1.9-4) adds to a family, first
+    element (``family$ls(y, w, n, scale)[1]``; its scale derivatives are zero for these families):
+
+    - poisson: ``sum(dpois(y, y, log = TRUE) * w)``;
+    - binomial: ``-binomial()$aic(y, n, y, w, 0) / 2``, which for a proportion response with prior weights
+      ``w`` (``n`` all one after ``binomial()$initialize``) is ``sum(dbinom(round(w*y), round(w), y, log =
+      TRUE))`` over ``w > 0``.
+
+    A free-scale family's ``ls`` depends on the scale and is not ported here (gaussian's profiled score in
+    :func:`reml_score_general` already includes it); asking for one raises.
+
+    Raises:
+        HgamNotImplementedError: a family other than poisson or binomial.
+    """
+    y = np.asarray(y, dtype=np.float64)
+    w = np.ones_like(y) if weights is None else np.asarray(weights, dtype=np.float64)
+    if family.name == "poisson":
+        # dpois(y, y, log = TRUE) = y log y - y - lgamma(y + 1), with 0 log 0 = 0.
+        return float(np.sum((xlogy(y, y) - y - gammaln(y + 1.0)) * w))
+    if family.name == "binomial":
+        keep = w > 0.0
+        m = np.round(w[keep])
+        return float(np.sum(binom.logpmf(np.round(w[keep] * y[keep]), m, y[keep])))
+    raise HgamNotImplementedError(
+        f"saturated_log_likelihood: family {family.name!r} is not ported (fix.family.ls); only the "
+        "known-scale poisson and binomial are."
+    )
+
+
+def mgcv_reml_score_offset(
+    family: Family,
+    y: np.ndarray,
+    penalty_blocks: tuple[np.ndarray, ...],
+    *,
+    weights: np.ndarray | None = None,
+    gamma: float = 1.0,
+) -> float:
+    """The constant that turns :func:`reml_score_general` into mgcv's REML score (``m$gcv.ubre``).
+
+    mgcv counterpart: the known-scale ``REML`` of ``gam.fit3`` (gam.fit3.r, mgcv 1.9-4, scale 1),
+    ``(Dp/2 - ls[1])/gamma + rank.tol/2 - det/2 - Mp/2*(log(2*pi) - log(gamma))``. This module drops the
+    ``lambda``-independent terms, so mgcv's score is ``reml_score_general + offset`` with
+    ``offset = -ls/gamma - Mp/2*log(2*pi) + Mp*log(gamma)`` (the last term because this module carries
+    ``-Mp/2*log(gamma)`` where mgcv carries ``+Mp/2*log(gamma)``). ``Mp = p - rank(S)``, Appendix B's
+    structural rank. Measured at ``gamma = 1`` on fixtures 27b2 and 27d3 (tier 1): ``Mp`` 6 and 3, the
+    offset reproduces ``m$gcv.ubre``. Only the outer search's stopping scale uses it (``newton``'s
+    ``score.scale``), so nothing is optimised differently.
+
+    A free-scale family returns ``0.0``: gaussian's profiled score already equals ``m$gcv.ubre`` (ADR-231);
+    quasipoisson's differs by a nearly constant amount (its extended quasi-likelihood ``ls`` depends on the
+    scale, which mgcv's ``newton`` estimates as one more coordinate), recorded in ``docs/DEFERRED.md``.
+    """
+    if not family.dispersion_fixed:
+        return 0.0
+    p = penalty_blocks[0].shape[0]
+    rank_s = appendix_b_transform(penalty_blocks, np.ones(len(penalty_blocks), dtype=np.float64)).rank
+    mp = float(p - rank_s)
+    ls = saturated_log_likelihood(family, y, weights)
+    return float(-ls / gamma - 0.5 * mp * np.log(2.0 * np.pi) + mp * np.log(gamma))

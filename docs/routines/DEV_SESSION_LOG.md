@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-21 (forty-second slice): mgcv's `newton` port, opt in (PR #48 follow-up (b), first slice)
+
+PR #50 auto-merged (six conditions posted; branch delete cut by the git proxy). Ported `newton` (gam.fit3.r) as `newton_select_lambdas(iteration="mgcv")`, default unchanged; `mgcv_reml_score_offset` and `saturated_log_likelihood` (fix.family.ls) for `score.scale`. The convergence test alone regressed four select fits (paths diverge at the step logic), so the whole iteration is ported.
+Tests: 866 → 877 (`tests/test_mgcv_newton.py`; fixture 27e). `make lint` clean. Against mgcv's default fits (tier 1): iteration counts equal on all five; eta 27b2 8.1e-11, 27d3 2.1e-10 (predict 3.2e-10), sz select 6.6e-5, fs select 1.8e-10, by-numeric 1.2e-10; at conv.tol 1e-12 vs tight refits 1.2e-10.
+Deferred: quasipoisson `score.scale`, gamma != 1 offset unmeasured, sz select final score 8.8e-4. Question for Jonathan: Q1 (reference for ridge cases). Next: the port as default, refusal lifted.
+
 ## 2026-11-21 (PR #49 review nits)
 
 Jonathan asked for PR #49's two nits after it merged. `control={}` (mgcv `control = list()`) returns the default `conv.tol` instead of a misleading validation error; the inner P-IRLS `conv.tol/100` tightening (gam.fit3.r:1308, not ported) is recorded in DEFERRED for follow-up (b).

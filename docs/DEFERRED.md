@@ -56,3 +56,10 @@ One line each: what differs or is missing, where it was seen, and why it did not
   Also not ported: `newton` tightens the inner P-IRLS tolerance to `conv.tol/100` (gam.fit3.r:1308); hgam's stays at
   `_IRLS_TOL = 1e-10`. PR #49 review measured it is not the 27d3 stall (IRLS tol 1e-10/1e-12/1e-14: gradient
   9.7e-10/6.5e-10/1.0e-9 against 8.0e-10, every gate holds). Follow-up (b) ports it with `newton`.
+- mgcv's `newton` port (`newton_select_lambdas(iteration="mgcv")`, section 27e): `score.scale` uses mgcv's REML
+  score only for the known-scale families (`mgcv_reml_score_offset`: `-ls/gamma - Mp/2 log(2 pi) + Mp log(gamma)`,
+  measured at `gamma = 1` only). Gaussian's profiled score already equals mgcv's; quasipoisson's differs by a nearly
+  constant amount, and mgcv's `newton` estimates its log scale as one more coordinate, which is not ported. On
+  `gam_binomial_cloglog_sz_select_reml` (log sp up to 18.8) hgam's final REML score is 8.8e-4 from mgcv's at the
+  same iteration count; eta is within 6.6e-5. The cause is not measured (a candidate: Wood 2011 section 3.1's stable
+  reparameterisation, not ported, at sp near 1e8); not a key result.

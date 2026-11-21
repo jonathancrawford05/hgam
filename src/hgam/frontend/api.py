@@ -594,15 +594,24 @@ def _refuse_te(call: TensorCall, parsed: ParsedFormula) -> None:
             )
 
 
-def _refuse_t2(call: TensorCall, parsed: ParsedFormula, *, select: bool) -> None:
+def _refuse_t2(call: TensorCall, parsed: ParsedFormula, *, select: bool, discrete: bool) -> None:
     """``t2(x, z, bs="cr")`` is ported for ``gam(method="REML")`` and ``bam(discrete=TRUE)`` on its own
-    covariates. Refused by name: ``select=TRUE`` (not measured yet), and a t2 beside another smooth of
-    one of its covariates (``gam.side``, as for te: :func:`_refuse_te`). In a discrete bam a t2 is not
-    ``tero``-reordered (it is not a ``tensor.smooth.spec``) and its covariates are compressed jointly."""
-    if select:
+    covariates, and with ``select=TRUE`` in ``bam(discrete=TRUE)`` (smoothCon's ``null.space.penalty``
+    ``need.full`` branch, which ``null_space_penalty`` follows, built under bam's ``modCon = 2`` constraint
+    ``Cp``; make_fixtures.R section 27d).
+
+    Refused by name: ``select=TRUE`` in a REML gam. The design and its four penalties are mgcv's (the fit at
+    mgcv's own smoothing parameters agrees), but on section 27d's ``p ~ f + t2(x, z)`` the rn block's
+    smoothing parameter lies on a flat REML ridge, and hgam's Newton search stops between mgcv's default fit
+    and its tight-``conv.tol`` refit (log sp 5.66 against 4.85 and 18.8), 1.3e-3 from the latter on
+    prediction, outside the 1e-3 gate. Also refused: a t2 beside another smooth of one of its covariates
+    (``gam.side``, as for te: :func:`_refuse_te`). In a discrete bam a t2 is not ``tero``-reordered (it is
+    not a ``tensor.smooth.spec``) and its covariates are compressed jointly."""
+    if select and not discrete:
         raise HgamNotImplementedError(
-            f"gam(): select=True with {call.text} is not verified against mgcv yet (smoothCon's "
-            "null.space.penalty on a t2 term)."
+            f"gam(): select=True with {call.text} in a REML gam does not meet mgcv's gates yet (the "
+            "null-space penalty's smoothing parameter can lie on a flat REML ridge where hgam's Newton "
+            "search stops elsewhere than mgcv's). It is ported for bam(method='fREML', discrete=True)."
         )
     _refuse_te(call, parsed)
 
@@ -756,7 +765,7 @@ def _build_model(
             if call.kind == "te":
                 _refuse_te(call, parsed)
             if call.kind == "t2":
-                _refuse_t2(call, parsed, select=select)
+                _refuse_t2(call, parsed, select=select, discrete=tero)
             call = _tero(call) if tero and call.kind != "t2" else call
             margin_knots = tuple(
                 pair

@@ -172,7 +172,9 @@ def test_t2_prediction_matches_the_basis(load_fixture) -> None:
     ],
 )
 def test_t2_refusals(formula: str, kwargs: dict, needle: str, load_fixture) -> None:
-    """What t2 does not port yet is refused by name: select=TRUE (not measured), a t2
+    """What t2 does not port yet is refused by name: select=TRUE in a REML gam (section 27d3: hgam's Newton
+    search stops on the null-space sp's flat REML ridge 1.3e-3 from mgcv's tight refit on prediction; ported
+    for discrete bam, ``tests/test_t2_discrete.py``), a t2
     beside another smooth of its covariates (gam.side), and t2()'s other arguments, small k and other
     margin bases."""
     data = _columns(load_fixture("gam_binomial_cloglog_factor_t2_reml")["data"])

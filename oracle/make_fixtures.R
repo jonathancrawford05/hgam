@@ -821,4 +821,40 @@ set.seed(8547); xu27e <- mgcv:::compress.df(d27e[c("x", "z")])
 put("bam_discrete_binomial_cloglog_t2_binned", bam_disc_case(b27c5, d27e, f27c5, "binomial(link='cloglog')",
     c(t2_disc_extra(b27c5, NULL, nd27c), list(compress_nr = nrow(xu27e), compress_x = xu27e$x, compress_z = xu27e$z,
                                               compress_index = as.integer(attr(xu27e, "index"))))))
+# 27d. select = TRUE with t2. smoothCon's null.space.penalty branch takes need.full for t2 (several penalties): St is
+# the sum of the scaled, constrained penalties and U U' is appended over its eigenvectors with eigenvalue below
+# max * eps^0.66 (rank 3 here: the 2 x 2 all-null block less the constraint), null.space.dim 0. The penalty is built in
+# the fit parameterisation, so under gam's sparse C (modCon = 0) and under bam's dense Cp (modCon = 2); smoothCon adds
+# none to Sp. 27d1: smoothCon on section 27's data at both modCon. Then 27b's two models with select = TRUE as a REML gam
+# (27d2, 27d3; 27d3's rn sp is again on its flat ridge, so it is refitted at a tight newton conv.tol as in 27b) and as a
+# discrete bam (27d4, 27d5), each with predict on new data.
+t2s_case <- function(sm) list(data = d26[c("x", "z")], X = sm$X, S = unname(sm$S), rank = sm$rank,
+                              null_space_dim = sm$null.space.dim)
+put("smoothcon_t2_cr_select", list(
+  mod_con_0 = t2s_case(smoothCon(t2(x, z, bs = "cr", k = c(5, 4)), d26, knots = t2_kn, absorb.cons = TRUE,
+                                 null.space.penalty = TRUE)[[1]]),
+  mod_con_2 = t2s_case(smoothCon(t2(x, z, bs = "cr", k = c(5, 4)), d26, knots = t2_kn, absorb.cons = TRUE,
+                                 null.space.penalty = TRUE, modCon = 2)[[1]])))
+m27d2 <- gam(as.formula(f27b1), family = binomial(link = "cloglog"), weights = n, data = d26b, knots = te_knots,
+             method = "REML", select = TRUE)
+put("gam_binomial_cloglog_t2_select_reml", c(gam_case(m27d2, d26b, f27b1, "binomial(link='cloglog')"),
+                                             te_extra(m27d2, te_knots), list(select = TRUE)))
+m27d3 <- gam(as.formula(f27b2), family = binomial(link = "cloglog"), weights = n, data = d26b, method = "REML",
+             select = TRUE)
+m27d3t <- gam(as.formula(f27b2), family = binomial(link = "cloglog"), weights = n, data = d26b, method = "REML",
+              select = TRUE, control = gam.control(newton = list(conv.tol = 1e-12)))
+pr27d3t <- predict(m27d3t, nd26b, se.fit = TRUE)
+put("gam_binomial_cloglog_factor_t2_select_reml", c(gam_case(m27d3, d26b, f27b2, "binomial(link='cloglog')"),
+    te_extra(m27d3, NULL), list(select = TRUE),
+    list(tight = c(gam_case(m27d3t, d26b, f27b2, "binomial(link='cloglog')")[
+      c("sp", "edf", "eta", "se", "reml", "outer_iter", "outer_conv")],
+      list(conv_tol = 1e-12, fit_new = as.numeric(pr27d3t$fit), se_new = as.numeric(pr27d3t$se.fit))))))
+b27d4 <- bam(as.formula(f27b1), family = binomial(link = "cloglog"), weights = n, data = d26b, knots = te_knots,
+             method = "fREML", discrete = TRUE, select = TRUE)
+put("bam_discrete_binomial_cloglog_t2_select", bam_disc_case(b27d4, d26b, f27b1, "binomial(link='cloglog')",
+    c(t2_disc_extra(b27d4, te_knots, nd26b), list(select = TRUE))))
+b27d5 <- bam(as.formula(f27b2), family = binomial(link = "cloglog"), weights = n, data = d26b, method = "fREML",
+             discrete = TRUE, select = TRUE)
+put("bam_discrete_binomial_cloglog_factor_t2_select", bam_disc_case(b27d5, d26b, f27b2, "binomial(link='cloglog')",
+    c(t2_disc_extra(b27d5, NULL, nd26b), list(select = TRUE))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

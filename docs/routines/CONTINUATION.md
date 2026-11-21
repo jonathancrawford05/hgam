@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-20, by the development run's thirty-ninth slice: `t2` on cr in discrete bam (PLAN step 3). No
-open pull request at the start (PR #46 merged). Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-21, by the development run's fortieth slice: `select=TRUE` with t2 (PLAN step 3). No open pull
+request at the start (PR #47 merged); Jonathan decided PR #48's question (option (a), follow-ups (c) then (b)). Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -257,17 +257,31 @@ constraint |Cp| at 5.9e-15 (sign-free: nat.param's eigenvector signs; over the d
 still refuse (not measured). The refusal case `discrete=True` in `test_t2_refusals` is retired (SETTINGS condition 5),
 replaced by `test_discrete_t2_meets_the_gates`. Tests: 849 pass, no xfail.
 
-## Next slice: `select=TRUE` with t2
+`select=TRUE` with t2 (section 27d, this run's PR): no engine change. smoothCon's `null.space.penalty` takes `need.full`
+for t2 and appends `U U'` over the null space of the summed penalties (rank 3) in the fit parameterisation (gam's sparse
+`C`, bam's `Cp`); `null_space_penalty` gives it at both modCon (27d1, 2.3e-14 up to the orthogonal map,
+`tests/test_t2_basis.py`). Discrete bam (27d4, 27d5, `tests/test_t2_discrete.py`): eta 1.4e-11, se 3.5e-11, edf 2.4e-5
+of the gate width, predict on new data 7.2e-12 / se 3.3e-11, four sp, structure, rank and names exact. In a REML gam
+select stays refused by name (`api._refuse_t2(select=, discrete=)`): on 27d3 (`p ~ f + t2(x, z)`) the rn block's sp is
+on a flat ridge again, mgcv's default stops at log sp 4.85 and its tight refit at 18.8 (lower score), hgam's Newton
+at 5.66: eta 1.0e-3 and predict 1.3e-3 from the tight fit (gate 1e-3). 27d2 meets every gate (eta 2.2e-4). With hgam's
+`conv_tol` at 1e-12 both meet the tight fit at 1.9e-9, so the design and the four penalties are mgcv's; only the stop
+point differs. Fixtures 27d2, 27d3 are committed for the follow-up. Tests: 855 pass, no xfail.
 
-- smoothCon's `null.space.penalty` branch (smooth.r 1.9-4): t2 has several penalties, so `need.full`; St sums the
-  scaled, constrained identities and `U U'` is appended for eigenvalues below `max * eps^0.66`. For t2 on two cr
-  margins the unpenalised block is 2 x 2 = 4 columns less the constraint: expect rank 3. Check whether the penalty is
-  built in the fit (C) or prediction (Cp) parameterisation for gam (modCon = 0) and bam (modCon = 2), and whether
-  `null_space_penalty` (`hgam.engine.gam_select_penalty`) already gives it (te needed no change).
-- Fixture 27d: `smoothCon(t2(...), null.space.penalty = TRUE)` on section 26's data, then 27b's two models with
-  `select = TRUE` as a REML gam and as a discrete bam; gates as 26d. Then lift `_refuse_t2`'s select refusal (and
-  retire its refusal case under condition 5).
-- After t2: the PLAN's next widening item.
+## Next slice: `gam.control(newton = list(conv.tol = ))` on `gam(method="REML")` (PR #48 follow-up (c))
+
+- Jonathan's decision on PR #48: option (a) for that PR. Then (c), then (b) (`docs/PLAN.md` step 3).
+- (c): expose mgcv's `gam.control(newton = list(conv.tol = ))` as a user-facing option on `gam(method="REML")`, for
+  example `control={"newton": {"conv_tol": ...}}`. Read `gam.control` (gam.fit3.r / mgcv.r, 1.9-4) for the argument's
+  name and shape. Default unchanged at `MGCV_NEWTON_CONV_TOL = 1e-6`. Pass it to `newton_select_lambdas(conv_tol=)`
+  through `fit_engine_gam`. Refuse any other `gam.control` entry by name, and refuse the option on discrete bam.
+- Acceptance: on 27d3 (`gam_binomial_cloglog_factor_t2_select_reml`) with `conv_tol=1e-12`, hgam meets every gate
+  against the fixture's `tight` refit. This run measured eta 1.2e-9 and predict 1.9e-9, with log sp 19.2 against
+  mgcv's 18.8. Note that hgam reported `converged=False` there, so check why first. 27b2 at 1e-12 gave eta 4.8e-10.
+  The select refusal for t2 in a REML gam stays until (b), unless the user opts in by passing the tight tolerance.
+  Whether to lift it under the option is a question for Jonathan, not this slice's call.
+- Then (b): port mgcv's `newton` (gam.fit3.r) in slices. Done when 27d3 meets every gate against mgcv's default fit
+  and the refusal is lifted.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 
@@ -316,7 +330,7 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 ## Open questions
 
-None.
+None. PR #48's question was decided on 2026-11-21: option (a), with follow-ups (c) then (b) (Next slice).
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

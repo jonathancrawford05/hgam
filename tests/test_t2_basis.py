@@ -19,6 +19,7 @@ import pytest
 
 from hgam.engine.gam_basis_fs import nat_param
 from hgam.engine.gam_basis_t2 import t2_basis, t2_model_matrix, t2_predict_design
+from hgam.engine.gam_select_penalty import null_space_penalty
 from hgam.errors import HgamNotImplementedError
 
 GATE = 1e-8
@@ -114,6 +115,38 @@ def test_t2_basis_matches_smoothcon(name, load_fixture, margin) -> None:
     for quantity, value in values.items():
         margin("t2 basis", f"{quantity}, max rel", value, "1e-8 rel", name)
         assert value < GATE, quantity
+
+
+@pytest.mark.parametrize("mod_con", [0, 2])
+def test_t2_null_space_penalty_matches_smoothcon(mod_con: int, load_fixture, margin) -> None:
+    """Section 27d1: ``smoothCon(t2(x, z, bs = "cr", k = c(5, 4)), null.space.penalty = TRUE, modCon = )``.
+    smoothCon's ``need.full`` branch appends ``U U'`` over the null space of the summed (scaled, constrained)
+    penalties: rank 3, the 2 x 2 all-null block less the constraint, and ``null.space.dim`` becomes 0. It is
+    built in the fit parameterisation: gam's sparse ``C`` (``modCon = 0``) and bam's ``Cp`` (``modCon = 2``).
+    hgam's :func:`null_space_penalty` on ``t2_basis``'s penalties gives the same fourth penalty, held with the
+    first three up to the orthogonal map ``R`` that takes hgam's design to mgcv's (eigenvector signs; module
+    docstring)."""
+    fx = load_fixture("smoothcon_t2_cr_select")[f"mod_con_{mod_con}"]
+    xs = [_column(fx["data"], v) for v in ("x", "z")]
+    got = t2_basis(xs, (5, 4), [np.asarray([1.0, 3.0, 7.0, 12.0, 21.0]), None], mod_con=mod_con)
+    extra = null_space_penalty(got.penalties)
+    assert extra is not None
+    s_null, null_rank = extra
+    assert len(fx["S"]) == 4
+    assert list(fx["rank"]) == [*got.rank, null_rank] == [6, 4, 6, 3]
+    assert fx["null_space_dim"] == 0
+    r = _orthogonal_map(got.design, fx["X"])
+    np.testing.assert_allclose(r.T @ r, np.eye(r.shape[0]), rtol=0, atol=1e-10)
+    rel_x = _rel(got.design @ r, fx["X"])
+    rel_s = max(_rel(r.T @ g @ r, sr) for g, sr in zip(got.penalties, fx["S"][:3], strict=True))
+    rel_null = _rel(r.T @ s_null @ r, fx["S"][3])
+    name, tag = "smoothcon_t2_cr_select", f"modCon {mod_con}"
+    margin("t2 select", f"X (orthogonal map), {tag}, max rel", rel_x, "1e-8 rel", name)
+    margin("t2 select", f"S, {tag}, max rel", rel_s, "1e-8 rel", name)
+    margin("t2 select", f"null-space penalty, {tag}, max rel", rel_null, "1e-8 rel", name)
+    assert rel_x < GATE
+    assert rel_s < GATE
+    assert rel_null < GATE
 
 
 def test_t2_model_matrix_blocks() -> None:

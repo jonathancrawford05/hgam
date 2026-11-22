@@ -1,9 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-22, by the development run's forty-third slice: the second slice of PR #48 follow-up (b), the
-port of mgcv's `newton` as the default outer iteration, with t2's REML `select=TRUE` refusal lifted (Jonathan chose
-PR #51's Q1 option (a) on 2026-11-22). PR #52 (the matching `docs/PRIORITIES.md` paragraph) is merged; this slice's
-tests follow that rule. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-22, by the development run's forty-fourth slice: the one-covariate `tp` basis, measured against
+section 28 and not ported (PLAN step 3, the bases). Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -309,14 +307,24 @@ gated like for like: default tolerance against mgcv's default fit (`test_t2_fit`
 `max|g| * conv_tol / gradient_tolerance` (for the port, `max|g| / (5 * score.scale)`). Every other fixture test passed
 unchanged with the port as the default. Tests: 876 pass.
 
-## Next slice: the bases, `tp` first (PLAN step 3)
+The one-covariate tp basis (2026-11-22, this run; section 28, `tests/test_tp_fit.py`): measured, not ported. The moved
+`tp_basis` plus `absorb_sum_to_zero_constraint` spans smoothCon's tp design (6.2e-14 in mgcv's basis; the coordinates
+are a gauge) with the penalty at 3.0e-14. REML gam fits `s(x) + s(z, bs="cr", k=6)` (binomial cloglog), two tp smooths
+with an offset (Poisson) and the first with `select=TRUE` meet every gate: eta at most 8.2e-12 on data and new data
+(x outside its range), se 3.2e-4 relative, edf 7.9e-9 of the gate, structure and coefficient names exact. Still refused
+by name: tp in discrete bam, `by=` on tp, tp as the `fs` base (mgcv's default `xt`), two-covariate `s(x, z)`, `ts`.
+Tests: 880 pass.
 
-- PLAN step 3's rule: first measure what the moved engine already does against a fixture; port only what misses a
-  gate. `s(x)` / `s(x, bs="tp", k=)` is accepted by `gam()` today (`api.py`, one covariate). Find which tp fixtures
-  exist (`grep -l '"tp"' tests/fixtures`) and which tp forms the exit formula and hierarchical models need (tp in
-  `by=`, `fs` with a tp base, two-covariate tp); add the first missing one to `oracle/make_fixtures.R`, hold it at the
-  gates, and port `smooth.construct.tp.smooth.spec` (smooth.r) pieces only where it misses.
-- The session needs R with mgcv for a new fixture (`which Rscript`; install as DAILY_DEV step 5 says).
+## Next slice: `fs` on its default tp base (PLAN step 3, the bases)
+
+- `s(x, f, bs="fs")` with no `xt` is tp-based in mgcv (`smooth.construct.fs.smooth.spec`, smooth.r: `xt` defaults to
+  `"tp"`), the most common hierarchical-GAM form; hgam refuses it today (only `xt="cr"`). Add section 29 to
+  `oracle/make_fixtures.R`: `smoothCon(s(x, f, bs="fs", k=5))` and a REML gam `p ~ s(x, f, bs="fs", k=5)` (and with
+  `s(x)` beside it), held at the gates as `tests/test_fs_fit.py` does for cr. Measure first with `tp_basis` as the
+  base; port the fs-on-tp pieces of `smooth.construct.fs.smooth.spec` (the base's null space gets its own penalty per
+  level) only where a gate is missed. Lift the refusal only for the measured form.
+- After that, in order: tp in discrete bam (`discrete.mf` bins the covariate; tp is built on the compressed frame),
+  `by=` on tp, then the remaining bases (`ts`, `cs`, `ps`, `cc`).
 - Optional later cleanup (not blocking): remove the `"hgam"` Newton iteration and its tests once nothing relies on it;
   ask Jonathan in that slice's PR whether to keep it as a diagnostic.
 - Not ported yet (DEFERRED): the inner P-IRLS tolerance `conv.tol/100`; `edge.correct`; quasipoisson's log-scale

@@ -869,4 +869,39 @@ put("gam_newton_trajectories", list(cases = list(
   newton_case("gam_binomial_cloglog_sz_select_reml", m10s),
   newton_case("gam_binomial_cloglog_cr_fs_select_reml", m24e3),
   newton_case("gam_binomial_cloglog_by_numeric_reml", m14))))
+# 28. the thin-plate regression spline, one covariate (smooth.construct.tp.smooth.spec, smooth.r; construct_tprs, tprs.c),
+# mgcv's default smooth. Fewer than max.knots = 2000 distinct values, so no subsampling. x is rounded to two decimals
+# so values repeat (the basis is built on the unique values). 28a: smoothCon(s(x, bs = "tp", k = 8), absorb.cons = TRUE)
+# on the data: X and S (compared up to the eigenvector gauge, tests/test_tp_fit.py). 28b: p ~ s(x) + s(z, bs = "cr",
+# k = 6) as a REML gam (binomial cloglog, weights n), predict on new data with se, including x outside its range.
+# 28c: two tp smooths at set k in a Poisson REML gam with an exposure offset. 28d: 28b with select = TRUE.
+set.seed(28); n <- 1200
+d28 <- data.frame(x = round(runif(n, 0, 10), 2), z = runif(n, -1, 1), n = sample(20:200, n, TRUE))
+d28$p <- rbinom(n, d28$n, 1 - exp(-exp(-3.5 + 0.4 * sin(d28$x / 1.6) + 0.3 * d28$z^2))) / d28$n
+nd28 <- data.frame(x = c(-0.5, 0, 2.345, 5, 7.77, 10, 10.5), z = c(0, -1, 0.3, 0.9, -0.4, 1, 0.2))
+sc28 <- smoothCon(s(x, bs = "tp", k = 8), d28, absorb.cons = TRUE)[[1]]
+put("smoothcon_tp_k8", list(x = d28$x, k = 8, X = sc28$X, S = sc28$S[[1]], null_space_dim = sc28$null.space.dim,
+                            rank = sc28$rank))
+f28b <- "p ~ s(x) + s(z, bs='cr', k=6)"
+m28b <- gam(as.formula(f28b), family = binomial(link = "cloglog"), weights = n, data = d28, method = "REML")
+pr28b <- predict(m28b, nd28, se.fit = TRUE)
+put("gam_binomial_cloglog_tp_reml", c(gam_case(m28b, d28, f28b, "binomial(link='cloglog')"),
+    list(rank = m28b$rank, coef_names = names(coef(m28b)), newdata = nd28,
+         fit_new = as.numeric(pr28b$fit), se_new = as.numeric(pr28b$se.fit))))
+d28$expo <- round(runif(n, 200, 5000)); d28$log_expo <- log(d28$expo)
+d28$deaths <- rpois(n, d28$expo * exp(-6 + 0.3 * cos(d28$x / 2) - 0.4 * d28$z))
+f28c <- "deaths ~ s(x, bs='tp', k=6) + s(z, bs='tp', k=5) + offset(log_expo)"
+m28c <- gam(as.formula(f28c), family = poisson, data = d28, method = "REML")
+pr28c <- predict(m28c, cbind(nd28, log_expo = 0), se.fit = TRUE)
+put("gam_poisson_tp_reml", c(gam_case(m28c, d28, f28c, "poisson"),
+    list(rank = m28c$rank, coef_names = names(coef(m28c)), newdata = nd28,
+         fit_new = as.numeric(pr28c$fit), se_new = as.numeric(pr28c$se.fit))))
+# 28d. 28b's model with select = TRUE: smoothCon's null.space.penalty adds a penalty on the tp term's null space (the
+# linear function left after the constraint).
+m28d <- gam(as.formula(f28b), family = binomial(link = "cloglog"), weights = n, data = d28, method = "REML",
+            select = TRUE)
+pr28d <- predict(m28d, nd28, se.fit = TRUE)
+put("gam_binomial_cloglog_tp_select_reml", c(gam_case(m28d, d28, f28b, "binomial(link='cloglog')"),
+    list(rank = m28d$rank, coef_names = names(coef(m28d)), newdata = nd28,
+         fit_new = as.numeric(pr28d$fit), se_new = as.numeric(pr28d$se.fit))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

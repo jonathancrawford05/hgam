@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-22 (forty-fourth slice): the one-covariate `tp` basis, measured (PLAN step 3, bases)
+
+No open PR at start (PR #53 merged). Section 28 fixtures: `smoothCon(s(x, bs="tp", k=8))`, `s(x) + s(z, bs="cr")` (binomial cloglog), two tp smooths with an offset (Poisson), and `select=TRUE`. No engine change: the moved `tp_basis` met every gate.
+Tests: 876 → 880 (`tests/test_tp_fit.py`). `make lint` clean. Tier 1 (mgcv 1.9-1): basis in mgcv's gauge 6.2e-14 (design) and 3.0e-14 (penalty); eta ≤ 8.2e-12 on data and new data, se ≤ 3.2e-4 relative, edf ≤ 7.9e-9 of the gate; structure and coefficient names exact.
+Deferred: se line extended with the tp numbers. Next: `fs` on its default tp base.
+
 ## 2026-11-22 (forty-third slice): the `newton` port is the default (PR #48 follow-up (b), second slice)
 
 Jonathan chose PR #51 Q1 option (a) (like-for-like gating; the PRIORITIES text is PR #52, not this slice). `fit_engine_gam(newton_iteration=None)` now runs the port; `"hgam"` stays opt in. `_refuse_t2` no longer refuses `select=TRUE` in a REML gam. `summary()` reports the test the search ran (`EngineGAMFit.conv_tol`; mgcv's gradient relative to `5 * score.scale`).

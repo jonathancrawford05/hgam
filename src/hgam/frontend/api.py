@@ -820,18 +820,15 @@ def _build_model(
             smoothed = call.variables[is_factor.index(False)]
             need_numeric(smoothed, call.text)
             levels = need_factor(factor_name).levels
-            if call.base == "tp":
-                refuse_knots(smoothed, call.text)
             smooth.append(
                 TermSpec(
                     label=call.text,
                     variables=(factor_name, smoothed),
                     basis="fs",
                     k=(call.k,),
-                    knots=cr_knots(smoothed, call.k, call.text) if call.base == "cr" else None,
+                    knots=cr_knots(smoothed, call.k, call.text),
                     n_levels=len(levels),
                     margin_order=call.variables,
-                    fs_base=call.base,
                 )
             )
             # smooth.construct.fs.smooth.spec: bs.dim is ncol(X), the base bs.dim times nf.
@@ -987,7 +984,7 @@ def gam(
             Supported: a bare ``s(x, k=)`` / ``s(x, bs="tp", k=)`` (thin-plate, ``mgcv``'s
             default, ADR-261), ``s(x, bs="cr", k=, by=)`` (numeric or factor ``by``),
             ``s(f, bs="re")``, ``s(f, x, bs="sz", k=, xt=list(bs="cr"))``,
-            ``s(x, f, bs="fs", k=)`` on its default tp base or ``xt="cr"``,
+            ``s(x, f, bs="fs", k=, xt="cr")``,
             ``ti(x, z, bs="cr", k=)``, factors ``a``, ``a:b``
             (with both main effects), ``offset(col)``. Anything else is refused by
             name (:class:`~hgam.errors.HgamValidationError`).

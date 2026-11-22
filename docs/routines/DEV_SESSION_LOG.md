@@ -1,10 +1,10 @@
 # Development session log
 
-## 2026-11-22 (forty-fifth slice): `fs` on its default tp base (PLAN step 3, bases)
+## 2026-11-22 (forty-fifth slice): `fs` on its default tp base, engine only (PLAN step 3, bases)
 
-Same run: PR #54 auto-merged after the Ready review of `74f9069` (six conditions posted; branch delete cut by the git proxy). Ported `smooth.construct.fs.smooth.spec`'s tp base: `tp_construct` (tp before `scale.penalty`), `fs_basis(base="tp")`, prediction through `tp_predict`; the parser takes no `xt` as tp, as mgcv does. PR #54's nit (`tp_predict`'s counterpart) done.
-Tests: 881 → 891 (section 29; four refusal-only cases retired, replaced by `test_fs_tp_fit.py`). `make lint` clean. Tier 1 (mgcv 1.9-1): basis 2.5e-14; eta ≤ 1.8e-11 on data and new data, se ≤ 6.9e-4 relative, edf ≤ 3.4e-9 of the gate, on fs, tp + fs, and tp + fs with select.
-Deferred: se line extended; fs line updated. Next: tp in discrete bam.
+Same run: PR #54 auto-merged after the Ready review of `74f9069` (six conditions posted; branch delete cut by the git proxy). Ported `tp_construct` and `fs_basis(base="tp")`; fits passed against local mgcv 1.9.1 (eta 1.8e-11) but CI's `oracle` (mgcv 1.9.4) failed: X 0.35, eta 2.2e-3 / 3.0e-2. Cause measured: the null pair's rotation is set by rounding and a 0.1 rad rotation moves eta 1.2e-3 (cr and tp). Front-end acceptance reverted; question for Jonathan on PR #55.
+Tests: 881 → 882 (`test_fs_tp_basis_matches_smoothcon_up_to_the_null_pair`). `make lint` clean. Tier 1: range columns 2.5e-14, null pair as a subspace 4.5e-15, penalties 6.6e-15. PR #54's nit (`tp_predict`'s counterpart) done.
+Deferred: the fs null-pair line. Next: depends on Jonathan's answer; otherwise tp in discrete bam.
 
 ## 2026-11-22 (PR #54 review follow-up, `ada3807`)
 

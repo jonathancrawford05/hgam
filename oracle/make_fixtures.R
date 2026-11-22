@@ -910,7 +910,8 @@ put("gam_binomial_cloglog_tp_select_reml", c(gam_case(m28d, d28, f28b, "binomial
 # column scaling, no smoothCon scale.penalty), then nat.param(type = 1) as for cr (section 24). 29a: smoothCon on section
 # 24's data, with PredictMat at its new values (Predict.matrix.fs.interaction calls Predict.matrix.tprs.smooth).
 # 29b: section 24b's REML fit at the tp base, predict on 24b's new data with se. 29c: the global-plus-group-curves form
-# s(x) + s(x, f, bs = "fs") on 24b's data, both tp. 29d: 29c with select = TRUE.
+# s(x) + s(x, f, bs = "fs") on 24b's data, both tp. 29d: 29c with select = TRUE. 29b to 29d are recorded for PR #55's
+# question and not yet gated: the fit depends on the rotation LAPACK gives the null-space pair (eigenvalues ~1e-20).
 sm29 <- smoothCon(s(x, f, bs = "fs", k = 6), d24)[[1]]
 put("smoothcon_fs_tp", list(x = d24$x, group = as.integer(d24$f) - 1L, n_levels = 3L, k = 6L, label = sm29$label,
   X = sm29$X, S = sm29$S, rank = sm29$rank, P = sm29$P, C_rows = nrow(sm29$C), null_space_dim = sm29$null.space.dim,

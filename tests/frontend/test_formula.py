@@ -7,7 +7,6 @@ import pytest
 
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 from hgam.frontend.formula import (
-    FsCall,
     ParametricCall,
     SmoothCall,
     TensorCall,
@@ -63,21 +62,6 @@ def test_a_bare_smooth_is_thin_plate_with_mgcvs_default_k() -> None:
     assert parse_formula('y ~ s(x, bs="cr")').terms == (SmoothCall("x", "cr", 10),)
 
 
-@pytest.mark.parametrize(
-    ("text", "base"),
-    [
-        ('s(f, x, bs="fs")', "tp"),
-        ('s(f, x, bs="fs", xt="tp")', "tp"),
-        ('s(f, x, bs="fs", xt=list(bs="tp"))', "tp"),
-        ('s(f, x, bs="fs", xt="cr")', "cr"),
-        ("s(f, x, bs='fs', xt=list(bs='cr'))", "cr"),
-    ],
-)
-def test_fs_base_follows_xt_with_tp_as_the_default(text: str, base: str) -> None:
-    """smooth.construct.fs.smooth.spec: base.bs is xt (or xt$bs), and "tp" when xt is absent."""
-    assert parse_formula(f"y ~ {text}").terms == (FsCall(("f", "x"), 10, base),)
-
-
 def test_a_thin_plate_smooth_takes_no_by() -> None:
     with pytest.raises(HgamNotImplementedError, match=r"by= on a thin-plate smooth"):
         parse_formula("y ~ s(x, by=g)")
@@ -89,7 +73,8 @@ def test_a_thin_plate_smooth_takes_no_by() -> None:
         ('y ~ s(x, bs="ts")', "bs='ts'"),
         ('y ~ s(x, bs="cc")', "bs='cc'"),
         ('y ~ s(x, bs="ps")', "bs='ps'"),
-        ('y ~ s(x, f, bs="fs", xt="ps")', 'xt="ps"'),
+        ('y ~ s(f, x, bs="fs")', "without xt="),
+        ('y ~ s(x, f, bs="fs", xt="tp")', 'xt="tp"'),
         ('y ~ s(f, x, bs="sz", k=8)', "without xt="),
         ('y ~ s(x, z, bs="cr")', "multi-variable smooth"),
         ('y ~ s(x, bs="cr", sp=1)', "argument 'sp'"),

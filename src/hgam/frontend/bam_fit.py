@@ -62,10 +62,9 @@ def fit_engine_bam(model: ModelSpec, data: Mapping[str, np.ndarray], y: np.ndarr
             "only poisson and binomial (the fixed-scale branch of bgam.fitd). Free-scale, "
             "quasi and extended families are different builds (ADR-260 amendment 2)."
         )
-    if any(term.basis == "tp" or term.fs_base == "tp" for term in model.terms):
+    if any(term.basis == "tp" for term in model.terms):
         raise HgamNotImplementedError(
-            "gam(method='fREML', discrete=True): tp terms (including a bare s(x) and an fs term on its "
-            "default tp base) are not "
+            "gam(method='fREML', discrete=True): tp terms (including a bare s(x)) are not "
             'supported — bam builds them on its compressed frame; write bs="cr" '
             "(ADR-261)."
         )

@@ -1,7 +1,8 @@
 # Continuation
 
-Last updated: 2026-11-21, by a review-nit slice after PR #49 (`gam.control(newton = list(conv.tol = ))`, merged). Jonathan
-asked for PR #49's two review nits; both are done here. Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-21, by the development run's forty-second slice: the first slice of PR #48 follow-up (b), the
+port of mgcv's `newton` (gam.fit3.r), opt in. PR #50 (PR #49's review nits) was merged in this run. Read
+`docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -281,19 +282,35 @@ PR #49 review nits (done): `control={}` (mgcv's `control = list()`) now keeps ev
 gam.fit3.r:1308) has a line in DEFERRED for follow-up (b). PR #50 review nit (done): `control={}` on discrete bam is
 accepted as the default (`test_empty_control_on_discrete_bam_is_the_default`). Tests: 866 pass.
 
-## Next slice: port mgcv's `newton` (gam.fit3.r), first step (PR #48 follow-up (b))
+mgcv's `newton` port, opt in (this run, `tests/test_mgcv_newton.py`, fixture 27e `gam_newton_trajectories`):
+`newton_select_lambdas(iteration="mgcv")` (`fit_engine_gam(newton_iteration="mgcv")`; default `"hgam"`, unchanged)
+runs mgcv's iteration on hgam's evaluation, exact Hessian and bounds: `uconv.ind`, the indefiniteness test, absolute
+eigenvalues floored at `max * eps^.7`, `maxNstep`, `qerror` (0.8), halving with the switch to steepest descent at the
+fourth halving, the steepest-descent trial for an indefinite Hessian, and the convergence test (`score.scale =
+|log(scale.est)| + |score|`, with mgcv's REML score from `gam_reml.mgcv_reml_score_offset`, `-ls - Mp/2 log(2 pi)`,
+and the Fletcher `scale.est`). Measured first: the convergence test alone moved 27b2 to mgcv's default fit but put
+four select fits 1.4e-3 to 1.1e-2 off it (their paths diverge at mgcv's step logic), so the whole iteration is ported.
+Against mgcv's default fits (tier 1): iteration counts equal mgcv's on all five cases; eta 27b2 8.1e-11, 27d3 2.1e-10
+(predict 3.2e-10, se 2.5e-3), sz select 6.6e-5, cr+fs select 1.8e-10, cr-by-numeric 1.2e-10. At `conv.tol = 1e-12`
+it converges and meets mgcv's tight refits to 1.2e-10 on 27b2, 27d3 and cr-by-numeric. Tests: 877 pass.
 
-- Done when (Jonathan, PR #48): 27d3 meets every gate against mgcv's **default** fit and `_refuse_t2`'s REML select
-  refusal is lifted. Split into slices.
-- Read `newton` (gam.fit3.r 1.9-4, line 1290 on) side by side with `hgam.engine.gam_reml_newton.newton_select_lambdas`.
-  Known differences so far: mgcv's convergence test (line 1647 on: `score.scale = abs(log(scale.est)) + abs(score)`
-  under REML; gradient within `5 * score.scale * conv.tol`; score change within `score.scale * conv.tol`; step failure
-  after `maxHalf` halvings counts as converged with a warning); `uconv.ind` (gradients below `0.1 * score.scale *
-  conv.tol` are dropped, with the `0.001 * max|grad|` refinement at line 1430); the indefinite-Hessian handling;
-  `qerror` and the step-length logic. Also the start (`initial.sp`) and `maxNstep = 5`.
-  Also the inner P-IRLS tolerance `conv.tol/100` (gam.fit3.r:1308; PR #49 review measured it is not the 27d3 stall).
-- First step: measure. Record mgcv's `newton` iterates on 27d3 and 27b2 (`trace` or `gam.control(trace = TRUE)`;
-  `outer.info`), fixture 27e, and compare hgam's path. Port the convergence test first if that alone moves the stop.
+Measured for the question below: with the port as the default, the suite's only key-result failures are the three
+tests that gate a default-tolerance fit against mgcv's tight refit (`test_t2_fit` 27b2 eta 1.2e-3,
+`test_cr_by_numeric` eta 1.4e-3, `test_tight_conv_tol_on_the_select_ridge`, which asserts the old stall), plus two
+summary tests that report the old tolerance (`epsilon_rel`).
+
+## Next slice: make the `newton` port the default (PR #48 follow-up (b), second slice), once Q1 is decided
+
+- Done when (Jonathan, PR #48): 27d3 meets every gate against mgcv's **default** fit (met through the port) and
+  `_refuse_t2`'s REML select refusal is lifted.
+- With Q1 (a): `fit_engine_gam(newton_iteration=)` defaults to `"mgcv"`; the ridge tests (`test_t2_fit` 27b2,
+  `test_cr_by_numeric`, `test_newton_conv_tol`) gate default-tolerance fits against mgcv's default fit and
+  `control={"newton": {"conv.tol": 1e-12}}` fits against the tight refit; `_refuse_t2` stops refusing `select=True`
+  in a REML gam (its refusal test is replaced by `test_mgcv_newton`'s 27d3 case, SETTINGS condition 5);
+  `summary().epsilon_rel` and `rel_projected_gradient` report mgcv's test (`5 * score.scale * conv.tol`). Then remove
+  the `"hgam"` iteration and its tests in a later slice, or keep it, as Jonathan prefers.
+- Not ported yet (DEFERRED): the inner P-IRLS tolerance `conv.tol/100`; `edge.correct`; quasipoisson's log-scale
+  coordinate.
 - Then the bases (`tp` first), PLAN step 3.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
@@ -343,7 +360,14 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 ## Open questions
 
-None. PR #48's question was decided on 2026-11-21: option (a), follow-up (c) done, (b) next.
+Q1 (this run's PR): which mgcv fit the ridge cases are gated against once the `newton` port is the default.
+`docs/PRIORITIES.md` gates a fitted quantity on a flat REML ridge against mgcv's tight refit (PR #12 option B, made
+because hgam's search was not mgcv's). The port follows mgcv's own path, so at the default tolerance it reproduces
+mgcv's default fit (27b2 eta 8.1e-11) and misses the tight refit (27b2 1.2e-3, cr-by-numeric 1.4e-3); at `conv.tol =
+1e-12` it reproduces the tight refit (1.2e-10). Options: (a) gate like for like: a default-tolerance fit against
+mgcv's default fit, a tight-tolerance fit against mgcv's tight refit (Jonathan rewrites that PRIORITIES paragraph;
+the fixtures already hold both fits); (b) keep the rule, so the port stays opt in and 27d3's refusal stays.
+Recommendation: (a). It is the reference Jonathan already set for 27d3 on PR #48.
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

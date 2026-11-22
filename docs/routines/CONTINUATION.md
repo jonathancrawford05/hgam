@@ -303,7 +303,9 @@ summary tests that report the old tolerance (`epsilon_rel`).
 
 - Done when (Jonathan, PR #48): 27d3 meets every gate against mgcv's **default** fit (met through the port) and
   `_refuse_t2`'s REML select refusal is lifted.
-- Q1 decided (a) on PR #51; the rule is in `docs/PRIORITIES.md`. `fit_engine_gam(newton_iteration=)` defaults to `"mgcv"`; the ridge tests (`test_t2_fit` 27b2,
+- Q1 decided (a) on PR #51; the rule is in `docs/PRIORITIES.md`. Until this slice lands, `main` still runs the
+  `"hgam"` iteration and its ridge tests still gate it against the tight refit (DEFERRED notes this).
+  `fit_engine_gam(newton_iteration=)` defaults to `"mgcv"`; the ridge tests (`test_t2_fit` 27b2,
   `test_cr_by_numeric`, `test_newton_conv_tol`) gate default-tolerance fits against mgcv's default fit and
   `control={"newton": {"conv.tol": 1e-12}}` fits against the tight refit; `_refuse_t2` stops refusing `select=True`
   in a REML gam (its refusal test is replaced by `test_mgcv_newton`'s 27d3 case, SETTINGS condition 5);
@@ -353,8 +355,9 @@ Decided on PR #51 (2026-11-22): option (a). A fitted quantity on a flat REML rid
 default-tolerance fit against mgcv's default fit, a `conv.tol = 1e-12` fit against mgcv's tight refit. This replaces
 PR #12's option B below. The rule is in `docs/PRIORITIES.md`.
 
-Superseded by PR #51. Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a fitted quantity at
-estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at the unchanged gate.
+Superseded by PR #51. Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a
+fitted quantity at estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at
+the unchanged gate.
 The fixture records both mgcv fits and their REML scores, and the tight fit is the reference only where mgcv's own
 tight score is not higher than its default score. mgcv's `newton` is not ported for this (option A not taken); the
 moved Newton search stays. The rule is in `docs/PRIORITIES.md`.

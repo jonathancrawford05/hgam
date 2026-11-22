@@ -15,7 +15,7 @@ from hgam.engine.gam_basis_tp import (
     tp_basis,
     tp_predict,
 )
-from hgam.errors import HgamValidationError
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 
 @pytest.fixture
@@ -131,7 +131,7 @@ def test_fewer_distinct_values_than_k_is_refused() -> None:
 
 def test_the_random_subsampling_regime_is_refused_by_name() -> None:
     x = np.linspace(0.0, 1.0, TP_MAX_KNOTS + 1)
-    with pytest.raises(HgamValidationError, match=r"max\.knots"):
+    with pytest.raises(HgamNotImplementedError, match=r"max\.knots"):
         tp_basis(x, 10)
 
 

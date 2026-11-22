@@ -1,10 +1,12 @@
-"""Wood's thin-plate regression spline basis, one covariate (``bs="tp"``) — R4 / ladder L7.
+"""Wood's thin-plate regression spline basis, one covariate (``bs="tp"``).
 
-``docs/PLAN_gam_real_data_readiness.md`` Slice R4, ADR-261. ``mgcv``'s default smooth:
+mgcv counterpart: ``smooth.construct.tp.smooth.spec`` (smooth.r) and its C routine ``construct_tprs``
+(tprs.c), mgcv 1.9-4; LAPACK's symmetric eigensolver replaces mgcv's Lanczos routine. Held to ``smoothCon``
+and to REML gam fits in ``tests/test_tp_fit.py`` (``make_fixtures.R`` section 28). ``mgcv``'s default smooth:
 a bare ``s(x)`` is ``bs="tp"``, ``k = 10`` (``M + 8`` with the null-space dimension
 ``M = 2``).
 
-**Parity claim (ADR-193, written before the code):** this module computes the
+What this module computes: the
 thin-plate regression spline ``design_X`` and ``penalty_S`` from the covariate and
 ``k`` alone (the eigen-truncation recipe below); ``mgcv`` computes them via
 ``smoothCon(s(x, bs="tp", k=k), absorb.cons=TRUE)`` (its ``construct_tprs`` C routine);
@@ -12,8 +14,7 @@ compared on the **column space of the design** and on **the penalty in a common 
 (:func:`compare_tp_basis`), not element-wise — see "The gauge" below.
 
 The recipe, pinned by reading ``mgcv:::smooth.construct.tp.smooth.spec`` and then
-measuring ``smoothCon`` output against it (tier 1, ADR-261 amendment log — hypotheses
-that the tier-3 probe re-measures), not guessed:
+measuring ``smoothCon`` output against it, not guessed:
 
 1. ``shift = mean(x)``; work with ``x - shift``. The distinct shifted values ``xu``
    (``nu`` of them) carry the basis; the data rows only evaluate it.
@@ -42,10 +43,10 @@ between the two column spaces, and ``S`` in the basis that maps one design to th
 ``1e-8`` on some cases (measured); the tolerance is derived from that, not chosen
 (:func:`derived_tolerance`).
 
-**Refused, by name:** ``mgcv`` randomly subsamples ``max.knots = 2000`` of the distinct
-covariate values when there are more than 2000 data rows *and* more than 2000 distinct
-values (``temp.seed(1)`` and ``sample()``); that stream is not ported, so
-:func:`tp_basis` raises rather than return a different basis.
+**Refused, by name** (:class:`~hgam.errors.HgamNotImplementedError`): ``mgcv`` randomly subsamples
+``max.knots = 2000`` of the distinct covariate values when there are more than 2000 data rows *and* more
+than 2000 distinct values (``temp.seed(1)`` and ``sample()``); that stream is not ported, so :func:`tp_basis`
+raises rather than return a different basis.
 """
 
 from dataclasses import dataclass
@@ -54,7 +55,7 @@ from math import gamma, pi, sqrt
 import numpy as np
 
 from hgam.engine.gam_basis_cr import _r_norm_inf, _r_norm_one
-from hgam.errors import HgamComputationError, HgamValidationError
+from hgam.errors import HgamComputationError, HgamNotImplementedError, HgamValidationError
 
 __all__ = [
     "TP_MAX_KNOTS",
@@ -105,7 +106,10 @@ def _eval_unique(xs: np.ndarray, state: TprsState) -> np.ndarray:
 
 
 def tp_predict(x: np.ndarray, state: TprsState) -> np.ndarray:
-    """The **unconstrained** ``tp`` design at ``x`` (``mgcv``'s ``Predict.matrix``): the
+    """mgcv counterpart: ``smooth.construct.tp.smooth.spec`` (smooth.r), ``construct_tprs`` (tprs.c),
+    mgcv 1.9-4.
+
+    The **unconstrained** ``tp`` design at ``x`` (``mgcv``'s ``Predict.matrix``): the
     caller applies the training sum-to-zero ``Z``. Evaluating at the training rows
     reproduces the training design exactly (same arithmetic)."""
     xs = np.asarray(x, dtype=np.float64) - state.shift
@@ -143,7 +147,7 @@ def _check_inputs(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, np.nda
     xs = x - float(np.mean(x))
     xu, inverse, counts = np.unique(xs, return_inverse=True, return_counts=True)
     if x.shape[0] > TP_MAX_KNOTS and xu.shape[0] > TP_MAX_KNOTS:
-        raise HgamValidationError(
+        raise HgamNotImplementedError(
             f"tp_basis: {x.shape[0]} rows and {xu.shape[0]} distinct values both exceed mgcv's "
             f"max.knots={TP_MAX_KNOTS}, where mgcv draws a RANDOM subsample of the distinct "
             "values (set.seed(1) then sample()); that stream is not reproduced, so a different "
@@ -160,12 +164,16 @@ def _check_inputs(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, np.nda
 
 
 def tp_basis(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, TprsState]:
-    """The **unconstrained** ``tp`` design ``(n, k)``, the (``scale.penalty``-rescaled)
+    """mgcv counterpart: ``smooth.construct.tp.smooth.spec`` (smooth.r), ``construct_tprs`` (tprs.c),
+    mgcv 1.9-4.
+
+    The **unconstrained** ``tp`` design ``(n, k)``, the (``scale.penalty``-rescaled)
     penalty ``(k, k)`` and the :class:`TprsState` — ``smoothCon(..., absorb.cons=FALSE)``.
 
     Raises:
-        HgamValidationError: ``k < 3``; fewer than ``k`` distinct values; or the
-            subsampling regime described in the module docstring.
+        HgamValidationError: ``k < 3``; fewer than ``k`` distinct values.
+        HgamNotImplementedError: the ``max.knots`` subsampling regime (smooth.r: more than 2000 rows and
+            more than 2000 distinct values), which is not ported.
         HgamComputationError: a degenerate (zero) column or penalty.
     """
     xs, xu, inverse, counts = _check_inputs(x, k)

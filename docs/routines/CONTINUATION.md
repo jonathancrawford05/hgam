@@ -1,8 +1,9 @@
 # Continuation
 
-Last updated: 2026-11-22, after PR #51 (the opt-in port of mgcv's `newton`, gam.fit3.r) was merged by Jonathan,
-who decided its Q1 as option (a); the matching `docs/PRIORITIES.md` paragraph is rewritten in the same change. Read
-`docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-22, by the development run's forty-third slice: the second slice of PR #48 follow-up (b), the
+port of mgcv's `newton` as the default outer iteration, with t2's REML `select=TRUE` refusal lifted (Jonathan chose
+PR #51's Q1 option (a) on 2026-11-22). PR #52 (the matching `docs/PRIORITIES.md` paragraph) is merged; this slice's
+tests follow that rule. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -299,21 +300,27 @@ tests that gate a default-tolerance fit against mgcv's tight refit (`test_t2_fit
 `test_cr_by_numeric` eta 1.4e-3, `test_tight_conv_tol_on_the_select_ridge`, which asserts the old stall), plus two
 summary tests that report the old tolerance (`epsilon_rel`).
 
-## Next slice: make the `newton` port the default (PR #48 follow-up (b), second slice)
+The `newton` port as the default (2026-11-22, this run): `fit_engine_gam(newton_iteration=None)` runs
+`newton_select_lambdas(iteration="mgcv")` for `outer="newton"`; `"hgam"` is still accepted (opt in), and with
+`outer="lbfgsb"` any `newton_iteration` is refused. `gam()` accepts `select=True` with t2 in a REML fit. Ridge cases are
+gated like for like: default tolerance against mgcv's default fit (`test_t2_fit`, `test_cr_by_numeric`,
+`test_mgcv_newton`), `conv.tol = 1e-12` against the tight refit (`test_newton_conv_tol`, `test_mgcv_newton`).
+`EngineGAMFit.conv_tol` is new; `summary().epsilon_rel` is the search's `conv.tol` and `rel_projected_gradient` is
+`max|g| * conv_tol / gradient_tolerance` (for the port, `max|g| / (5 * score.scale)`). Every other fixture test passed
+unchanged with the port as the default. Tests: 876 pass.
 
-- Done when (Jonathan, PR #48): 27d3 meets every gate against mgcv's **default** fit (met through the port) and
-  `_refuse_t2`'s REML select refusal is lifted.
-- Q1 decided (a) on PR #51; the rule is in `docs/PRIORITIES.md`. Until this slice lands, `main` still runs the
-  `"hgam"` iteration and its ridge tests still gate it against the tight refit (DEFERRED notes this).
-  `fit_engine_gam(newton_iteration=)` defaults to `"mgcv"`; the ridge tests (`test_t2_fit` 27b2,
-  `test_cr_by_numeric`, `test_newton_conv_tol`) gate default-tolerance fits against mgcv's default fit and
-  `control={"newton": {"conv.tol": 1e-12}}` fits against the tight refit; `_refuse_t2` stops refusing `select=True`
-  in a REML gam (its refusal test is replaced by `test_mgcv_newton`'s 27d3 case, SETTINGS condition 5);
-  `summary().epsilon_rel` and `rel_projected_gradient` report mgcv's test (`5 * score.scale * conv.tol`). Then remove
-  the `"hgam"` iteration and its tests in a later slice, or keep it, as Jonathan prefers.
+## Next slice: the bases, `tp` first (PLAN step 3)
+
+- PLAN step 3's rule: first measure what the moved engine already does against a fixture; port only what misses a
+  gate. `s(x)` / `s(x, bs="tp", k=)` is accepted by `gam()` today (`api.py`, one covariate). Find which tp fixtures
+  exist (`grep -l '"tp"' tests/fixtures`) and which tp forms the exit formula and hierarchical models need (tp in
+  `by=`, `fs` with a tp base, two-covariate tp); add the first missing one to `oracle/make_fixtures.R`, hold it at the
+  gates, and port `smooth.construct.tp.smooth.spec` (smooth.r) pieces only where it misses.
+- The session needs R with mgcv for a new fixture (`which Rscript`; install as DAILY_DEV step 5 says).
+- Optional later cleanup (not blocking): remove the `"hgam"` Newton iteration and its tests once nothing relies on it;
+  ask Jonathan in that slice's PR whether to keep it as a diagnostic.
 - Not ported yet (DEFERRED): the inner P-IRLS tolerance `conv.tol/100`; `edge.correct`; quasipoisson's log-scale
   coordinate.
-- Then the bases (`tp` first), PLAN step 3.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 
@@ -351,13 +358,8 @@ Decided on PR #21 (2026-11-16): Q1 option (A): port mgcv's constraint rows for d
 at Ref.df exact; Chi.sq 1% relative; p-value 1e-3 absolute or 1% relative, whichever is larger. The matching
 `docs/PRIORITIES.md` row is Jonathan's change (a routine slice does not edit that file).
 
-Decided on PR #51 (2026-11-22): option (a). A fitted quantity on a flat REML ridge is gated like for like: a
-default-tolerance fit against mgcv's default fit, a `conv.tol = 1e-12` fit against mgcv's tight refit. This replaces
-PR #12's option B below. The rule is in `docs/PRIORITIES.md`.
-
-Superseded by PR #51. Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a
-fitted quantity at estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at
-the unchanged gate.
+Superseded by PR #51. Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a fitted quantity at
+estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at the unchanged gate.
 The fixture records both mgcv fits and their REML scores, and the tight fit is the reference only where mgcv's own
 tight score is not higher than its default score. mgcv's `newton` is not ported for this (option A not taken); the
 moved Newton search stays. The rule is in `docs/PRIORITIES.md`.
@@ -365,9 +367,13 @@ moved Newton search stays. The rule is in `docs/PRIORITIES.md`.
 (PR #10's question on SETTINGS condition 5 is decided: option (a). A refusal test may be retired when a
 fixture-backed acceptance test of the same input replaces it; the wording is in `docs/routines/SETTINGS.md`.)
 
+Decided on PR #51 (2026-11-22): Q1 option (a). Ridge cases are gated like for like, a default-tolerance fit against
+mgcv's default fit and a tight-tolerance fit against mgcv's tight refit; this supersedes PR #12's option B for fits
+that follow mgcv's `newton`. The rule is in `docs/PRIORITIES.md` (PR #52). Done in the forty-third slice.
+
 ## Open questions
 
-None. PR #51's Q1 was decided on 2026-11-22: option (a).
+None.
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

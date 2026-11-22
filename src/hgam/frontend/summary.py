@@ -4,7 +4,8 @@ Mirrors the parts of ``mgcv``'s ``summary.gam`` that the verified engine produce
 independently: the parametric coefficient table (``p.table``, :func:`parametric_table`),
 per-smooth ``edf``, the smoothing parameters, the scale, the REML score, the deviance
 explained and ``n`` — plus the Newton search's own convergence report (iterations, the final
-relative projected gradient against ``epsilon_rel = 1e-6``, ADR-248).
+relative projected gradient against ``epsilon_rel``, the search's ``conv.tol``: 1e-6 by default, ADR-248;
+for the port of mgcv's ``newton`` the gradient is relative to ``5 * score.scale``, mgcv's own test).
 
 **The smooth-term tests, in part.** For a ``discrete=True`` fit (fixed scale, no pivoted
 coefficients), every fully penalised smooth (``null.space.dim == 0``, as under ``select=TRUE``) gets
@@ -298,10 +299,19 @@ def build_summary(
         for label in smooth_labels
     )
     smooths = _with_smooth_tests(fit, smooths, blocks, family)
+    # The search's own test, as a relative gradient against conv.tol: max|g| <= gradient_tolerance, where
+    # gradient_tolerance = conv.tol * (1 + |score|) for hgam's iteration and 5 * score.scale * conv.tol for
+    # the port of mgcv's newton (gam.fit3.r, mgcv 1.9-4; its score-change condition is not shown here).
+    gradient_scale = (
+        None
+        if fit.gradient_tolerance is None or fit.conv_tol is None
+        else fit.gradient_tolerance / fit.conv_tol
+    )
     rel_grad = (
         None
         if fit.max_abs_projected_gradient is None
-        else fit.max_abs_projected_gradient / (1.0 + abs(fit.reml_score))
+        else fit.max_abs_projected_gradient
+        / (1.0 + abs(fit.reml_score) if gradient_scale is None else gradient_scale)
     )
     return GamSummary(
         formula=formula,
@@ -329,11 +339,7 @@ def build_summary(
         n_iterations=fit.n_iterations,
         max_abs_projected_gradient=fit.max_abs_projected_gradient,
         rel_projected_gradient=rel_grad,
-        epsilon_rel=(
-            EPSILON_REL
-            if fit.gradient_tolerance is None
-            else fit.gradient_tolerance / (1.0 + abs(float(fit.reml_score)))
-        ),
+        epsilon_rel=EPSILON_REL if fit.conv_tol is None else float(fit.conv_tol),
         n_function_evals=int(fit.n_function_evals),
         at_bound_blocks=fit.at_bound_blocks,
     )

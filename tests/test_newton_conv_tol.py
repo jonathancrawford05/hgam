@@ -3,12 +3,13 @@
 
 mgcv counterpart: ``gam.control`` (mgcv.r, mgcv 1.9-4), whose ``newton$conv.tol`` defaults to ``1e-6`` and
 is the relative gradient tolerance of ``newton`` (gam.fit3.r). hgam takes it as
-``control={"newton": {"conv.tol": value}}`` and hands it to its own Newton search, whose stopping test is
-not mgcv's (porting mgcv's ``newton`` is PLAN step 3's follow-up (b)). The default is unchanged.
+``control={"newton": {"conv.tol": value}}`` and hands it to the outer search, by default the port of mgcv's
+``newton`` (``tests/test_mgcv_newton.py``). The default tolerance is unchanged.
 
 On ``p ~ f + t2(x, z)`` (27b2) and the same model with ``select=TRUE`` (27d3) the rn block's smoothing
 parameter lies on a flat REML ridge, so where a search stops depends on its tolerance. The fixtures record
-mgcv refitted at ``conv.tol = 1e-12``. With the same option hgam meets every gate against that refit.
+mgcv refitted at ``conv.tol = 1e-12``. With the same option hgam meets every gate against that refit (like
+for like, Jonathan on PR #51 Q1, option (a)).
 
 Gates (``docs/PRIORITIES.md``): the linear predictor to 1e-3 absolute; standard errors of the linear
 predictor 1% relative; per-term edf 0.05 absolute or 1%, whichever is larger; the same on new data.
@@ -82,40 +83,23 @@ def test_tight_conv_tol_meets_mgcvs_tight_refit(load_fixture, margin) -> None:
     _hold_to_tight(fit, fx, name, margin)
 
 
-def test_tight_conv_tol_on_the_select_ridge(load_fixture, margin, monkeypatch) -> None:
-    """27d3, ``p ~ f + t2(x, z)`` with ``select=TRUE``, which ``gam()`` still refuses in a REML fit (it
-    misses the predict gate at the default tolerance; lifting that is follow-up (b)). The refusal is bypassed
-    here, and only here, so that the option is held to the fixture Jonathan named. Every gate is met against
-    mgcv's tight refit. hgam's search ends ``converged=False`` there: it stalls with its projected gradient
-    just above ``conv.tol * (1 + |score|)``, a stricter test than mgcv's ``newton`` (gradient within 5 times
-    that, and the score change within it), which reports full convergence. ``gam()`` warns as it does for
-    any unconverged fit."""
+def test_tight_conv_tol_on_the_select_ridge(load_fixture, margin) -> None:
+    """27d3, ``p ~ f + t2(x, z)`` with ``select=TRUE``, through the public ``hgam.gam`` at mgcv's tight
+    tolerance: the port reports full convergence, as mgcv's ``newton`` does, and every gate is met against
+    mgcv's tight refit."""
     name = "gam_binomial_cloglog_factor_t2_select_reml"
     fx = load_fixture(name)
-    data = _columns(fx["data"])
-    formula = fx["formula"].replace("'", '"')
-    with pytest.raises(HgamNotImplementedError, match="select=True"):
-        hgam.gam(formula, data, FAMILY, weights="n", method="REML", select=True)
-
-    refuse = frontend_api._refuse_t2
-    monkeypatch.setattr(
-        frontend_api,
-        "_refuse_t2",
-        lambda call, parsed, **kw: refuse(call, parsed, select=False, discrete=False),
-    )
-    with pytest.warns(UserWarning, match="did not meet its convergence criterion"):
-        fit = hgam.gam(
-            formula,
-            data,
-            FAMILY,
-            weights="n",
-            method="REML",
-            select=True,
-            control={"newton": {"conv.tol": fx["tight"]["conv_tol"]}},
-        )
     assert fx["tight"]["outer_conv"] == "full convergence"
-    assert not fit.converged
-    assert fit.max_abs_projected_gradient <= 5.0 * fit.gradient_tolerance
+    fit = hgam.gam(
+        fx["formula"].replace("'", '"'),
+        _columns(fx["data"]),
+        FAMILY,
+        weights="n",
+        method="REML",
+        select=True,
+        control={"newton": {"conv.tol": fx["tight"]["conv_tol"]}},
+    )
+    assert fit.converged
     _hold_to_tight(fit, fx, name, margin)
 
 

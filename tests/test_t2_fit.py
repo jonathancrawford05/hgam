@@ -15,10 +15,11 @@ prediction on new data, which includes points outside both margins' knot ranges.
 
 On ``p ~ f + t2(x, z)`` mgcv's default search stops short of its own REML optimum: the rn block's smoothing
 parameter lies on a flat ridge towards infinity (log sp 5.45 by default, 19.4 at a tight ``newton`` conv.tol,
-whose REML score is lower), and mgcv's two fits differ by 1.2e-3 on eta. Following ``docs/PRIORITIES.md`` (the
-PR #12 rule), the quantities at estimated sp are gated against the tight fit there; the difference from the
-default fit is reported, not gated. The fit at mgcv's own smoothing parameters is a deterministic piece, held
-at 1e-8 on both cases.
+whose REML score is lower), and mgcv's two fits differ by 1.2e-3 on eta. hgam's default outer iteration is the
+port of mgcv's ``newton``, so the fit is gated like for like (Jonathan, PR #51 Q1, option (a)): against mgcv's
+default fit here, and at ``conv.tol = 1e-12`` against the tight refit (``tests/test_newton_conv_tol.py``); the
+difference from the tight fit is reported, not gated. The fit at mgcv's own smoothing parameters is a
+deterministic piece, held at 1e-8 on both cases.
 """
 
 import numpy as np
@@ -75,19 +76,15 @@ def test_t2_meets_the_gates(name: str, load_fixture, margin) -> None:
     assert list(fit.coefficient_names) == fx["coef_names"]
     assert len(fit.lambda_) == len(fx["sp"]) == 3
 
-    ref = fx.get("tight")
-    if ref is not None:
-        assert ref["reml"] <= fx["reml"]  # the rule's condition: the tight fit is not worse
-        eta_default = fit.predict(data)
+    if "tight" in fx:
         margin(
             "t2 fit",
-            "eta vs mgcv default (not gated)",
-            float(np.max(np.abs(eta_default - fx["eta"]))),
+            "eta vs mgcv tight refit (not gated)",
+            float(np.max(np.abs(fit.predict(data) - np.asarray(fx["tight"]["eta"])))),
             "reported",
             name,
         )
-    else:
-        ref = fx
+    ref = fx  # like for like: a default-tolerance fit against mgcv's default fit
     eta, se = fit.predict(data, se_fit=True)
     d_eta = float(np.max(np.abs(eta - np.asarray(ref["eta"]))))
     d_se = float(np.max(np.abs(se / np.asarray(ref["se"]) - 1.0)))
@@ -164,7 +161,6 @@ def test_t2_prediction_matches_the_basis(load_fixture) -> None:
 @pytest.mark.parametrize(
     ("formula", "kwargs", "needle"),
     [
-        ('p ~ t2(x, z, bs="cr")', {"select": True}, "select=True"),
         ('p ~ s(x, bs="cr") + t2(x, z, bs="cr")', {}, "not verified"),
         ('p ~ t2(x, z, bs="cr", full=TRUE)', {}, "full"),
         ('p ~ t2(x, z, bs="cr", k=2)', {}, "k="),
@@ -172,11 +168,9 @@ def test_t2_prediction_matches_the_basis(load_fixture) -> None:
     ],
 )
 def test_t2_refusals(formula: str, kwargs: dict, needle: str, load_fixture) -> None:
-    """What t2 does not port yet is refused by name: select=TRUE in a REML gam (section 27d3: hgam's Newton
-    search stops on the null-space sp's flat REML ridge 1.3e-3 from mgcv's tight refit on prediction; ported
-    for discrete bam, ``tests/test_t2_discrete.py``), a t2
-    beside another smooth of its covariates (gam.side), and t2()'s other arguments, small k and other
-    margin bases."""
+    """What t2 does not port yet is refused by name: a t2 beside another smooth of its covariates
+    (gam.side), and t2()'s other arguments, small k and other margin bases. (``select=TRUE`` in a REML gam
+    is ported: its refusal is replaced by ``tests/test_mgcv_newton.py``'s 27d3 case.)"""
     data = _columns(load_fixture("gam_binomial_cloglog_factor_t2_reml")["data"])
     with pytest.raises(HgamNotImplementedError, match=needle.replace("(", r"\(").replace(")", r"\)")):
         gam(formula, data, FAMILY, weights="n", **{"method": "REML", **kwargs})

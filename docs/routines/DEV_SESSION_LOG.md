@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-22 (forty-third slice): the `newton` port is the default (PR #48 follow-up (b), second slice)
+
+Jonathan chose PR #51 Q1 option (a) (like-for-like gating; the PRIORITIES text is PR #52, not this slice). `fit_engine_gam(newton_iteration=None)` now runs the port; `"hgam"` stays opt in. `_refuse_t2` no longer refuses `select=TRUE` in a REML gam. `summary()` reports the test the search ran (`EngineGAMFit.conv_tol`; mgcv's gradient relative to `5 * score.scale`).
+Tests: 877 → 876 (`test_t2_refusals`' select case removed, replaced by `test_mgcv_newton`'s 27d3 default case, now through public `hgam.gam`). `make lint` clean. Against mgcv's default fits (tier 1): 27b2 eta 8.1e-11, 27d3 2.1e-10 (predict 3.2e-10, se 2.5e-3), by-numeric 1.2e-10, t2 1.96e-10; at conv.tol 1e-12 vs tight refits ≤ 9.6e-11.
+Deferred: unchanged (inner P-IRLS conv.tol/100, quasipoisson log-scale coordinate, edge.correct). Next: the bases, `tp` first.
+
 ## 2026-11-21 (forty-second slice): mgcv's `newton` port, opt in (PR #48 follow-up (b), first slice)
 
 PR #50 auto-merged (six conditions posted; branch delete cut by the git proxy). Ported `newton` (gam.fit3.r) as `newton_select_lambdas(iteration="mgcv")`, default unchanged; `mgcv_reml_score_offset` and `saturated_log_likelihood` (fix.family.ls) for `score.scale`. The convergence test alone regressed four select fits (paths diverge at the step logic), so the whole iteration is ported.

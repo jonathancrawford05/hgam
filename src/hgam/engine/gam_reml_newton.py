@@ -44,13 +44,16 @@ numbers, named as such, and not tuned to any cell. The Hessian floor
 "numerically zero curvature". The central-difference step ``hessian_step`` is
 this module's own (a stable-step measurement, see its docstring).
 
-**``iteration="mgcv"``: the port of mgcv's ``newton`` (gam.fit3.r, mgcv 1.9-4), opt in (PLAN step 3,
-follow-up (b)).** The steps above are hgam's own; with ``iteration="mgcv"`` the same evaluation, exact
-Hessian and bounds run mgcv's iteration instead (step logic, ``qerror``, steepest-descent trials and
-convergence test; :func:`newton_select_lambdas` lists what is ported and what differs). Measured on
-section 27e (tier 1): the five fits' iteration counts equal mgcv's and the linear predictor agrees with
-mgcv's default fit to 6.6e-5 or better (``tests/test_mgcv_newton.py``). It is not the default yet: that
-changes which mgcv fit the ridge cases are gated against (``docs/PRIORITIES.md``), Jonathan's decision.
+**``iteration="mgcv"``: the port of mgcv's ``newton`` (gam.fit3.r, mgcv 1.9-4) (PLAN step 3, follow-up
+(b)); ``fit_engine_gam``'s default outer iteration since 2026-11-22.** The steps above are hgam's
+own; with ``iteration="mgcv"`` the same evaluation, exact Hessian and bounds run mgcv's iteration
+instead (step logic, ``qerror``, steepest-descent trials and convergence test;
+:func:`newton_select_lambdas` lists what is ported and what differs). Measured on section 27e (tier 1):
+the five fits' iteration counts equal mgcv's and the linear predictor agrees with mgcv's default fit to
+6.6e-5 or better (``tests/test_mgcv_newton.py``). ``fit_engine_gam`` uses it unless
+``newton_iteration="hgam"`` is passed; on a flat REML ridge a fit is then gated like for like against
+mgcv's fit at the same ``conv.tol`` (Jonathan, PR #51 Q1, option (a)). This function's own default is
+unchanged (``"hgam"``).
 """
 
 import warnings

@@ -1,21 +1,14 @@
-"""The ``fs`` factor-smooth interaction basis on a ``cr`` base (``s(x, f, bs="fs", xt="cr")``) or on mgcv's
-default ``tp`` base (``s(x, f, bs="fs")``).
+"""The ``fs`` factor-smooth interaction basis on a ``cr`` base (``s(x, f, bs="fs", xt="cr")``).
 
 mgcv counterparts (smooth.r, mgcv 1.9-4): ``nat.param`` (type 1, the QR branch, ``unit.fnorm = TRUE``),
 ``smooth.construct.fs.smooth.spec`` (the non-``gamm`` branch), ``Predict.matrix.fs.interaction``, and the
-penalty scaling of ``smoothCon``. Held to ``smoothcon_fs_cr`` and ``smoothcon_fs_tp`` (``make_fixtures.R``
-sections 24 and 29) in ``tests/test_fs_basis.py``.
+penalty scaling of ``smoothCon``. Held to ``smoothcon_fs_cr`` (``make_fixtures.R`` section 24) in
+``tests/test_fs_basis.py``.
 
 The construction, as mgcv runs it:
 
-1. The base smooth is built by ``smooth.construct`` (not ``smoothCon``), on every row and with no constraint:
-   the unscaled ``cr`` penalty (:func:`~hgam.engine.gam_basis_cr._cr_basis_raw`), or with no ``xt`` the
-   unconstrained ``tp`` basis (``smooth.construct.tp.smooth.spec``,
-   :func:`~hgam.engine.gam_basis_tp.tp_basis`; its penalty carries ``smoothCon``'s scale, which
-   ``nat.param`` does not see: a scalar on ``S`` and a column scaling of ``X`` both cancel in step 2).
-   The tp base's coordinates are an eigenvector gauge (``gam_basis_tp``); ``nat.param`` maps any such
-   gauge to the same ``X`` up to the signs of its columns, so only ``P``, which maps from the base,
-   differs from mgcv's.
+1. The base smooth is built by ``smooth.construct`` (not ``smoothCon``), so its penalty is the unscaled
+   ``cr`` penalty (:func:`~hgam.engine.gam_basis_cr._cr_basis_raw`), on every row and with no constraint.
 2. ``nat.param(X, S, rank, type = 1)`` re-parameterises it: ``X = QR``; the eigen-decomposition of
    ``R^-T S R^-1`` (``eigen(symmetric = TRUE)``, LAPACK ``dsyevr``; SciPy's ``driver="evr"`` is the same
    routine) gives ``X Q V`` and ``P = R^-1 V`` with the range columns first; type 1 divides each range column
@@ -42,13 +35,9 @@ import numpy as np
 import scipy.linalg
 
 from hgam.engine.gam_basis_cr import _cr_basis_raw, _r_norm_inf, _r_norm_one
-from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
 from hgam.errors import HgamComputationError, HgamNotImplementedError, HgamValidationError
 
-__all__ = ["FS_BASES", "FsBasis", "fs_basis", "fs_predict_design", "nat_param"]
-
-FS_BASES = ("cr", "tp")
-"""The base smooths ported for ``fs``: ``xt = "cr"``, and ``tp`` (mgcv's default when ``xt`` is absent)."""
+__all__ = ["FsBasis", "fs_basis", "fs_predict_design", "nat_param"]
 
 _NAT_PARAM_TOL = float(np.finfo(np.float64).eps ** 0.8)
 
@@ -166,12 +155,7 @@ class FsBasis:
     """An ``fs`` term's model matrix, penalties and re-parameterisation, as ``smoothCon`` returns them."""
 
     def __init__(
-        self,
-        design: np.ndarray,
-        penalties: tuple[np.ndarray, ...],
-        rank: tuple[int, ...],
-        p_mat: np.ndarray,
-        tp_state: TprsState | None = None,
+        self, design: np.ndarray, penalties: tuple[np.ndarray, ...], rank: tuple[int, ...], p_mat: np.ndarray
     ) -> None:
         self.design = design
         """``(n, k * n_levels)``: level blocks of ``k`` columns, range columns first in each."""
@@ -181,8 +165,6 @@ class FsBasis:
         """``(base_rank * n_levels, n_levels, ...)``, mgcv's ``rank``."""
         self.p_mat = p_mat
         """``(k, k)``: ``nat.param``'s ``P``, kept for prediction."""
-        self.tp_state = tp_state
-        """A ``tp`` base's shift, distinct values and ``UZ``, kept for prediction; ``None`` on cr."""
 
 
 def _expand(base: np.ndarray, group: np.ndarray, n_levels: int) -> np.ndarray:
@@ -207,53 +189,30 @@ def fs_basis(
     x: np.ndarray,
     group: np.ndarray,
     n_levels: int,
-    knots: np.ndarray | None,
+    knots: np.ndarray,
     frame: tuple[np.ndarray, np.ndarray] | None = None,
-    *,
-    base: str = "cr",
-    k: int | None = None,
 ) -> FsBasis:
-    """mgcv counterpart: ``smooth.construct.fs.smooth.spec`` (smooth.r) with ``xt = "cr"`` or with no
-    ``xt`` (a ``tp`` base), then ``smoothCon``'s penalty scaling, mgcv 1.9-4 (module docstring).
+    """mgcv counterpart: ``smooth.construct.fs.smooth.spec`` (smooth.r) with ``xt = "cr"``, then
+    ``smoothCon``'s penalty scaling, mgcv 1.9-4 (module docstring).
 
     Args:
         x: The smoothed covariate, ``(n,)``.
         group: 0-indexed level code per row (``as.integer(fac) - 1``), ``(n,)``.
         n_levels: ``length(levels(fac))``; every level gets a copy, observed or not, as in mgcv.
-        knots: The cr knots, ``(k,)``; ``None`` for a ``tp`` base (which places none).
+        knots: The cr knots, ``(k,)``.
         frame: ``(x0, group0)``, the rows the smooth is constructed on when they are not the data's
-            (``bam(discrete = TRUE)``'s ``mf0``). ``None``: ``x`` and ``group`` themselves. Only on a
-            ``cr`` base: tp in a discrete bam is not ported.
-        base: ``"cr"`` or ``"tp"`` (:data:`FS_BASES`).
-        k: The tp base's basis dimension; ``None`` on a ``cr`` base (``len(knots)``).
+            (``bam(discrete = TRUE)``'s ``mf0``). ``None``: ``x`` and ``group`` themselves.
     """
     x = np.asarray(x, dtype=np.float64)
     group = np.asarray(group, dtype=np.int64)
     _check_group(x, group, n_levels)
-    tp_state: TprsState | None = None
-    if base == "cr":
-        if knots is None or k is not None:
-            raise HgamValidationError("fs_basis: a cr base takes knots and no k.")
-        if frame is not None:
-            built = fs_basis(frame[0], frame[1], n_levels, knots)
-            design = fs_predict_design(x, group, n_levels, knots, built.p_mat)
-            return FsBasis(design, built.penalties, built.rank, built.p_mat)
-        base_x, base_s = _cr_basis_raw(x, np.asarray(knots, dtype=np.float64))
-    elif base == "tp":
-        if knots is not None or k is None:
-            raise HgamValidationError("fs_basis: a tp base takes k and no knots.")
-        if frame is not None:
-            raise HgamNotImplementedError(
-                "fs_basis: an fs term on a tp base in bam(discrete = TRUE) is not ported "
-                '(discrete.mf on a tp base is not measured); write xt="cr" or discrete=False.'
-            )
-        base_x, base_s, tp_state = tp_basis(x, k)
-    else:
-        raise HgamNotImplementedError(f"fs_basis: base {base!r} is not ported; only {FS_BASES} are.")
+    if frame is not None:
+        built = fs_basis(frame[0], frame[1], n_levels, knots)
+        design = fs_predict_design(x, group, n_levels, knots, built.p_mat)
+        return FsBasis(design, built.penalties, built.rank, built.p_mat)
+    base_x, base_s = _cr_basis_raw(x, np.asarray(knots, dtype=np.float64))
     k = base_x.shape[1]
-    # smooth.construct.cr.smooth.spec and .tp.smooth.spec (one covariate, m = 2): rank = k - 2,
-    # null.space.dim = 2.
-    base_rank = k - 2
+    base_rank = k - 2  # smooth.construct.cr.smooth.spec: rank = k - 2, null.space.dim = 2
     xb, d, p_mat = nat_param(base_x, base_s, base_rank)
     null_d = k - base_rank
 
@@ -269,27 +228,16 @@ def fs_basis(
         raise HgamComputationError("fs_basis: the design matrix is identically zero.")
     penalties = tuple(s / (_r_norm_one(s) / max_xx) for s in unscaled)
     rank = (base_rank * n_levels, *([n_levels] * null_d))
-    return FsBasis(design, penalties, rank, p_mat, tp_state)
+    return FsBasis(design, penalties, rank, p_mat)
 
 
 def fs_predict_design(
-    x: np.ndarray,
-    group: np.ndarray,
-    n_levels: int,
-    knots: np.ndarray | None,
-    p_mat: np.ndarray,
-    tp_state: TprsState | None = None,
+    x: np.ndarray, group: np.ndarray, n_levels: int, knots: np.ndarray, p_mat: np.ndarray
 ) -> np.ndarray:
-    """mgcv counterpart: ``Predict.matrix.fs.interaction`` (smooth.r), mgcv 1.9-4: the base prediction
-    matrix at new ``x`` (``Predict.matrix.cr.smooth``, or ``Predict.matrix.tprs.smooth`` when ``tp_state``
-    is given) times the fit's ``P``, one copy per level."""
+    """mgcv counterpart: ``Predict.matrix.fs.interaction`` (smooth.r), mgcv 1.9-4: the base cr prediction
+    matrix at new ``x`` times the fit's ``P``, one copy per level."""
     x = np.asarray(x, dtype=np.float64)
     group = np.asarray(group, dtype=np.int64)
     _check_group(x, group, n_levels)
-    if tp_state is not None:
-        base_x = tp_predict(x, tp_state)
-    else:
-        if knots is None:
-            raise HgamValidationError("fs_predict_design: a cr base needs its knots.")
-        base_x, _ = _cr_basis_raw(x, np.asarray(knots, dtype=np.float64))
+    base_x, _ = _cr_basis_raw(x, np.asarray(knots, dtype=np.float64))
     return _expand(base_x @ np.asarray(p_mat, dtype=np.float64), group, n_levels)

@@ -801,11 +801,11 @@ def _build_model(
             # mgcv's bs.dim for sz: prod(nf - 1) * the base smooth's bs.dim.
             smooth_meta.append((call.text, call.k * (len(levels) - 1)))
         elif isinstance(call, FsCall):
-            # mgcv counterpart: smooth.construct.fs.smooth.spec (smooth.r, mgcv 1.9-4), cr or tp base, the
-            # non-gamm branch. The factor is found by type, so either written order is accepted; the label
-            # keeps the written order. Only the base term reads knots= (object$term without the factor). In a
-            # discrete bam the term is built on discrete.mf's mf0 (fs_frame); the model matrix is the same
-            # per-level copies of Xb as the tensor.smooth.spec branch's two margins give.
+            # mgcv counterpart: smooth.construct.fs.smooth.spec (smooth.r, mgcv 1.9-4), cr base, the non-gamm
+            # branch. The factor is found by type, so either written order is accepted; the label keeps the
+            # written order. Only the base term reads knots= (object$term without the factor). In a discrete
+            # bam the term is built on discrete.mf's mf0 (fs_frame); the model matrix is the same per-level
+            # copies of Xb as the tensor.smooth.spec branch's two margins give.
             is_factor = [_is_factor(_column(df, v)) for v in call.variables]
             if sum(is_factor) != 1:
                 raise HgamNotImplementedError(
@@ -820,19 +820,15 @@ def _build_model(
             smoothed = call.variables[is_factor.index(False)]
             need_numeric(smoothed, call.text)
             levels = need_factor(factor_name).levels
-            if call.base == "tp":
-                # smooth.construct.tp.smooth.spec reads knots= as knot locations; that is not ported.
-                refuse_knots(smoothed, call.text)
             smooth.append(
                 TermSpec(
                     label=call.text,
                     variables=(factor_name, smoothed),
                     basis="fs",
                     k=(call.k,),
-                    knots=cr_knots(smoothed, call.k, call.text) if call.base == "cr" else None,
+                    knots=cr_knots(smoothed, call.k, call.text),
                     n_levels=len(levels),
                     margin_order=call.variables,
-                    fs_base=call.base,
                 )
             )
             # smooth.construct.fs.smooth.spec: bs.dim is ncol(X), the base bs.dim times nf.
@@ -988,7 +984,7 @@ def gam(
             Supported: a bare ``s(x, k=)`` / ``s(x, bs="tp", k=)`` (thin-plate, ``mgcv``'s
             default, ADR-261), ``s(x, bs="cr", k=, by=)`` (numeric or factor ``by``),
             ``s(f, bs="re")``, ``s(f, x, bs="sz", k=, xt=list(bs="cr"))``,
-            ``s(x, f, bs="fs", k=, xt="cr")``, ``s(x, f, bs="fs", k=)`` (tp base, not in a discrete bam),
+            ``s(x, f, bs="fs", k=, xt="cr")``,
             ``ti(x, z, bs="cr", k=)``, factors ``a``, ``a:b``
             (with both main effects), ``offset(col)``. Anything else is refused by
             name (:class:`~hgam.errors.HgamValidationError`).

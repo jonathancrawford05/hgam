@@ -144,9 +144,7 @@ def small() -> dict[str, np.ndarray]:
 @pytest.mark.parametrize(
     ("formula", "kwargs", "match"),
     [
-        ('p ~ s(x, f, bs="fs", xt=list(bs="tp"), k=6)', {}, 'only xt="cr"'),
-        ('p ~ s(x, f, bs="fs", k=6)', {"knots": {"x": [1.0, 5.0, 10.0, 15.0, 18.0, 21.0]}}, "knots="),
-        ('p ~ s(x, f, bs="fs", k=6)', {"method": "fREML", "discrete": True}, "only a cr base"),
+        ('p ~ s(x, f, bs="fs", k=6)', {}, "default fs base smooth is tp"),
         ('p ~ s(x, f, bs="fs", xt="tp", k=6)', {}, 'only xt="cr"'),
         ('p ~ s(x, f, bs="fs", xt="cr", m=1)', {}, "argument 'm'"),
         ('p ~ s(x, f, bs="fs", xt="cr", by=z)', {}, "argument 'by'"),
@@ -268,51 +266,3 @@ def test_fs_select_meets_the_gates(name: str, load_fixture, margin) -> None:
     assert d_eta < 1e-3
     assert d_se < 1e-2
     assert d_edf <= 1.0, (got_edf, ref_edf)
-
-
-TP = {
-    "gam_binomial_cloglog_fs_tp_reml": ('p ~ s(x, f, bs="fs", k=5)', False),
-    "gam_binomial_cloglog_tp_fs_tp_reml": ('p ~ s(x) + s(x, f, bs="fs", k=5)', False),
-    "gam_binomial_cloglog_fs_tp_select_reml": ('p ~ s(x, f, bs="fs", k=5)', True),
-}
-
-
-@pytest.mark.parametrize("name", list(TP))
-def test_fs_tp_fit_meets_the_gates(name: str, load_fixture, margin) -> None:
-    """Section 29: ``s(x, f, bs="fs")`` with no ``xt``, mgcv's default tp base, alone (29b), beside a tp
-    smooth of the same covariate (29c, the global-plus-group-curves form), and with ``select = TRUE`` (29d:
-    the fs penalties sum to full rank, so mgcv adds none and the fit is 29b's). Smoothing parameters are not
-    gated: the null pair comes out swapped, as on cr. Predict on new data includes x outside its range."""
-    formula, select = TP[name]
-    fx = load_fixture(name)
-    data = _columns(fx["data"])
-    fit = gam(formula, data, FAMILY, weights="n", method="REML", select=select)
-    assert fit.converged
-    labels = fx["labels"] if isinstance(fx["labels"], list) else [fx["labels"]]
-    assert list(fit.smooth_labels) == labels
-    assert fit.coef.size == fx["n_coef"] == fx["rank"]
-    assert not fit.pivoted_columns
-    assert list(fit.coefficient_names) == fx["coef_names"]
-    assert len(fit.lambda_) == len(fx["sp"])
-    if select:
-        assert fx["n_penalties"] == 3 and fx["eta_vs_noselect"] == 0
-
-    eta, se = fit.predict(data, se_fit=True)
-    d_eta = float(np.max(np.abs(eta - np.asarray(fx["eta"]))))
-    d_se = float(np.max(np.abs(se / np.asarray(fx["se"]) - 1.0)))
-    ref_edf = np.atleast_1d(np.asarray(fx["edf"], dtype=np.float64))
-    got_edf = np.array([fit.edf_per_term[label] for label in labels])
-    d_edf = float(np.max(np.abs(got_edf - ref_edf) / np.maximum(0.05, 0.01 * ref_edf)))
-    eta_new, se_new = fit.predict(_columns(fx["newdata"]), se_fit=True)
-    d_new = float(np.max(np.abs(eta_new - np.asarray(fx["fit_new"]))))
-    d_se_new = float(np.max(np.abs(se_new / np.asarray(fx["se_new"]) - 1.0)))
-    margin("fs tp fit", "eta, max abs", d_eta, "1e-3 abs", name)
-    margin("fs tp fit", "se, max rel", d_se, "1e-2 rel", name)
-    margin("fs tp fit", "edf, fraction of gate", d_edf, "0.05 abs or 1%", name)
-    margin("fs tp predict", "eta, max abs", d_new, "1e-3 abs", name)
-    margin("fs tp predict", "se, max rel", d_se_new, "1e-2 rel", name)
-    assert d_eta < 1e-3
-    assert d_se < 1e-2
-    assert d_edf <= 1.0, (got_edf, ref_edf)
-    assert d_new < 1e-3
-    assert d_se_new < 1e-2

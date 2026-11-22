@@ -1,5 +1,4 @@
-"""The ``fs`` factor-smooth basis on cr and on its default tp base, held to ``smoothCon`` (``make_fixtures.R``
-sections 24 and 29).
+"""The ``fs`` factor-smooth basis on cr, held to ``smoothCon`` (``make_fixtures.R`` section 24).
 
 mgcv counterparts: ``smooth.construct.fs.smooth.spec`` and ``nat.param`` (type 1),
 ``Predict.matrix.fs.interaction`` and ``smoothCon``'s penalty scaling (smooth.r, mgcv 1.9-4), ported in
@@ -16,10 +15,8 @@ fitted term is held to a REML gam fit in ``tests/test_fs_fit.py`` (section 24b).
 import itertools
 
 import numpy as np
-import pytest
 
 from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
-from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 GATE = 1e-8
 
@@ -81,62 +78,3 @@ def test_fs_basis_matches_smoothcon(load_fixture, margin) -> None:
     assert rel_p < GATE
     assert rel_s < GATE
     assert rel_new < GATE
-
-
-def test_fs_tp_basis_matches_smoothcon(load_fixture, margin) -> None:
-    """Section 29a: ``s(x, f, bs="fs", k=5)`` with no ``xt``, mgcv's default tp base. The tp base's own
-    coordinates are an eigenvector gauge (``gam_basis_tp``), but ``nat.param`` maps any gauge of the same
-    base to the same design up to column signs and the order of the null pair, so ``X``, the penalties and
-    ``PredictMat`` are held under the same column map as the cr case. ``P`` maps from the base, so it is
-    gauge dependent and not compared."""
-    fx = load_fixture("smoothcon_fs_tp")
-    assert fx["base_bs"] == "tprs.smooth"
-    n_levels, k = fx["n_levels"], fx["k"]
-    base_rank = k - 2
-    got = fs_basis(np.asarray(fx["x"]), np.asarray(fx["group"]), n_levels, None, base="tp", k=k)
-    ref_x = np.asarray(fx["X"])
-    assert got.design.shape == ref_x.shape == (len(fx["x"]), k * n_levels)
-    assert fx["C_rows"] == 0 and fx["null_space_dim"] == 0
-    assert got.rank == tuple(fx["rank"]) == (base_rank * n_levels, n_levels, n_levels)
-    assert len(got.penalties) == len(fx["S"]) == 1 + k - base_rank
-    assert got.tp_state is not None
-
-    order, signs = _column_map(got.design[:, :k], ref_x[:, :k], base_rank)
-    full_order = np.concatenate([order + level * k for level in range(n_levels)])
-    full_signs = np.tile(signs, n_levels)
-    rel_x = _rel(got.design[:, full_order] * full_signs, ref_x)
-    penalty_order = [0, *(1 + order[base_rank:] - base_rank)]
-    rel_s = max(
-        _rel(got.penalties[penalty_order[i]][np.ix_(full_order, full_order)], np.asarray(fx["S"][i]))
-        for i in range(len(fx["S"]))
-    )
-    x_new = fs_predict_design(
-        np.asarray(fx["new_x"]), np.asarray(fx["new_group"]), n_levels, None, got.p_mat, got.tp_state
-    )
-    rel_new = _rel(x_new[:, full_order] * full_signs, np.asarray(fx["X_new"]))
-    for quantity, value in (("X", rel_x), ("S", rel_s), ("PredictMat", rel_new)):
-        margin("fs tp basis", f"{quantity}, max rel", value, "1e-8 rel", "smoothcon_fs_tp")
-    assert rel_x < GATE
-    assert rel_s < GATE
-    assert rel_new < GATE
-
-
-@pytest.mark.parametrize(
-    ("kwargs", "error"),
-    [
-        ({"base": "tp", "k": None}, HgamValidationError),
-        ({"base": "ps", "k": 5}, HgamNotImplementedError),
-    ],
-)
-def test_fs_basis_refuses_a_bad_base(kwargs: dict, error: type) -> None:
-    x = np.linspace(0.0, 1.0, 30)
-    with pytest.raises(error):
-        fs_basis(x, np.arange(30) % 2, 2, None, **kwargs)
-
-
-def test_fs_tp_basis_in_a_frame_is_refused() -> None:
-    """tp in ``bam(discrete = TRUE)`` (built on ``mf0``) is not ported."""
-    x = np.linspace(0.0, 1.0, 30)
-    g = np.arange(30) % 2
-    with pytest.raises(HgamNotImplementedError, match="discrete"):
-        fs_basis(x, g, 2, None, frame=(x, g), base="tp", k=5)

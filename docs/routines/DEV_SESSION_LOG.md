@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-22 (forty-fifth slice): `fs` on its default tp base (PLAN step 3, bases)
+
+No open PR at start (PR #54 merged). `fs_basis(base="tp")`: mgcv's no-`xt` fs (`smooth.construct.fs.smooth.spec`, base.bs "tp") on the moved `tp_basis`, then the same `nat.param`; `TermSpec.fs_base`, parser accepts `s(x, f, bs="fs")`. Discrete bam, `knots=` and `xt="tp"` on a tp base refused.
+Tests: 881 → 890 (two refusal-only cases retired: `test_fs_refusals[...default fs base smooth is tp]`, `test_formula` `s(f, x, bs="fs")` "without xt="; replaced by `test_fs_tp_fit_meets_the_gates` on section 29). `make lint` clean. Tier 1 (mgcv 1.9-1): basis 7.9e-14; eta ≤ 1.2e-12 (data and new data), se ≤ 3.0e-4 rel, edf ≤ 1.9e-10 of the gate; structure and names exact.
+Deferred: the null pair's sp swap on tp (as on cr). Next: tp in discrete bam.
+
 ## 2026-11-22 (PR #54 review follow-up, `ada3807`)
 
 Should fix 1: tp's `max.knots` subsampling refusal raises `HgamNotImplementedError` (was `HgamValidationError`); engine test updated, `test_tp_max_knots_subsampling_is_refused_through_gam` added. Should fix 2: `tp_basis` and its module name `smooth.construct.tp.smooth.spec` / `construct_tprs`, mgcv 1.9-4; stale polaris-re references removed.

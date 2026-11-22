@@ -163,6 +163,15 @@ class TermSpec:
     """``basis="fs"`` only: :attr:`variables` as written (mgcv's ``object$term``), which is the order
     ``bam(discrete = TRUE)`` gives the term's margins and so the order ``discrete.mf`` compresses them in.
     ``None`` means :attr:`variables`' order."""
+    fs_base: str | None = None
+    """``basis="fs"`` only: the base smooth, ``"cr"`` (``xt = "cr"``) or ``"tp"`` (no ``xt``, mgcv's
+    default in ``smooth.construct.fs.smooth.spec``). ``None`` on an fs term means ``"cr"``; must be
+    ``None`` on any other basis."""
+
+    @property
+    def fs_base_bs(self) -> str:
+        """An fs term's base smooth (:attr:`fs_base`, ``None`` read as ``"cr"``)."""
+        return "cr" if self.fs_base is None else self.fs_base
 
     def knots_by_variable(self) -> dict[str, tuple[float, ...]]:
         """:attr:`knots` as a plain ``dict``, computed on demand.
@@ -249,6 +258,14 @@ class TermSpec:
                 raise HgamValidationError(
                     f"TermSpec {self.label!r} is basis='fs' with n_levels={self.n_levels!r}; fs needs "
                     "n_levels set, >= 2 (mgcv's length(levels(fac)))."
+                )
+            if self.fs_base not in (None, "cr", "tp"):
+                raise HgamValidationError(
+                    f"TermSpec {self.label!r}: fs_base={self.fs_base!r}; only 'cr' and 'tp' are ported."
+                )
+            if self.fs_base == "tp" and self.knots is not None:
+                raise HgamValidationError(
+                    f"TermSpec {self.label!r}: an fs term on a tp base takes no knots (only cr reads them)."
                 )
             if self.margin_order is not None and sorted(self.margin_order) != sorted(self.variables):
                 raise HgamValidationError(
@@ -401,6 +418,8 @@ class TermSpec:
                 f"n_levels={self.n_levels!r} — only a basis='sz'/'re' term, or a "
                 f"basis='cr' factor-by term, has a factor-level count."
             )
+        if self.basis != "fs" and self.fs_base is not None:
+            raise HgamValidationError(f"TermSpec {self.label!r}: fs_base is only meaningful for basis='fs'.")
         if self.basis != "fs" and self.margin_order is not None:
             raise HgamValidationError(
                 f"TermSpec {self.label!r} has basis={self.basis!r} but sets margin_order; "

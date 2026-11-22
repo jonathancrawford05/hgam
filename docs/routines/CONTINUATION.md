@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-22, by the development run's forty-fourth slice: the one-covariate `tp` basis, measured against
-section 28 and not ported (PLAN step 3, the bases). Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-22, by the development run's forty-fifth slice: `fs` on its default tp base (section 29, PLAN
+step 3, the bases). Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -317,16 +317,28 @@ distinct values; mgcv samples them at random), tp in discrete bam, `by=` on tp, 
 PR #54 review (`ada3807`): that refusal now raises `HgamNotImplementedError` (was `HgamValidationError`), with a
 front-end test; `tp_basis` names its counterpart; the Poisson case predicts at a nonzero offset. Tests: 881 pass.
 
-## Next slice: `fs` on its default tp base (PLAN step 3, the bases)
+`fs` on its default tp base (2026-11-22, this run; section 29, `tests/test_fs_basis.py`, `tests/test_fs_fit.py`):
+`s(x, f, bs="fs", k=)` with no `xt` is accepted (`FsCall.base`, `TermSpec.fs_base = "tp"`). `fs_basis(base="tp", k=)`
+builds the base with `tp_basis` (unconstrained, as `smooth.construct` returns it) and runs the cr path's `nat.param`;
+the tp gauge cancels there, so X, the S list and PredictMat meet smoothCon at 7.9e-14 up to column signs and the null
+pair's order. P is gauge dependent and not compared. The fit's `TermState` keeps the tp state (`tp`) and `fs_p`. REML
+fits `p ~ s(x, f, bs="fs", k=5)`, `p ~ s(x) + s(x, f, bs="fs", k=5)` and the first with `select=TRUE` (no extra penalty,
+as mgcv) meet every gate: eta at most 1.2e-12 on data and new data, se 3.0e-4 relative, edf 1.9e-10 of the gate,
+structure and names exact. Refused by name: a tp-based fs in discrete bam (`discrete_model_frame` and `fs_basis`'s
+`frame=`), `knots=` reaching a tp base, `xt="tp"` or `xt=list(bs="tp")` written out (not measured; could be lifted with
+one fixture). Tests: 890 pass.
 
-- `s(x, f, bs="fs")` with no `xt` is tp-based in mgcv (`smooth.construct.fs.smooth.spec`, smooth.r: `xt` defaults to
-  `"tp"`), the most common hierarchical-GAM form; hgam refuses it today (only `xt="cr"`). Add section 29 to
-  `oracle/make_fixtures.R`: `smoothCon(s(x, f, bs="fs", k=5))` and a REML gam `p ~ s(x, f, bs="fs", k=5)` (and with
-  `s(x)` beside it), held at the gates as `tests/test_fs_fit.py` does for cr. Measure first with `tp_basis` as the
-  base; port the fs-on-tp pieces of `smooth.construct.fs.smooth.spec` (the base's null space gets its own penalty per
-  level) only where a gate is missed. Lift the refusal only for the measured form.
-- After that, in order: tp in discrete bam (`discrete.mf` bins the covariate; tp is built on the compressed frame),
-  `by=` on tp, then the remaining bases (`ts`, `cs`, `ps`, `cc`).
+## Next slice: tp in discrete bam (PLAN step 3, the bases)
+
+- `bam(method="fREML", discrete=TRUE)` with a one-covariate `s(x)` / `s(x, bs="tp")`, refused today in
+  `hgam.frontend.discrete._smooth_groups`. mgcv: `discrete.mf` (bam.r) compresses x on its own; `gam.setup` builds the
+  tp smooth on the padded frame `mf0` (as for cr, ADR 0002), so `smooth.construct.tp.smooth.spec` sees mf0's unique
+  values and row count (the sqrt(n) column scaling and `scale.penalty` are over mf0's rows), and the constraint is
+  `colMeans` over mf0. Add section 30 to `oracle/make_fixtures.R`: `bam(p ~ s(x) + s(z, bs="cr", k=6), discrete=TRUE)`
+  on section 28's data (binomial cloglog, weights n), predict on new data with se, and the same with `select=TRUE`.
+  Measure first by building `tp_basis` on mf0 (a `frame=` path like cr's `constraint_frame`) and evaluating
+  `tp_predict` at the binned rows. Lift the refusal only for what meets the gates. Then fs on a tp base in discrete
+  bam follows the same frame (one more fixture), then `by=` on tp, then `ts`, `cs`, `ps`, `cc`.
 - Optional later cleanup (not blocking): remove the `"hgam"` Newton iteration and its tests once nothing relies on it;
   ask Jonathan in that slice's PR whether to keep it as a diagnostic.
 - Not ported yet (DEFERRED): the inner P-IRLS tolerance `conv.tol/100`; `edge.correct`; quasipoisson's log-scale

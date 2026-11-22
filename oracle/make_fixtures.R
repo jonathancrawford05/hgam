@@ -905,4 +905,40 @@ pr28d <- predict(m28d, nd28, se.fit = TRUE)
 put("gam_binomial_cloglog_tp_select_reml", c(gam_case(m28d, d28, f28b, "binomial(link='cloglog')"),
     list(rank = m28d$rank, coef_names = names(coef(m28d)), newdata = nd28,
          fit_new = as.numeric(pr28d$fit), se_new = as.numeric(pr28d$se.fit))))
+# 29. fs on its default tp base (smooth.construct.fs.smooth.spec, smooth.r: no xt means base.bs "tp"): the base is
+# smooth.construct.tp.smooth.spec on the data less the factor (no constraint), re-parameterised by nat.param(type = 1),
+# one uncentred copy per level, as section 24 on cr. x is rounded to two decimals so values repeat (tp is built on the
+# unique values; fewer than max.knots). 29a: smoothCon's X, S list and rank, and PredictMat at new values including x
+# outside its range (P is not recorded: it maps from the tp base, whose coordinates are an eigenvector gauge).
+# 29b: p ~ s(x, f, bs = "fs", k = 5) as a REML gam (binomial cloglog, weights n), predict on new data with se.
+# 29c: the global-plus-group-curves form s(x) + s(x, f, bs = "fs", k = 5). 29d: 29b with select = TRUE.
+set.seed(29); n <- 1500
+d29 <- data.frame(x = round(runif(n, 0, 10), 2), f = factor(sample(c("a", "b", "c"), n, TRUE), levels = c("a", "b", "c")),
+                  n = sample(20:200, n, TRUE))
+d29$p <- rbinom(n, d29$n, 1 - exp(-exp(-3.8 + 0.07 * (d29$x - 5) + c(0, 0.25, -0.15)[as.integer(d29$f)] +
+                                       c(0.2, -0.15, 0.3)[as.integer(d29$f)] * sin(d29$x / 1.7)))) / d29$n
+set.seed(291); nd29 <- data.frame(x = c(-0.5, round(runif(40, 0, 10), 3), 10.5),
+                                  f = factor(sample(c("a", "b", "c"), 42, TRUE), levels = c("a", "b", "c")))
+sm29 <- smoothCon(s(x, f, bs = "fs", k = 5), d29)[[1]]
+put("smoothcon_fs_tp", list(x = d29$x, group = as.integer(d29$f) - 1L, n_levels = 3L, k = 5L, label = sm29$label,
+  base_bs = sm29$base$bs, X = sm29$X, S = sm29$S, rank = sm29$rank, C_rows = nrow(sm29$C),
+  null_space_dim = sm29$null.space.dim, new_x = nd29$x, new_group = as.integer(nd29$f) - 1L,
+  X_new = PredictMat(sm29, nd29)))
+fs_tp_case <- function(m, f) {
+  pr <- predict(m, nd29, se.fit = TRUE)
+  c(gam_case(m, d29, f, "binomial(link='cloglog')"),
+    list(rank = m$rank, coef_names = names(coef(m)), newdata = nd29,
+         fit_new = as.numeric(pr$fit), se_new = as.numeric(pr$se.fit)))
+}
+f29b <- "p ~ s(x, f, bs='fs', k=5)"
+m29b <- gam(as.formula(f29b), family = binomial(link = "cloglog"), weights = n, data = d29, method = "REML")
+put("gam_binomial_cloglog_fs_tp_reml", fs_tp_case(m29b, f29b))
+f29c <- "p ~ s(x) + s(x, f, bs='fs', k=5)"
+m29c <- gam(as.formula(f29c), family = binomial(link = "cloglog"), weights = n, data = d29, method = "REML")
+put("gam_binomial_cloglog_tp_fs_tp_reml", fs_tp_case(m29c, f29c))
+m29d <- gam(as.formula(f29b), family = binomial(link = "cloglog"), weights = n, data = d29, method = "REML",
+            select = TRUE)
+put("gam_binomial_cloglog_fs_tp_select_reml", c(fs_tp_case(m29d, f29b),
+  list(select = TRUE, n_penalties = sapply(m29d$smooth, function(s) length(s$S)),
+       eta_vs_noselect = max(abs(m29d$linear.predictors - m29b$linear.predictors)))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

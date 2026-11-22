@@ -29,7 +29,8 @@ CASES = (
     "gam_binomial_cloglog_fs_tp_reml",
     # 29c: the global-plus-group-curves form, s(x) + s(x, f, bs="fs"), both tp.
     "gam_binomial_cloglog_tp_fs_tp_reml",
-    # 29d: 29c with select=TRUE (a null-space penalty for s(x); none for fs, whose penalties sum to full rank).
+    # 29d: 29c with select=TRUE (a null-space penalty for s(x); none for fs, whose penalties sum to full
+    # rank).
     "gam_binomial_cloglog_tp_fs_tp_select_reml",
 )
 

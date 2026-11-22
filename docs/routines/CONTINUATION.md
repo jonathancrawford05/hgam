@@ -2,8 +2,8 @@
 
 Last updated: 2026-11-22, by the development run's forty-third slice: the second slice of PR #48 follow-up (b), the
 port of mgcv's `newton` as the default outer iteration, with t2's REML `select=TRUE` refusal lifted (Jonathan chose
-PR #51's Q1 option (a) on 2026-11-22). PR #52 (docs only, the matching `docs/PRIORITIES.md` paragraph) waits for
-Jonathan to merge; this slice's tests follow that rule. Read `docs/PRIORITIES.md` before choosing work.
+PR #51's Q1 option (a) on 2026-11-22). PR #52 (the matching `docs/PRIORITIES.md` paragraph) is merged; this slice's
+tests follow that rule. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -358,7 +358,7 @@ Decided on PR #21 (2026-11-16): Q1 option (A): port mgcv's constraint rows for d
 at Ref.df exact; Chi.sq 1% relative; p-value 1e-3 absolute or 1% relative, whichever is larger. The matching
 `docs/PRIORITIES.md` row is Jonathan's change (a routine slice does not edit that file).
 
-Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a fitted quantity at
+Superseded by PR #51. Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a fitted quantity at
 estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at the unchanged gate.
 The fixture records both mgcv fits and their REML scores, and the tight fit is the reference only where mgcv's own
 tight score is not higher than its default score. mgcv's `newton` is not ported for this (option A not taken); the
@@ -369,8 +369,7 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 Decided on PR #51 (2026-11-22): Q1 option (a). Ridge cases are gated like for like, a default-tolerance fit against
 mgcv's default fit and a tight-tolerance fit against mgcv's tight refit; this supersedes PR #12's option B for fits
-that follow mgcv's `newton`. The `docs/PRIORITIES.md` paragraph is PR #52 (Jonathan merges). Done in the forty-third
-slice.
+that follow mgcv's `newton`. The rule is in `docs/PRIORITIES.md` (PR #52). Done in the forty-third slice.
 
 ## Open questions
 

@@ -30,11 +30,13 @@ The 1e-3 gate reflects mgcv itself: on the same model its own `gam`, `bam` and `
 with itself is not a goal. Changing a gate is an "Always ask" item.
 
 Where mgcv's default search stops short of its own optimum (a smoothing parameter on a flat REML ridge), a
-fitted quantity at estimated smoothing parameters is gated against mgcv refitted at a tight `newton` tolerance
-(`gam.control(newton = list(conv.tol = 1e-12))`), at the same gate. The fixture records both mgcv fits and their
-REML scores, with no hgam output in the R script, and the tight fit is the reference only where mgcv's own tight
-score is not higher than its default score. The gap between mgcv's two fits goes in `docs/DEFERRED.md`. This is
-not a reason to port mgcv's `newton`.
+fitted quantity at estimated smoothing parameters is gated against the mgcv fit made at the same `newton`
+tolerance, at the same gate. A fit at the default tolerance is gated against mgcv's default fit. A fit at
+`gam.control(newton = list(conv.tol = 1e-12))` is gated against mgcv refitted at that tolerance, where mgcv's own
+tight score is not higher than its default score. The fixture records both mgcv fits and their REML scores, with no
+hgam output in the R script. The gap between mgcv's two fits goes in `docs/DEFERRED.md`. (Decided on PR #51, option
+(a). It replaces PR #12's option B, which gated every fit against the tight refit while hgam's outer search was not
+mgcv's.)
 
 Where a model is rank deficient and a redundant direction runs through several terms (a factor main effect
 beside its `sz` smooths, or two `sz` smooths of one factor), those terms are gated on their summed edf, at the

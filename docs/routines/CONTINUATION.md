@@ -395,11 +395,13 @@ that follow mgcv's `newton`. The rule is in `docs/PRIORITIES.md` (PR #52). Done 
 
 PR #55 Q1 (2026-11-22): what to gate an fs fit on a tp base against, given that mgcv's own fit depends on the rounding
 that sets the null pair's rotation. Options: (a) leave fs on a tp base refused and record it (the PR as it stands);
-(b) accept it, gating structure, edf and se as usual but eta at a looser, measured tolerance; this is a gate change, so
-it is yours to make; (c) find whether mgcv 1.9-4 picks a reproducible rotation on a tp base (needs the CI `oracle`
-fixtures or R >= 4.4 in a session; the routine cannot download CI artifacts). Recommendation: (a) now, and (c) if
-hierarchical models on the default fs base matter soon. Note the cr base has the same sensitivity and matches the
-pinned image on section 24 today; it would be exposed in the same way if the rounding changed.
+(b) record mgcv's null-space columns (or its fitted `P`) in the fixture and gate an hgam fit built on mgcv's null
+basis, like the existing "eta at mgcv's sp" checks (the reviewer's route), plus the rotation-invariant results;
+(c) gate eta at a looser, measured tolerance (a gate change, yours to make); (d) look for a tie-break mgcv 1.9-4 follows
+(none in `nat.param`: `eigen(RSR, symmetric=TRUE)`). Recommendation: (a) now, (b) if hierarchical models on the
+default fs base are needed soon. A fit is sensitive to an explicit rotation on either base (1.2e-3 per 0.1 rad), but
+rounding rotates only the tp base's pair in practice: the PR #55 review perturbed x by 1e-15 to 1e-13 relative and the
+cr fit did not move, while the tp fit moved by up to 3e-2.
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

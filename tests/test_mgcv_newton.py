@@ -232,3 +232,19 @@ def test_newton_iteration_is_validated() -> None:
         gam_model.newton_select_lambdas(
             np.ones(3), np.eye(3), poisson_log(), (np.eye(3),), x0=np.zeros(1), iteration="bfgs"
         )
+
+
+def test_iteration_limit_warns_as_mgcv_does() -> None:
+    """mgcv's ``newton`` warns "Iteration limit reached without full convergence - check carefully" at its
+    iteration cap (gam.fit3.r, after the loop); so does the port (PR #51 review nit)."""
+    rng = np.random.default_rng(51)
+    x = np.column_stack([np.ones(60), rng.normal(size=(60, 3))])
+    y = rng.poisson(np.exp(0.2 + 0.3 * x[:, 1])).astype(np.float64)
+    block = np.zeros((4, 4))
+    block[1:, 1:] = np.eye(3)
+    with pytest.warns(UserWarning, match="iteration limit reached without full convergence"):
+        result = gam_model.newton_select_lambdas(
+            y, x, poisson_log(), (block,), x0=np.array([4.0]), maxiter=1, iteration="mgcv"
+        )
+    assert result.message == "iteration limit reached"
+    assert not result.converged

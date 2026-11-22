@@ -292,18 +292,19 @@ and the Fletcher `scale.est`). Measured first: the convergence test alone moved 
 four select fits 1.4e-3 to 1.1e-2 off it (their paths diverge at mgcv's step logic), so the whole iteration is ported.
 Against mgcv's default fits (tier 1): iteration counts equal mgcv's on all five cases; eta 27b2 8.1e-11, 27d3 2.1e-10
 (predict 3.2e-10, se 2.5e-3), sz select 6.6e-5, cr+fs select 1.8e-10, cr-by-numeric 1.2e-10. At `conv.tol = 1e-12`
-it converges and meets mgcv's tight refits to 1.2e-10 on 27b2, 27d3 and cr-by-numeric. Tests: 877 pass.
+it converges and meets mgcv's tight refits to 1.2e-10 on 27b2, 27d3 and cr-by-numeric. PR #51 review nit (done):
+the port warns at the iteration limit as mgcv does (`test_iteration_limit_warns_as_mgcv_does`). Tests: 878 pass.
 
 Measured for the question below: with the port as the default, the suite's only key-result failures are the three
 tests that gate a default-tolerance fit against mgcv's tight refit (`test_t2_fit` 27b2 eta 1.2e-3,
 `test_cr_by_numeric` eta 1.4e-3, `test_tight_conv_tol_on_the_select_ridge`, which asserts the old stall), plus two
 summary tests that report the old tolerance (`epsilon_rel`).
 
-## Next slice: make the `newton` port the default (PR #48 follow-up (b), second slice), once Q1 is decided
+## Next slice: make the `newton` port the default (PR #48 follow-up (b), second slice; Q1 decided: option (a))
 
 - Done when (Jonathan, PR #48): 27d3 meets every gate against mgcv's **default** fit (met through the port) and
   `_refuse_t2`'s REML select refusal is lifted.
-- With Q1 (a): `fit_engine_gam(newton_iteration=)` defaults to `"mgcv"`; the ridge tests (`test_t2_fit` 27b2,
+- Q1 (a), decided 2026-11-22: `fit_engine_gam(newton_iteration=)` defaults to `"mgcv"`; the ridge tests (`test_t2_fit` 27b2,
   `test_cr_by_numeric`, `test_newton_conv_tol`) gate default-tolerance fits against mgcv's default fit and
   `control={"newton": {"conv.tol": 1e-12}}` fits against the tight refit; `_refuse_t2` stops refusing `select=True`
   in a REML gam (its refusal test is replaced by `test_mgcv_newton`'s 27d3 case, SETTINGS condition 5);
@@ -360,14 +361,10 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 ## Open questions
 
-Q1 (this run's PR): which mgcv fit the ridge cases are gated against once the `newton` port is the default.
-`docs/PRIORITIES.md` gates a fitted quantity on a flat REML ridge against mgcv's tight refit (PR #12 option B, made
-because hgam's search was not mgcv's). The port follows mgcv's own path, so at the default tolerance it reproduces
-mgcv's default fit (27b2 eta 8.1e-11) and misses the tight refit (27b2 1.2e-3, cr-by-numeric 1.4e-3); at `conv.tol =
-1e-12` it reproduces the tight refit (1.2e-10). Options: (a) gate like for like: a default-tolerance fit against
-mgcv's default fit, a tight-tolerance fit against mgcv's tight refit (Jonathan rewrites that PRIORITIES paragraph;
-the fixtures already hold both fits); (b) keep the rule, so the port stays opt in and 27d3's refusal stays.
-Recommendation: (a). It is the reference Jonathan already set for 27d3 on PR #48.
+None. Q1 (PR #51) was decided on 2026-11-22: option (a), gate like for like. A default-tolerance fit is gated against
+mgcv's default fit, a `conv.tol = 1e-12` fit against mgcv's tight refit. The matching `docs/PRIORITIES.md` paragraph
+(the tight-refit rule from PR #12) is Jonathan's change; a routine slice does not edit that file. The next slice
+makes the port the default as described above.
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

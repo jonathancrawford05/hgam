@@ -546,6 +546,11 @@ def newton_select_lambdas(
             )
         elif not converged:
             message = "iteration limit reached"
+            warnings.warn(
+                "newton_select_lambdas: iteration limit reached without full convergence - check carefully",
+                UserWarning,
+                stacklevel=2,
+            )
         else:
             message = "full convergence"
 

@@ -892,9 +892,10 @@ d28$expo <- round(runif(n, 200, 5000)); d28$log_expo <- log(d28$expo)
 d28$deaths <- rpois(n, d28$expo * exp(-6 + 0.3 * cos(d28$x / 2) - 0.4 * d28$z))
 f28c <- "deaths ~ s(x, bs='tp', k=6) + s(z, bs='tp', k=5) + offset(log_expo)"
 m28c <- gam(as.formula(f28c), family = poisson, data = d28, method = "REML")
-pr28c <- predict(m28c, cbind(nd28, log_expo = 0), se.fit = TRUE)
+nd28c <- cbind(nd28, log_expo = log(c(300, 1000, 2500, 4000, 500, 1500, 4800)))
+pr28c <- predict(m28c, nd28c, se.fit = TRUE)
 put("gam_poisson_tp_reml", c(gam_case(m28c, d28, f28c, "poisson"),
-    list(rank = m28c$rank, coef_names = names(coef(m28c)), newdata = nd28,
+    list(rank = m28c$rank, coef_names = names(coef(m28c)), newdata = nd28c,
          fit_new = as.numeric(pr28c$fit), se_new = as.numeric(pr28c$se.fit))))
 # 28d. 28b's model with select = TRUE: smoothCon's null.space.penalty adds a penalty on the tp term's null space (the
 # linear function left after the constraint).

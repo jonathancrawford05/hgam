@@ -187,5 +187,5 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
 - `tp`, one covariate (2026-11-22, measured, not ported): section 28 (`tests/test_tp_fit.py`). The moved
   `tp_basis` meets smoothCon's tp basis up to its gauge (design 6.2e-14, penalty 3.0e-14 in mgcv's basis); `s(x)` +
   cr, two tp smooths with an offset (Poisson) and `select=TRUE` meet every gate (eta at most 8.2e-12 on data and new
-  data, se 3.2e-4 relative, edf 7.9e-9 of the gate). Still refused: tp in discrete bam, `by=` on tp, tp as the `fs`
+  data, se 3.2e-4 relative, edf 7.9e-9 of the gate). Still refused: the `max.knots` subsampling regime (more than 2000 rows and 2000 distinct values), tp in discrete bam, `by=` on tp, tp as the `fs`
   base, two-covariate tp. Next: `fs` on its default tp base.

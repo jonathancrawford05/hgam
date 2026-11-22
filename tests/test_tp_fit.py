@@ -12,7 +12,7 @@ The basis is compared up to its gauge: the range-space coordinates are fixed onl
 constrained design and to the penalty in the basis that maps hgam's design onto mgcv's. Fitted quantities are
 gauge invariant and are gated directly (``docs/PRIORITIES.md``): structure exact; eta 1e-3 absolute; per-term
 edf 0.05 absolute or 1%, whichever is larger; se of eta 1% relative, on the data and on new data (x outside
-its range included).
+its range included; the Poisson case predicts at a nonzero offset).
 """
 
 import numpy as np
@@ -20,6 +20,7 @@ import pytest
 
 from hgam.engine.gam_basis_cr import absorb_sum_to_zero_constraint
 from hgam.engine.gam_basis_tp import tp_basis
+from hgam.errors import HgamNotImplementedError
 from hgam.frontend.api import gam
 
 DETERMINISTIC_RTOL = 1e-8
@@ -95,8 +96,6 @@ def test_tp_reml_fit_meets_the_gates(name: str, load_fixture, margin) -> None:
     edf_ratio = float(np.max(np.abs(got_edf - ref_edf) / np.maximum(0.05, 0.01 * ref_edf)))
 
     newdata = _columns(fx["newdata"])
-    if "log_expo" in fx["formula"]:
-        newdata["log_expo"] = np.zeros(newdata["x"].size)  # the fixture predicts at log_expo = 0
     eta_new, se_new = fit.predict(newdata, se_fit=True)
     eta_new_err = float(np.max(np.abs(eta_new - np.asarray(fx["fit_new"]))))
     se_new_err = float(np.max(np.abs(se_new / np.asarray(fx["se_new"]) - 1.0)))
@@ -111,3 +110,14 @@ def test_tp_reml_fit_meets_the_gates(name: str, load_fixture, margin) -> None:
     assert edf_ratio <= 1.0, (got_edf, ref_edf)
     assert eta_new_err < ETA_ATOL
     assert se_new_err < SE_RTOL
+
+
+def test_tp_max_knots_subsampling_is_refused_through_gam() -> None:
+    """mgcv subsamples ``max.knots = 2000`` distinct values at random when there are more than 2000 rows
+    and more than 2000 distinct values (smooth.construct.tp.smooth.spec, smooth.r); that stream is not
+    ported, so ``gam()`` refuses it by name rather than build a different basis."""
+    rng = np.random.default_rng(54)
+    x = rng.uniform(0.0, 1.0, 2500)
+    data = {"x": x, "y": np.sin(6.0 * x) + rng.normal(0.0, 0.1, x.size)}
+    with pytest.raises(HgamNotImplementedError, match=r"max\.knots"):
+        gam("y ~ s(x)", data, "gaussian", method="REML")

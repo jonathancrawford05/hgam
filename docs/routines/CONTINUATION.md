@@ -312,8 +312,10 @@ The one-covariate tp basis (2026-11-22, this run; section 28, `tests/test_tp_fit
 are a gauge) with the penalty at 3.0e-14. REML gam fits `s(x) + s(z, bs="cr", k=6)` (binomial cloglog), two tp smooths
 with an offset (Poisson) and the first with `select=TRUE` meet every gate: eta at most 8.2e-12 on data and new data
 (x outside its range), se 3.2e-4 relative, edf 7.9e-9 of the gate, structure and coefficient names exact. Still refused
-by name: tp in discrete bam, `by=` on tp, tp as the `fs` base (mgcv's default `xt`), two-covariate `s(x, z)`, `ts`.
-Tests: 880 pass.
+by name (`HgamNotImplementedError`): the `max.knots` subsampling regime (more than 2000 rows and more than 2000
+distinct values; mgcv samples them at random), tp in discrete bam, `by=` on tp, tp as the `fs` base (mgcv's default `xt`), two-covariate `s(x, z)`, `ts`.
+PR #54 review (`ada3807`): that refusal now raises `HgamNotImplementedError` (was `HgamValidationError`), with a
+front-end test; `tp_basis` names its counterpart; the Poisson case predicts at a nonzero offset. Tests: 881 pass.
 
 ## Next slice: `fs` on its default tp base (PLAN step 3, the bases)
 

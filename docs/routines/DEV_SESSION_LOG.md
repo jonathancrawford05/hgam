@@ -1,5 +1,10 @@
 # Development session log
 
+## 2026-11-22 (PR #54 review follow-up, `ada3807`)
+
+Should fix 1: tp's `max.knots` subsampling refusal raises `HgamNotImplementedError` (was `HgamValidationError`); engine test updated, `test_tp_max_knots_subsampling_is_refused_through_gam` added. Should fix 2: `tp_basis` and its module name `smooth.construct.tp.smooth.spec` / `construct_tprs`, mgcv 1.9-4; stale polaris-re references removed.
+Nit: 28c predicts new data at a nonzero offset (fixture regenerated; eta new 4.7e-12). Tests: 880 → 881. `make lint` clean. No key result changed.
+
 ## 2026-11-22 (forty-fourth slice): the one-covariate `tp` basis, measured (PLAN step 3, bases)
 
 No open PR at start (PR #53 merged). Section 28 fixtures: `smoothCon(s(x, bs="tp", k=8))`, `s(x) + s(z, bs="cr")` (binomial cloglog), two tp smooths with an offset (Poisson), and `select=TRUE`. No engine change: the moved `tp_basis` met every gate.

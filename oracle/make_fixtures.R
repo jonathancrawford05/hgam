@@ -941,4 +941,14 @@ m29d <- gam(as.formula(f29b), family = binomial(link = "cloglog"), weights = n, 
 put("gam_binomial_cloglog_fs_tp_select_reml", c(fs_tp_case(m29d, f29b),
   list(select = TRUE, n_penalties = sapply(m29d$smooth, function(s) length(s$S)),
        eta_vs_noselect = max(abs(m29d$linear.predictors - m29b$linear.predictors)))))
+# 29e. mgcv's own fs fit under a constant shift of x (1e-12 to 1e-9: the unique values, the model and, in exact arithmetic,
+# both bases are unchanged; only rounding moves), on a tp base (29b's formula) and on cr (xt = "cr"). On tp the two
+# null-space eigenvalues of nat.param's R^-T S R^-1 are rounding noise, so rounding sets their directions and the fit;
+# eta_shift is max |eta(shifted) - eta(unshifted)| per shift.
+fs_shift <- function(f) sapply(10^(-12:-9), function(h) { d <- d29; d$x <- d$x + h
+  m <- gam(as.formula(f), family = binomial(link = "cloglog"), weights = n, data = d, method = "REML")
+  m0 <- gam(as.formula(f), family = binomial(link = "cloglog"), weights = n, data = d29, method = "REML")
+  max(abs(m$linear.predictors - m0$linear.predictors)) })
+put("gam_fs_tp_rounding_spread", list(shifts = 10^(-12:-9), eta_shift_tp = fs_shift(f29b),
+  eta_shift_cr = fs_shift("p ~ s(x, f, bs='fs', xt='cr', k=5)")))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

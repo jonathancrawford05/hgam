@@ -75,8 +75,8 @@ class TermState:
     knots: tuple[np.ndarray, ...] = ()
     constraint: tuple[np.ndarray, ...] = ()
     tp: TprsState | None = None
-    """A ``tp`` term's (or an ``fs`` term's tp base's) shift, distinct covariate values and ``UZ``
-    (``smooth$shift``, ``$Xu``, ``$UZ``); ``None`` for every other basis."""
+    """A ``tp`` term's shift, distinct covariate values and ``UZ`` (``smooth$shift``,
+    ``$Xu``, ``$UZ``); ``None`` for every other basis."""
     fs_p: np.ndarray | None = None
     """An ``fs`` term's ``nat.param`` re-parameterisation ``P`` (``smooth$P``), which
     ``Predict.matrix.fs.interaction`` applies to the base cr matrix; ``None`` for every other basis."""
@@ -157,11 +157,8 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         assert term.n_levels is not None
         factor_name, smoothed = term.variables
         x = np.asarray(_column(data, smoothed, term), dtype=np.float64)
-        group = _codes(data, factor_name, term.n_levels, term)
-        if term.fs_base_bs == "tp":
-            built = fs_basis(x, group, term.n_levels, None, frame=fs_frame(term), base="tp", k=term.k[0])
-            return TermState(term=term, tp=built.tp_state, fs_p=built.p_mat)
         knots = _knots_for(term, smoothed, term.k[0], x)
+        group = _codes(data, factor_name, term.n_levels, term)
         built = fs_basis(x, group, term.n_levels, knots, frame=fs_frame(term))
         return TermState(term=term, knots=(knots,), fs_p=built.p_mat)
     if term.basis in ("re", "parametric"):
@@ -230,12 +227,6 @@ def predict_term_design(state: TermState, data: Mapping[str, np.ndarray]) -> np.
         factor_name, smoothed_name = term.variables
         x = np.asarray(_column(data, smoothed_name, term), dtype=np.float64)
         group = _codes(data, factor_name, term.n_levels, term)
-        if term.fs_base_bs == "tp":
-            if state.tp is None:
-                raise HgamValidationError(
-                    f"predict_term_design: fs term {term.label!r} has no tp base state."
-                )
-            return fs_predict_design(x, group, term.n_levels, None, state.fs_p, state.tp)
         return fs_predict_design(x, group, term.n_levels, state.knots[0], state.fs_p)
     if term.basis == "re":
         assert term.n_levels is not None

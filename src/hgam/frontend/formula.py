@@ -11,7 +11,7 @@ later by :mod:`hgam.frontend.api`, which holds the DataFrame.
     response ~ term (+ term)*          response := column | column / column
     term     := s(x [, bs="tp"] [, k=K])  |  s(x, bs="cr", k=K [, by=z])  |  s(f, bs="re")
               | s(f, x, bs="sz", k=K, xt=list(bs="cr"))
-              | s(x, f, bs="fs", k=K, xt="cr") | s(x, f, bs="fs", k=K)
+              | s(x, f, bs="fs", k=K, xt="cr")
               | ti(x, z, bs="cr" [, k=K | c(K1, K2)])
               | offset(column) | factor | factor:factor
 
@@ -102,14 +102,12 @@ class SzCall:
 
 @dataclass(frozen=True)
 class FsCall:
-    """A parsed ``s(x, f, bs="fs", k=K, xt="cr")`` or ``s(x, f, bs="fs", k=K)`` call: two variables in
-    written order, one of which is a factor. mgcv finds the factor by type
-    (``smooth.construct.fs.smooth.spec``), so :mod:`hgam.frontend.api` decides which against the data."""
+    """A parsed ``s(x, f, bs="fs", k=K, xt="cr")`` call: two variables in written order, one of which is a
+    factor. mgcv finds the factor by type (``smooth.construct.fs.smooth.spec``), so
+    :mod:`hgam.frontend.api` decides which against the data."""
 
     variables: tuple[str, str]
     k: int
-    base: str = "cr"
-    """The base smooth: ``"cr"`` (``xt = "cr"``) or ``"tp"`` (no ``xt``, mgcv's default)."""
 
     @property
     def text(self) -> str:
@@ -289,24 +287,25 @@ def _parse_sz(text: str, positional: list[str], keyword: dict[str, str]) -> SzCa
 
 
 def _parse_fs(text: str, positional: list[str], keyword: dict[str, str]) -> FsCall:
-    """``s(x, f, bs="fs", ...)`` (mgcv ``smooth.construct.fs.smooth.spec``, smooth.r, mgcv 1.9-4). A base
-    smooth of one covariate: ``xt = "cr"``, or no ``xt``, which is mgcv's default ``tp`` base. Any other
-    ``xt`` (including ``xt = "tp"`` written out, which is not measured) is refused."""
+    """``s(x, f, bs="fs", ...)`` (mgcv ``smooth.construct.fs.smooth.spec``, smooth.r, mgcv 1.9-4). Only a cr
+    base smooth of one covariate is ported: mgcv's default base (no ``xt``) is ``tp``, which is refused."""
     for key in keyword:
         if key not in ("bs", "k", "xt"):
             raise _refuse(
                 f"argument {key!r} in {text}",
-                f'only k= and xt="cr" (or no xt, a tp base) are ported for bs="fs" ({_COVERAGE} §2.1)',
+                f'only k= and xt="cr" are ported for bs="fs" ({_COVERAGE} §2.1)',
             )
-    base = "tp"
-    if "xt" in keyword:
-        if not _FS_XT.match(keyword["xt"].strip()):
-            raise _refuse(
-                f"xt={keyword['xt']} in {text}",
-                'only xt="cr" (or xt=list(bs="cr")), or no xt for mgcv\'s default tp base, is ported '
-                'for bs="fs"',
-            )
-        base = "cr"
+    if "xt" not in keyword:
+        raise _refuse(
+            f"{text} without xt=",
+            "mgcv's default fs base smooth is tp, which is not ported for fs: mgcv's own fit on a tp base "
+            "depends on rounding (its two null-space directions are set by it; make_fixtures.R section 29e); "
+            'write xt="cr"',
+        )
+    if not _FS_XT.match(keyword["xt"].strip()):
+        raise _refuse(
+            f"xt={keyword['xt']} in {text}", 'only xt="cr" (or xt=list(bs="cr")) is ported for bs="fs"'
+        )
     if len(positional) != 2:
         raise _refuse(
             f"{text} with {len(positional)} variable(s)",
@@ -319,7 +318,7 @@ def _parse_fs(text: str, positional: list[str], keyword: dict[str, str]) -> FsCa
     if variables[0] == variables[1]:
         raise HgamValidationError(f"gam(): {text} names the same variable twice.")
     k = _int_k(keyword["k"], text) if "k" in keyword else _CR_DEFAULT_K
-    return FsCall(variables=variables, k=k, base=base)
+    return FsCall(variables=variables, k=k)
 
 
 def _parse_smooth(text: str, positional: list[str], keyword: dict[str, str]) -> SmoothCall | SzCall | FsCall:

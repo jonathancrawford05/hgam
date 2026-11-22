@@ -1,10 +1,10 @@
 # Development session log
 
-## 2026-11-22 (forty-fifth slice): `fs` on its default tp base (PLAN step 3, bases)
+## 2026-11-22 (forty-fifth slice): `fs` on its default tp base, measured; fit stays refused (PLAN step 3, bases)
 
-No open PR at start (PR #54 merged). `fs_basis(base="tp")`: mgcv's no-`xt` fs (`smooth.construct.fs.smooth.spec`, base.bs "tp") on the moved `tp_basis`, then the same `nat.param`; `TermSpec.fs_base`, parser accepts `s(x, f, bs="fs")`. Discrete bam, `knots=` and `xt="tp"` on a tp base refused.
-Tests: 881 → 890 (two refusal-only cases retired: `test_fs_refusals[...default fs base smooth is tp]`, `test_formula` `s(f, x, bs="fs")` "without xt="; replaced by `test_fs_tp_fit_meets_the_gates` on section 29). `make lint` clean. Tier 1 (mgcv 1.9-1): basis 7.9e-14; eta ≤ 1.2e-12 (data and new data), se ≤ 3.0e-4 rel, edf ≤ 1.9e-10 of the gate; structure and names exact.
-Deferred: the null pair's sp swap on tp (as on cr). Next: tp in discrete bam.
+No open PR at start (PR #54 merged). First push lifted the refusal (tier 1 eta 1.2e-12), but `oracle` (mgcv 1.9-4) missed by 1.1e-2: on a tp base nat.param's two null eigenvalues are rounding noise, so rounding sets the pair's rotation and the fit, in mgcv too (29e: eta 6.8e-3 under x + 1e-12; cr 1.2e-14). Second push: refusal restored, `fs_basis(base="tp")` kept as the measured basis.
+Tests: 881 → 886 (basis tests only). `make lint` clean. Tier 1: range columns 7.9e-14, null-pair span 3.6e-15, penalties 1.0e-14, PredictMat 1.2e-14.
+Question for Jonathan on PR #56 (how to treat a reference that depends on rounding). Next: tp in discrete bam.
 
 ## 2026-11-22 (PR #54 review follow-up, `ada3807`)
 

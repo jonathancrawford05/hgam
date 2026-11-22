@@ -391,9 +391,8 @@ def fs_frame(term: TermSpec) -> tuple[np.ndarray, np.ndarray] | None:
 
 
 def build_python_fs_term(x: np.ndarray, group: np.ndarray, term: TermSpec) -> TermExtract:
-    """mgcv counterpart: ``smooth.construct.fs.smooth.spec`` with ``xt = "cr"`` or no ``xt`` (a tp base)
-    and ``smoothCon``'s penalty scaling (smooth.r), mgcv 1.9-4, through
-    :func:`~hgam.engine.gam_basis_fs.fs_basis`.
+    """mgcv counterpart: ``smooth.construct.fs.smooth.spec`` with ``xt = "cr"`` and ``smoothCon``'s penalty
+    scaling (smooth.r), mgcv 1.9-4, through :func:`~hgam.engine.gam_basis_fs.fs_basis`.
 
     ``term.variables`` is ``(factor_name, smoothed_name)``. The ``1 + null_dim`` penalties keep mgcv's
     ``rank`` vector (``rank * nf``, then ``nf`` per null-space direction). No constraint is absorbed.
@@ -406,17 +405,10 @@ def build_python_fs_term(x: np.ndarray, group: np.ndarray, term: TermSpec) -> Te
             f"basis={term.basis!r}."
         )
     x = np.asarray(x, dtype=np.float64)
+    supplied = term.knots_by_variable().get(term.variables[1])
     k = term.k[0]
-    if term.fs_base_bs == "tp":
-        basis = fs_basis(
-            x, np.asarray(group, dtype=np.int64), term.n_levels, None, frame=fs_frame(term), base="tp", k=k
-        )
-        knot_values: tuple[float, ...] = ()
-    else:
-        supplied = term.knots_by_variable().get(term.variables[1])
-        knots = np.asarray(supplied, dtype=np.float64) if supplied is not None else cr_default_knots(x, k)
-        basis = fs_basis(x, np.asarray(group, dtype=np.int64), term.n_levels, knots, frame=fs_frame(term))
-        knot_values = tuple(float(v) for v in knots)
+    knots = np.asarray(supplied, dtype=np.float64) if supplied is not None else cr_default_knots(x, k)
+    basis = fs_basis(x, np.asarray(group, dtype=np.int64), term.n_levels, knots, frame=fs_frame(term))
     return TermExtract(
         label=term.label,
         index_start=0,
@@ -424,7 +416,7 @@ def build_python_fs_term(x: np.ndarray, group: np.ndarray, term: TermSpec) -> Te
         design=basis.design,
         s=basis.penalties,
         rank=basis.rank,
-        knots=knot_values,
+        knots=tuple(float(v) for v in knots),
     )
 
 

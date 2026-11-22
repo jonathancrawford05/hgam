@@ -252,6 +252,11 @@ def _smooth_groups(term: TermSpec) -> list[tuple[str, ...]]:
     if term.basis == "t2":
         return head + [term.variables]
     if term.basis == "fs":
+        if term.fs_base_bs != "cr":
+            raise HgamNotImplementedError(
+                f"discrete_model_frame: {term.label!r} is an fs term on a {term.fs_base_bs} base; in "
+                'bam(discrete = TRUE) only a cr base (xt="cr") is ported.'
+            )
         return [(v,) for v in (term.margin_order if term.margin_order is not None else term.variables)]
     return head + [(v,) for v in term.variables]
 

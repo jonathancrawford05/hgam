@@ -14,11 +14,8 @@ The construction, as mgcv runs it:
    :func:`~hgam.engine.gam_basis_tp.tp_basis`; its penalty carries ``smoothCon``'s scale, which
    ``nat.param`` does not see: a scalar on ``S`` and a column scaling of ``X`` both cancel in step 2).
    The tp base's coordinates are an eigenvector gauge (``gam_basis_tp``); ``nat.param`` maps any such
-   gauge to the same range columns up to sign and the same null-pair span. ``P``, which maps from the
-   base, differs from mgcv's. On a tp base the two null-space eigenvalues are pure rounding noise, so the
-   pair's *rotation* is set by rounding, in mgcv as here (a shift of x by 1e-12 moves mgcv's own fit by
-   6.8e-3 in eta, ``make_fixtures.R`` section 29e). The fit therefore depends on rounding, and
-   ``gam()`` keeps refusing a tp-based fs; this function is the measured basis only.
+   gauge to the same ``X`` up to the signs of its columns, so only ``P``, which maps from the base,
+   differs from mgcv's.
 2. ``nat.param(X, S, rank, type = 1)`` re-parameterises it: ``X = QR``; the eigen-decomposition of
    ``R^-T S R^-1`` (``eigen(symmetric = TRUE)``, LAPACK ``dsyevr``; SciPy's ``driver="evr"`` is the same
    routine) gives ``X Q V`` and ``P = R^-1 V`` with the range columns first; type 1 divides each range column

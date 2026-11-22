@@ -19,11 +19,9 @@ import numpy as np
 import pytest
 
 from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
-from hgam.engine.gam_basis_tp import subspace_distance
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 GATE = 1e-8
-NAME_29E = "gam_fs_tp_rounding_spread"
 
 
 def _rel(got: np.ndarray, ref: np.ndarray) -> float:
@@ -86,12 +84,11 @@ def test_fs_basis_matches_smoothcon(load_fixture, margin) -> None:
 
 
 def test_fs_tp_basis_matches_smoothcon(load_fixture, margin) -> None:
-    """Section 29a: ``s(x, f, bs="fs", k=5)`` with no ``xt``, mgcv's default tp base. On a tp base the two
-    null-space eigenvalues of ``nat.param``'s ``R^-T S R^-1`` are rounding noise, so rounding sets not just
-    the order of the null pair but its rotation (on mgcv's side too: section 29e). What is determined is
-    held at the deterministic-piece gate: each range column up to sign, the null pair's span (sine of the
-    largest principal angle), the range penalty, and the sum of the null penalties (the identity on the
-    pair, invariant under its rotation). ``P`` maps from the tp base's gauge, so it is not compared."""
+    """Section 29a: ``s(x, f, bs="fs", k=5)`` with no ``xt``, mgcv's default tp base. The tp base's own
+    coordinates are an eigenvector gauge (``gam_basis_tp``), but ``nat.param`` maps any gauge of the same
+    base to the same design up to column signs and the order of the null pair, so ``X``, the penalties and
+    ``PredictMat`` are held under the same column map as the cr case. ``P`` maps from the base, so it is
+    gauge dependent and not compared."""
     fx = load_fixture("smoothcon_fs_tp")
     assert fx["base_bs"] == "tprs.smooth"
     n_levels, k = fx["n_levels"], fx["k"]
@@ -103,58 +100,25 @@ def test_fs_tp_basis_matches_smoothcon(load_fixture, margin) -> None:
     assert got.rank == tuple(fx["rank"]) == (base_rank * n_levels, n_levels, n_levels)
     assert len(got.penalties) == len(fx["S"]) == 1 + k - base_rank
     assert got.tp_state is not None
+
+    order, signs = _column_map(got.design[:, :k], ref_x[:, :k], base_rank)
+    full_order = np.concatenate([order + level * k for level in range(n_levels)])
+    full_signs = np.tile(signs, n_levels)
+    rel_x = _rel(got.design[:, full_order] * full_signs, ref_x)
+    penalty_order = [0, *(1 + order[base_rank:] - base_rank)]
+    rel_s = max(
+        _rel(got.penalties[penalty_order[i]][np.ix_(full_order, full_order)], np.asarray(fx["S"][i]))
+        for i in range(len(fx["S"]))
+    )
     x_new = fs_predict_design(
         np.asarray(fx["new_x"]), np.asarray(fx["new_group"]), n_levels, None, got.p_mat, got.tp_state
     )
-    ref_new = np.asarray(fx["X_new"])
-
-    rng_idx = np.concatenate([np.arange(base_rank) + level * k for level in range(n_levels)])
-    signs = np.sign(np.sum(got.design[:, rng_idx] * ref_x[:, rng_idx], axis=0))
-    rel_range = _rel(got.design[:, rng_idx] * signs, ref_x[:, rng_idx])
-    rel_range_new = _rel(x_new[:, rng_idx] * signs, ref_new[:, rng_idx])
-    null_angle = 0.0
-    for level in range(n_levels):
-        cols = np.arange(base_rank, k) + level * k
-        for a, b in ((got.design, ref_x), (x_new, ref_new)):
-            rows = np.any(b[:, cols] != 0.0, axis=1)
-            null_angle = max(null_angle, subspace_distance(a[np.ix_(rows, cols)], b[np.ix_(rows, cols)]))
-    rel_s_range = _rel(got.penalties[0], np.asarray(fx["S"][0]))
-    rel_s_null = _rel(sum(got.penalties[1:]), sum(np.asarray(s) for s in fx["S"][1:]))
-    for quantity, value in (
-        ("X range columns", rel_range),
-        ("X null pair, sine of angle", null_angle),
-        ("range penalty", rel_s_range),
-        ("summed null penalties", rel_s_null),
-        ("PredictMat range columns", rel_range_new),
-    ):
+    rel_new = _rel(x_new[:, full_order] * full_signs, np.asarray(fx["X_new"]))
+    for quantity, value in (("X", rel_x), ("S", rel_s), ("PredictMat", rel_new)):
         margin("fs tp basis", f"{quantity}, max rel", value, "1e-8 rel", "smoothcon_fs_tp")
-    assert rel_range < GATE
-    assert null_angle < GATE
-    assert rel_s_range < GATE
-    assert rel_s_null < GATE
-    assert rel_range_new < GATE
-
-
-def test_fs_tp_rounding_spread_is_reported(load_fixture, margin) -> None:
-    """Section 29e, the reason a tp-based fs stays refused in ``gam()``: mgcv's own fit moves under a constant
-    shift of x that changes nothing in exact arithmetic, on a tp base and not on cr. Reported, not gated (it
-    measures mgcv, not hgam)."""
-    fx = load_fixture(NAME_29E)
-    margin(
-        "fs tp, mgcv's own spread",
-        "eta under x + 1e-12..1e-9, tp base",
-        max(fx["eta_shift_tp"]),
-        "-",
-        NAME_29E,
-    )
-    margin(
-        "fs tp, mgcv's own spread",
-        "eta under x + 1e-12..1e-9, cr base",
-        max(fx["eta_shift_cr"]),
-        "-",
-        NAME_29E,
-    )
-    assert len(fx["eta_shift_tp"]) == len(fx["eta_shift_cr"]) == len(fx["shifts"]) == 4
+    assert rel_x < GATE
+    assert rel_s < GATE
+    assert rel_new < GATE
 
 
 @pytest.mark.parametrize(

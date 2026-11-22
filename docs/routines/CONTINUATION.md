@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-22, by the development run's forty-fifth slice: `fs` on its default tp base, measured, fit still
-refused (section 29, PLAN step 3, the bases; question open on PR #56). Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-22, by the development run's forty-fifth slice: `fs` on its default tp base (section 29, PLAN
+step 3, the bases). Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -317,14 +317,16 @@ distinct values; mgcv samples them at random), tp in discrete bam, `by=` on tp, 
 PR #54 review (`ada3807`): that refusal now raises `HgamNotImplementedError` (was `HgamValidationError`), with a
 front-end test; `tp_basis` names its counterpart; the Poisson case predicts at a nonzero offset. Tests: 881 pass.
 
-`fs` on its default tp base (2026-11-22, this run; section 29, `tests/test_fs_basis.py`): measured; `gam()` still
-refuses `s(x, f, bs="fs")` without `xt` (the refusal message now says why). `fs_basis(base="tp", k=)` and
-`fs_predict_design(..., tp_state)` build it with `tp_basis` and the cr path's `nat.param`; every determined piece meets
-smoothCon at 7.9e-14 (range columns up to sign, null-pair span, range and summed null penalties, PredictMat). Not
-determined: the null pair's rotation. Its two eigenvalues are rounding noise on a tp base, and mgcv's own fit moves by
-6.8e-3 in eta under x + 1e-12 (section 29e; cr 1.2e-14). A lifted refusal met tier 1 at 1.2e-12 but missed the pinned
-image (1.9-4) by 1.1e-2 (oracle on PR #56's first head `b214592`). Fixtures 29b-29d (REML fits) are kept for whichever
-option Jonathan picks. Tests: 886 pass.
+`fs` on its default tp base (2026-11-22, this run; section 29, `tests/test_fs_basis.py`, `tests/test_fs_fit.py`):
+`s(x, f, bs="fs", k=)` with no `xt` is accepted (`FsCall.base`, `TermSpec.fs_base = "tp"`). `fs_basis(base="tp", k=)`
+builds the base with `tp_basis` (unconstrained, as `smooth.construct` returns it) and runs the cr path's `nat.param`;
+the tp gauge cancels there, so X, the S list and PredictMat meet smoothCon at 7.9e-14 up to column signs and the null
+pair's order. P is gauge dependent and not compared. The fit's `TermState` keeps the tp state (`tp`) and `fs_p`. REML
+fits `p ~ s(x, f, bs="fs", k=5)`, `p ~ s(x) + s(x, f, bs="fs", k=5)` and the first with `select=TRUE` (no extra penalty,
+as mgcv) meet every gate: eta at most 1.2e-12 on data and new data, se 3.0e-4 relative, edf 1.9e-10 of the gate,
+structure and names exact. Refused by name: a tp-based fs in discrete bam (`discrete_model_frame` and `fs_basis`'s
+`frame=`), `knots=` reaching a tp base, `xt="tp"` or `xt=list(bs="tp")` written out (not measured; could be lifted with
+one fixture). Tests: 890 pass.
 
 ## Next slice: tp in discrete bam (PLAN step 3, the bases)
 
@@ -336,8 +338,7 @@ option Jonathan picks. Tests: 886 pass.
   on section 28's data (binomial cloglog, weights n), predict on new data with se, and the same with `select=TRUE`.
   Measure first by building `tp_basis` on mf0 (a `frame=` path like cr's `constraint_frame`) and evaluating
   `tp_predict` at the binned rows. Lift the refusal only for what meets the gates. Then fs on a tp base in discrete
-  bam waits on PR #56's question; then `by=` on tp, then `ts`, `cs`, `ps`, `cc`. Whichever slice runs next, it waits
-  for PR #56 first (one open development PR at a time).
+  bam follows the same frame (one more fixture), then `by=` on tp, then `ts`, `cs`, `ps`, `cc`.
 - Optional later cleanup (not blocking): remove the `"hgam"` Newton iteration and its tests once nothing relies on it;
   ask Jonathan in that slice's PR whether to keep it as a diagnostic.
 - Not ported yet (DEFERRED): the inner P-IRLS tolerance `conv.tol/100`; `edge.correct`; quasipoisson's log-scale
@@ -394,11 +395,7 @@ that follow mgcv's `newton`. The rule is in `docs/PRIORITIES.md` (PR #52). Done 
 
 ## Open questions
 
-PR #56, Q1: how to treat fs on a tp base, where mgcv's own reference depends on rounding (section 29e). Options:
-(a) keep it refused and document it (this PR's state); (b) port it and gate it against mgcv only on what is
-determined (the basis, done here; fits are not gated); (c) port it with a looser fit gate sized to mgcv's spread
-(about 2e-2 in eta), which changes a gate. Recommendation: (a).
-
+None.
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

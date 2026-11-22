@@ -189,8 +189,9 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   cr, two tp smooths with an offset (Poisson) and `select=TRUE` meet every gate (eta at most 8.2e-12 on data and new
   data, se 3.2e-4 relative, edf 7.9e-9 of the gate). Still refused: the `max.knots` subsampling regime (more than 2000 rows and 2000 distinct values), tp in discrete bam, `by=` on tp, tp as the `fs`
   base, two-covariate tp. Next: `fs` on its default tp base.
-- `fs` on its default tp base (2026-11-22, measured; the fit stays refused, question on PR #56): `fs_basis(base="tp")`
-  meets smoothCon (section 29a) on every determined piece at 7.9e-14: range columns up to sign, the null pair's span,
-  the range and summed null penalties, PredictMat. The null pair's rotation is not determined: its two eigenvalues are
-  rounding noise, and mgcv's own fit moves by 6.8e-3 in eta when x is shifted by 1e-12 (cr base: 1.2e-14; section 29e).
-  The pinned image's fit missed tier 1's by 1.1e-2, so `gam()` keeps refusing `s(x, f, bs="fs")` without `xt`.
+- `fs` on its default tp base (2026-11-22): `s(x, f, bs="fs", k=)` with no `xt` (`smooth.construct.fs.smooth.spec`:
+  base.bs `"tp"`). `fs_basis(base="tp")` builds the base with the moved `tp_basis` and runs the same `nat.param`; held to
+  smoothCon at 7.9e-14 (X, S list, PredictMat) up to column signs and the null pair's order (section 29a). REML fits
+  alone, beside `s(x)` and with `select=TRUE` meet every gate (eta at most 1.2e-12 on data and new data, se 3.0e-4
+  relative, edf 1.9e-10 of the gate; section 29, `tests/test_fs_fit.py`). Still refused: fs on tp in discrete bam,
+  `knots=` reaching a tp base, `xt="tp"` written out. Next: tp in discrete bam.

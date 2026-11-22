@@ -16,6 +16,7 @@ import itertools
 
 import numpy as np
 
+from hgam.engine.gam_basis_cr import _r_norm_inf
 from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
 from hgam.engine.gam_basis_tp import subspace_distance
 
@@ -88,7 +89,9 @@ def test_fs_tp_basis_matches_smoothcon_up_to_the_null_pair(load_fixture, margin)
     The range columns are held column by column (up to sign), like cr's. The two null-space directions of
     ``R^-T S R^-1`` have eigenvalues at rounding level (about 1e-20), so LAPACK may return any rotation of
     that pair, not only a swap: they are held as a subspace (the sine of the largest principal angle), with
-    the null-space penalties' sum, which is the identity on that subspace whatever the rotation. ``P`` is not
+    the null-space penalties' sum, which is the identity on that subspace whatever the rotation. Penalties are
+    compared after smoothCon's ``norm(X, "I")^2`` scaling from each side's own design, since that norm also
+    changes with the rotation (pinned image: 3.5e-2 without it). ``P`` is not
     compared: it maps the tp base's own coordinates, which carry tp's eigenvector gauge
     (``tests/test_tp_fit.py``). An mgcv fit is not invariant to a rotation of the null pair
     (measured: 0.1 rad moves eta by 1.2e-3 on both bases), and on a tp base rounding does rotate it (x
@@ -122,9 +125,12 @@ def test_fs_tp_basis_matches_smoothcon_up_to_the_null_pair(load_fixture, margin)
         d_null_new = max(
             d_null_new, subspace_distance(x_new[new_rows][:, ncols], ref_new[new_rows][:, ncols])
         )
+    # smoothCon scales each penalty by norm(X, "I")^2 / norm(S): the row-sum norm of the design changes with
+    # the null pair's rotation, so each side's penalties are compared at the other's design norm.
     ref_s = [np.asarray(s) for s in fx["S"]]
-    rel_s_range = _rel(got.penalties[0], ref_s[0])
-    rel_s_null = _rel(got.penalties[1] + got.penalties[2], ref_s[1] + ref_s[2])
+    rescale = _r_norm_inf(ref_x) ** 2 / _r_norm_inf(got.design) ** 2
+    rel_s_range = _rel(got.penalties[0] * rescale, ref_s[0])
+    rel_s_null = _rel((got.penalties[1] + got.penalties[2]) * rescale, ref_s[1] + ref_s[2])
 
     for quantity, value in (
         ("X range columns, max rel", rel_range),

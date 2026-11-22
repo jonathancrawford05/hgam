@@ -90,10 +90,10 @@ def test_fs_tp_basis_matches_smoothcon_up_to_the_null_pair(load_fixture, margin)
     that pair, not only a swap: they are held as a subspace (the sine of the largest principal angle), with
     the null-space penalties' sum, which is the identity on that subspace whatever the rotation. ``P`` is not
     compared: it maps the tp base's own coordinates, which carry tp's eigenvector gauge
-    (``tests/test_tp_fit.py``). An mgcv fit is not invariant to a rotation of the null pair (measured: 0.1 rad
-    moves eta by 1.2e-3 on both bases), and on a tp base rounding does rotate it (x perturbed at 1e-15 moves the
-    fit by up to 3e-2; the cr fit does not move), so a fit on this base is refused until Jonathan decides
-    (PR #55)."""
+    (``tests/test_tp_fit.py``). An mgcv fit is not invariant to a rotation of the null pair
+    (measured: 0.1 rad moves eta by 1.2e-3 on both bases), and on a tp base rounding does rotate it (x
+    perturbed at 1e-15 moves the fit by up to 3e-2; the cr fit does not move), so a fit on this base is
+    refused until Jonathan decides (PR #55)."""
     fx = load_fixture("smoothcon_fs_tp")
     n_levels, k = fx["n_levels"], fx["k"]
     base_rank = k - 2

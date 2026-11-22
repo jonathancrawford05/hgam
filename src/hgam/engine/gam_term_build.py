@@ -405,8 +405,21 @@ def build_python_fs_term(x: np.ndarray, group: np.ndarray, term: TermSpec) -> Te
             f"basis={term.basis!r}."
         )
     x = np.asarray(x, dtype=np.float64)
-    supplied = term.knots_by_variable().get(term.variables[1])
     k = term.k[0]
+    if term.fs_base == "tp":
+        basis = fs_basis(
+            x, np.asarray(group, dtype=np.int64), term.n_levels, None, fs_frame(term), base="tp", k=k
+        )
+        return TermExtract(
+            label=term.label,
+            index_start=0,
+            index_end=basis.design.shape[1],
+            design=basis.design,
+            s=basis.penalties,
+            rank=basis.rank,
+            knots=(),
+        )
+    supplied = term.knots_by_variable().get(term.variables[1])
     knots = np.asarray(supplied, dtype=np.float64) if supplied is not None else cr_default_knots(x, k)
     basis = fs_basis(x, np.asarray(group, dtype=np.int64), term.n_levels, knots, frame=fs_frame(term))
     return TermExtract(

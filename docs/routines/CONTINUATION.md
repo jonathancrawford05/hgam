@@ -1,7 +1,8 @@
 # Continuation
 
-Last updated: 2026-11-22, by the development run's forty-fourth slice: the one-covariate `tp` basis, measured against
-section 28 and not ported (PLAN step 3, the bases). Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-22, by the development run's forty-fifth slice: `fs` on its default tp base (PLAN step 3, the
+bases), after PR #54 (the one-covariate tp basis, measured) auto-merged in the same run. Read `docs/PRIORITIES.md`
+before choosing work.
 
 ## State
 
@@ -317,16 +318,24 @@ distinct values; mgcv samples them at random), tp in discrete bam, `by=` on tp, 
 PR #54 review (`ada3807`): that refusal now raises `HgamNotImplementedError` (was `HgamValidationError`), with a
 front-end test; `tp_basis` names its counterpart; the Poisson case predicts at a nonzero offset. Tests: 881 pass.
 
-## Next slice: `fs` on its default tp base (PLAN step 3, the bases)
+`fs` on its default tp base (2026-11-22, this run; section 29, `tests/test_fs_basis.py`, `tests/test_fs_tp_fit.py`):
+`s(x, f, bs="fs")` without `xt` (mgcv's `base.bs` "tp"), or with `xt="tp"` / `xt=list(bs="tp")`, builds the base with
+`tp_construct` (the tp design and penalty as `smooth.construct` returns them, before smoothCon's `scale.penalty`), then
+`nat_param` as on cr; `FsBasis.tp_state` and `TermState.tp` carry the tp state for prediction. X, S and PredictMat vs
+smoothCon 2.5e-14 (up to the null pair's order and sign; `P` is not compared for tp, as it maps the tp base's
+gauge-dependent coordinates). Fits 29b (fs alone), 29c (`s(x) + s(x, f, bs="fs")`) and 29d (29c with `select=TRUE`)
+meet every gate: eta at most 1.8e-11 on data and new data, se 6.9e-4 relative, edf 3.4e-9 of the gate. Refused on a tp
+base: discrete bam, supplied knots. Tests: 891 pass.
 
-- `s(x, f, bs="fs")` with no `xt` is tp-based in mgcv (`smooth.construct.fs.smooth.spec`, smooth.r: `xt` defaults to
-  `"tp"`), the most common hierarchical-GAM form; hgam refuses it today (only `xt="cr"`). Add section 29 to
-  `oracle/make_fixtures.R`: `smoothCon(s(x, f, bs="fs", k=5))` and a REML gam `p ~ s(x, f, bs="fs", k=5)` (and with
-  `s(x)` beside it), held at the gates as `tests/test_fs_fit.py` does for cr. Measure first with `tp_basis` as the
-  base; port the fs-on-tp pieces of `smooth.construct.fs.smooth.spec` (the base's null space gets its own penalty per
-  level) only where a gate is missed. Lift the refusal only for the measured form.
-- After that, in order: tp in discrete bam (`discrete.mf` bins the covariate; tp is built on the compressed frame),
-  `by=` on tp, then the remaining bases (`ts`, `cs`, `ps`, `cc`).
+## Next slice: tp in discrete bam (PLAN step 3, the bases)
+
+- `bam(method="fREML", discrete=TRUE)` refuses every tp term today (`hgam.frontend.bam_fit`). mgcv's `discrete.mf`
+  bins the tp covariate like any other one-covariate smooth, and `gam.setup` builds the tp basis on the padded frame
+  `mf0` (as for cr and fs, `constraint_frame`); prediction re-runs `discrete.mf`. Add section 30 to
+  `oracle/make_fixtures.R`: section 28b's model and section 29b's fs-on-tp model as discrete bam, with predict on new
+  data. Measure with `tp_construct` / `tp_basis` built on `mf0`; port only where a gate is missed. Watch the max.knots
+  rule: on `mf0` the row count is the padded frame's.
+- After that, in order: `by=` on tp, then the remaining bases (`ts`, `cs`, `ps`, `cc`).
 - Optional later cleanup (not blocking): remove the `"hgam"` Newton iteration and its tests once nothing relies on it;
   ask Jonathan in that slice's PR whether to keep it as a diagnostic.
 - Not ported yet (DEFERRED): the inner P-IRLS tolerance `conv.tol/100`; `edge.correct`; quasipoisson's log-scale

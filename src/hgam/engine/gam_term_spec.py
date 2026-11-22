@@ -163,6 +163,9 @@ class TermSpec:
     """``basis="fs"`` only: :attr:`variables` as written (mgcv's ``object$term``), which is the order
     ``bam(discrete = TRUE)`` gives the term's margins and so the order ``discrete.mf`` compresses them in.
     ``None`` means :attr:`variables`' order."""
+    fs_base: str | None = None
+    """``basis="fs"`` only: the base smooth, ``"cr"`` or ``"tp"`` (mgcv's ``object$base.bs``). ``None`` means
+    ``"cr"``."""
 
     def knots_by_variable(self) -> dict[str, tuple[float, ...]]:
         """:attr:`knots` as a plain ``dict``, computed on demand.
@@ -405,6 +408,10 @@ class TermSpec:
             raise HgamValidationError(
                 f"TermSpec {self.label!r} has basis={self.basis!r} but sets margin_order; "
                 "only an fs term does."
+            )
+        if self.fs_base is not None and (self.basis != "fs" or self.fs_base not in ("cr", "tp")):
+            raise HgamValidationError(
+                f"TermSpec {self.label!r}: fs_base={self.fs_base!r} is only for an fs term, as 'cr' or 'tp'."
             )
         if self.basis != "parametric" and self.levels is not None:
             raise HgamValidationError(

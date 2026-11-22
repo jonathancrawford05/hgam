@@ -144,8 +144,7 @@ def small() -> dict[str, np.ndarray]:
 @pytest.mark.parametrize(
     ("formula", "kwargs", "match"),
     [
-        ('p ~ s(x, f, bs="fs", k=6)', {}, "default fs base smooth is tp"),
-        ('p ~ s(x, f, bs="fs", xt="tp", k=6)', {}, 'only xt="cr"'),
+        ('p ~ s(x, f, bs="fs", xt="ps", k=6)', {}, 'only xt="cr" or xt="tp"'),
         ('p ~ s(x, f, bs="fs", xt="cr", m=1)', {}, "argument 'm'"),
         ('p ~ s(x, f, bs="fs", xt="cr", by=z)', {}, "argument 'by'"),
         ('p ~ s(x, z, bs="fs", xt="cr")', {}, "exactly one factor"),

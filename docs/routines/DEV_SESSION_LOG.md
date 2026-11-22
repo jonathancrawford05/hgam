@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-22 (forty-fifth slice): `fs` on its default tp base (PLAN step 3, bases)
+
+Same run: PR #54 auto-merged after the Ready review of `74f9069` (six conditions posted; branch delete cut by the git proxy). Ported `smooth.construct.fs.smooth.spec`'s tp base: `tp_construct` (tp before `scale.penalty`), `fs_basis(base="tp")`, prediction through `tp_predict`; the parser takes no `xt` as tp, as mgcv does. PR #54's nit (`tp_predict`'s counterpart) done.
+Tests: 881 → 891 (section 29; four refusal-only cases retired, replaced by `test_fs_tp_fit.py`). `make lint` clean. Tier 1 (mgcv 1.9-1): basis 2.5e-14; eta ≤ 1.8e-11 on data and new data, se ≤ 6.9e-4 relative, edf ≤ 3.4e-9 of the gate, on fs, tp + fs, and tp + fs with select.
+Deferred: se line extended; fs line updated. Next: tp in discrete bam.
+
 ## 2026-11-22 (PR #54 review follow-up, `ada3807`)
 
 Should fix 1: tp's `max.knots` subsampling refusal raises `HgamNotImplementedError` (was `HgamValidationError`); engine test updated, `test_tp_max_knots_subsampling_is_refused_through_gam` added. Should fix 2: `tp_basis` and its module name `smooth.construct.tp.smooth.spec` / `construct_tprs`, mgcv 1.9-4; stale polaris-re references removed.

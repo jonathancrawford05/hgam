@@ -68,8 +68,8 @@ _REFUSED_BASES: dict[str, str] = {
 _SZ_XT = re.compile(r"""^list\(\s*bs\s*=\s*(["'])cr\1\s*\)$""")
 """The one ``xt`` an ``sz`` smooth accepts: ``list(bs="cr")``, a cr base smooth (the exit test's form)."""
 
-_FS_XT = re.compile(r"""^(?:(["'])cr\1|list\(\s*bs\s*=\s*(["'])cr\2\s*\))$""")
-"""The ``xt`` an ``fs`` smooth accepts: ``"cr"`` or ``list(bs="cr")``, a cr base smooth
+_FS_XT = re.compile(r"""^(?:(["'])(cr|tp)\1|list\(\s*bs\s*=\s*(["'])(cr|tp)\3\s*\))$""")
+"""The ``xt`` an ``fs`` smooth accepts: ``"cr"``, ``"tp"``, ``list(bs="cr")`` or ``list(bs="tp")``
 (``smooth.construct.fs.smooth.spec`` reads either form)."""
 
 
@@ -108,6 +108,8 @@ class FsCall:
 
     variables: tuple[str, str]
     k: int
+    base: str = "cr"
+    """``object$base.bs``: ``"cr"`` or ``"tp"`` (mgcv's default when ``xt`` is not given)."""
 
     @property
     def text(self) -> str:
@@ -287,23 +289,23 @@ def _parse_sz(text: str, positional: list[str], keyword: dict[str, str]) -> SzCa
 
 
 def _parse_fs(text: str, positional: list[str], keyword: dict[str, str]) -> FsCall:
-    """``s(x, f, bs="fs", ...)`` (mgcv ``smooth.construct.fs.smooth.spec``, smooth.r, mgcv 1.9-4). Only a cr
-    base smooth of one covariate is ported: mgcv's default base (no ``xt``) is ``tp``, which is refused."""
+    """``s(x, f, bs="fs", ...)`` (mgcv ``smooth.construct.fs.smooth.spec``, smooth.r, mgcv 1.9-4). A cr or tp
+    base smooth of one covariate is ported; with no ``xt`` the base is ``tp``, as in mgcv."""
     for key in keyword:
         if key not in ("bs", "k", "xt"):
             raise _refuse(
                 f"argument {key!r} in {text}",
-                f'only k= and xt="cr" are ported for bs="fs" ({_COVERAGE} §2.1)',
+                f'only k= and xt="cr" or "tp" are ported for bs="fs" ({_COVERAGE} §2.1)',
             )
-    if "xt" not in keyword:
-        raise _refuse(
-            f"{text} without xt=",
-            'mgcv\'s default fs base smooth is tp, which is not ported for fs; write xt="cr"',
-        )
-    if not _FS_XT.match(keyword["xt"].strip()):
-        raise _refuse(
-            f"xt={keyword['xt']} in {text}", 'only xt="cr" (or xt=list(bs="cr")) is ported for bs="fs"'
-        )
+    base = "tp"
+    if "xt" in keyword:
+        match = _FS_XT.match(keyword["xt"].strip())
+        if not match:
+            raise _refuse(
+                f"xt={keyword['xt']} in {text}",
+                'only xt="cr" or xt="tp" (or xt=list(bs=...) of either) is ported for bs="fs"',
+            )
+        base = match.group(2) or match.group(4)
     if len(positional) != 2:
         raise _refuse(
             f"{text} with {len(positional)} variable(s)",
@@ -316,7 +318,7 @@ def _parse_fs(text: str, positional: list[str], keyword: dict[str, str]) -> FsCa
     if variables[0] == variables[1]:
         raise HgamValidationError(f"gam(): {text} names the same variable twice.")
     k = _int_k(keyword["k"], text) if "k" in keyword else _CR_DEFAULT_K
-    return FsCall(variables=variables, k=k)
+    return FsCall(variables=variables, k=k, base=base)
 
 
 def _parse_smooth(text: str, positional: list[str], keyword: dict[str, str]) -> SmoothCall | SzCall | FsCall:

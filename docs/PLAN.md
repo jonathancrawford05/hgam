@@ -189,3 +189,9 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   cr, two tp smooths with an offset (Poisson) and `select=TRUE` meet every gate (eta at most 8.2e-12 on data and new
   data, se 3.2e-4 relative, edf 7.9e-9 of the gate). Still refused: the `max.knots` subsampling regime (more than 2000 rows and 2000 distinct values), tp in discrete bam, `by=` on tp, tp as the `fs`
   base, two-covariate tp. Next: `fs` on its default tp base.
+- `fs` on its default tp base (2026-11-22): `s(x, f, bs="fs")` with no `xt`, or `xt="tp"`, builds the base with
+  `tp_construct` (smooth.construct's tp, before smoothCon's `scale.penalty`), then `nat.param` as on cr. Section 29
+  (`tests/test_fs_basis.py`, `tests/test_fs_tp_fit.py`): X, S and PredictMat vs smoothCon at 2.5e-14 (up to the null
+  pair's order and sign); the fs fit, `s(x) + s(x, f, bs="fs")`, and that with `select=TRUE` meet every gate (eta at most
+  1.8e-11, se 6.9e-4 relative, edf 3.4e-9 of the gate). Refused on a tp base: discrete bam, supplied knots. Next: tp in
+  discrete bam.

@@ -1,8 +1,9 @@
 # Continuation
 
-Last updated: 2026-11-21, by the development run's forty-second slice: the first slice of PR #48 follow-up (b), the
-port of mgcv's `newton` (gam.fit3.r), opt in. PR #50 (PR #49's review nits) was merged in this run. Read
-`docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-22, by the development run's forty-third slice: the second slice of PR #48 follow-up (b), the
+port of mgcv's `newton` as the default outer iteration, with t2's REML `select=TRUE` refusal lifted (Jonathan chose
+PR #51's Q1 option (a) on 2026-11-22). PR #52 (docs only, the matching `docs/PRIORITIES.md` paragraph) waits for
+Jonathan to merge; this slice's tests follow that rule. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -299,19 +300,27 @@ tests that gate a default-tolerance fit against mgcv's tight refit (`test_t2_fit
 `test_cr_by_numeric` eta 1.4e-3, `test_tight_conv_tol_on_the_select_ridge`, which asserts the old stall), plus two
 summary tests that report the old tolerance (`epsilon_rel`).
 
-## Next slice: make the `newton` port the default (PR #48 follow-up (b), second slice), once Q1 is decided
+The `newton` port as the default (2026-11-22, this run): `fit_engine_gam(newton_iteration=None)` runs
+`newton_select_lambdas(iteration="mgcv")` for `outer="newton"`; `"hgam"` is still accepted (opt in), and with
+`outer="lbfgsb"` any `newton_iteration` is refused. `gam()` accepts `select=True` with t2 in a REML fit. Ridge cases are
+gated like for like: default tolerance against mgcv's default fit (`test_t2_fit`, `test_cr_by_numeric`,
+`test_mgcv_newton`), `conv.tol = 1e-12` against the tight refit (`test_newton_conv_tol`, `test_mgcv_newton`).
+`EngineGAMFit.conv_tol` is new; `summary().epsilon_rel` is the search's `conv.tol` and `rel_projected_gradient` is
+`max|g| * conv_tol / gradient_tolerance` (for the port, `max|g| / (5 * score.scale)`). Every other fixture test passed
+unchanged with the port as the default. Tests: 876 pass.
 
-- Done when (Jonathan, PR #48): 27d3 meets every gate against mgcv's **default** fit (met through the port) and
-  `_refuse_t2`'s REML select refusal is lifted.
-- With Q1 (a): `fit_engine_gam(newton_iteration=)` defaults to `"mgcv"`; the ridge tests (`test_t2_fit` 27b2,
-  `test_cr_by_numeric`, `test_newton_conv_tol`) gate default-tolerance fits against mgcv's default fit and
-  `control={"newton": {"conv.tol": 1e-12}}` fits against the tight refit; `_refuse_t2` stops refusing `select=True`
-  in a REML gam (its refusal test is replaced by `test_mgcv_newton`'s 27d3 case, SETTINGS condition 5);
-  `summary().epsilon_rel` and `rel_projected_gradient` report mgcv's test (`5 * score.scale * conv.tol`). Then remove
-  the `"hgam"` iteration and its tests in a later slice, or keep it, as Jonathan prefers.
+## Next slice: the bases, `tp` first (PLAN step 3)
+
+- PLAN step 3's rule: first measure what the moved engine already does against a fixture; port only what misses a
+  gate. `s(x)` / `s(x, bs="tp", k=)` is accepted by `gam()` today (`api.py`, one covariate). Find which tp fixtures
+  exist (`grep -l '"tp"' tests/fixtures`) and which tp forms the exit formula and hierarchical models need (tp in
+  `by=`, `fs` with a tp base, two-covariate tp); add the first missing one to `oracle/make_fixtures.R`, hold it at the
+  gates, and port `smooth.construct.tp.smooth.spec` (smooth.r) pieces only where it misses.
+- The session needs R with mgcv for a new fixture (`which Rscript`; install as DAILY_DEV step 5 says).
+- Optional later cleanup (not blocking): remove the `"hgam"` Newton iteration and its tests once nothing relies on it;
+  ask Jonathan in that slice's PR whether to keep it as a diagnostic.
 - Not ported yet (DEFERRED): the inner P-IRLS tolerance `conv.tol/100`; `edge.correct`; quasipoisson's log-scale
   coordinate.
-- Then the bases (`tp` first), PLAN step 3.
 
 Carried PR #39 review nits: done (fs select vs plain asserted equal; the null-space tolerance line in DEFERRED).
 
@@ -358,16 +367,14 @@ moved Newton search stays. The rule is in `docs/PRIORITIES.md`.
 (PR #10's question on SETTINGS condition 5 is decided: option (a). A refusal test may be retired when a
 fixture-backed acceptance test of the same input replaces it; the wording is in `docs/routines/SETTINGS.md`.)
 
+Decided on PR #51 (2026-11-22): Q1 option (a). Ridge cases are gated like for like, a default-tolerance fit against
+mgcv's default fit and a tight-tolerance fit against mgcv's tight refit; this supersedes PR #12's option B for fits
+that follow mgcv's `newton`. The `docs/PRIORITIES.md` paragraph is PR #52 (Jonathan merges). Done in the forty-third
+slice.
+
 ## Open questions
 
-Q1 (this run's PR): which mgcv fit the ridge cases are gated against once the `newton` port is the default.
-`docs/PRIORITIES.md` gates a fitted quantity on a flat REML ridge against mgcv's tight refit (PR #12 option B, made
-because hgam's search was not mgcv's). The port follows mgcv's own path, so at the default tolerance it reproduces
-mgcv's default fit (27b2 eta 8.1e-11) and misses the tight refit (27b2 1.2e-3, cr-by-numeric 1.4e-3); at `conv.tol =
-1e-12` it reproduces the tight refit (1.2e-10). Options: (a) gate like for like: a default-tolerance fit against
-mgcv's default fit, a tight-tolerance fit against mgcv's tight refit (Jonathan rewrites that PRIORITIES paragraph;
-the fixtures already hold both fits); (b) keep the rule, so the port stays opt in and 27d3's refusal stays.
-Recommendation: (a). It is the reference Jonathan already set for 27d3 on PR #48.
+None.
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

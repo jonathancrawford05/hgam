@@ -7,18 +7,16 @@ uses :func:`~hgam.engine.gam_reml.mgcv_reml_score_offset` (gam.fit3's REML const
 
 The five cases are REML gam fits whose stop depends on the search: on 27b2 and 27d3 (``p ~ f + t2(x, z)``,
 without and with ``select=TRUE``) and on the cr-by-numeric fit an sp lies on a flat REML ridge, and on the
-``sz`` and ``fs`` select fits the default search has several near-optima. hgam's own search (the default,
-``iteration="hgam"``) is gated against mgcv's tight refits on the ridge cases (``docs/PRIORITIES.md``); the
-port follows mgcv's path and is gated against mgcv's default fit, the reference Jonathan set for 27d3
-(PR #48).
-``gam()`` still refuses ``select=True`` with t2 in a REML fit; the refusal is bypassed here, and only here.
+``sz`` and ``fs`` select fits the default search has several near-optima. The port is ``gam()``'s default
+outer iteration and these tests run it through the public ``hgam.gam``. Like for like (Jonathan, PR #51 Q1,
+option (a)): a default-tolerance fit is gated against mgcv's default fit, the reference Jonathan set for
+27d3 on PR #48, and a ``conv.tol = 1e-12`` fit against mgcv's tight refit. The 27d3 default case replaces
+the refusal of ``select=True`` with t2 in a REML gam (``tests/test_t2_fit.py``), SETTINGS condition 5.
 
 Gates (``docs/PRIORITIES.md``): the linear predictor to 1e-3 absolute; its standard errors 1% relative;
 per-term edf 0.05 absolute or 1%, whichever is larger; the same on new data where the fixture has it. The
 iteration count and the final REML score against mgcv's are reported, not gated.
 """
-
-import functools
 
 import numpy as np
 import pytest
@@ -28,7 +26,6 @@ from hgam.engine import gam_model
 from hgam.engine.gam_family import binomial_cloglog, poisson_log
 from hgam.engine.gam_reml import mgcv_reml_score_offset, saturated_log_likelihood
 from hgam.errors import HgamNotImplementedError, HgamValidationError
-from hgam.frontend import api as frontend_api
 
 FAMILY = 'binomial(link="cloglog")'
 TRAJECTORIES = "gam_newton_trajectories"
@@ -53,7 +50,8 @@ def _case(load_fixture, name: str) -> dict:
 
 
 def _mgcv_newton_fit(fx: dict, monkeypatch, control: dict | None = None) -> tuple:
-    """``gam()`` on the fixture's model with ``newton_iteration="mgcv"``; also returns the selection."""
+    """``hgam.gam()`` on the fixture's model, at gam()'s default outer iteration (the port); also returns
+    the selection, which must be the port's."""
     seen = []
     search = gam_model.newton_select_lambdas
 
@@ -62,15 +60,6 @@ def _mgcv_newton_fit(fx: dict, monkeypatch, control: dict | None = None) -> tupl
         return seen[-1]
 
     monkeypatch.setattr(gam_model, "newton_select_lambdas", spy)
-    monkeypatch.setattr(
-        frontend_api, "fit_engine_gam", functools.partial(gam_model.fit_engine_gam, newton_iteration="mgcv")
-    )
-    refuse = frontend_api._refuse_t2
-    monkeypatch.setattr(
-        frontend_api,
-        "_refuse_t2",
-        lambda call, parsed, **kw: refuse(call, parsed, select=False, discrete=False),
-    )
     fit = hgam.gam(
         fx["formula"].replace("'", '"'),
         _columns(fx["data"]),
@@ -82,6 +71,7 @@ def _mgcv_newton_fit(fx: dict, monkeypatch, control: dict | None = None) -> tupl
         control=control,
     )
     assert len(seen) == 1
+    assert np.isfinite(seen[0].score_scale)  # set only by iteration="mgcv"
     return fit, seen[0]
 
 

@@ -6,10 +6,11 @@ is dropped because the by variable is not constant, so the term keeps ``k`` coef
 uses this as ``s(AttdAge, by = StudyYear_C, k = 13, bs = "cr")``.
 
 The ``select=TRUE`` fit of section 10 is gated in ``tests/test_gam_reml_fixtures.py``. The fit without
-``select`` is gated here on structure, per-term edf and standard errors against mgcv's default fit, and on the
-fit at mgcv's smoothing parameters. Its linear predictor at the estimated smoothing parameters is gated
-against mgcv refitted at a tight newton ``conv.tol``: mgcv's default search stops short of its own REML
-optimum on that fixture (Jonathan's decision on PR #12, option B; ``docs/PRIORITIES.md``).
+``select`` is gated here on structure, per-term edf, standard errors and the linear predictor against mgcv's
+default fit, and on the fit at mgcv's smoothing parameters. mgcv's default search stops short of its own REML
+optimum on that fixture (a flat ridge); hgam's default outer iteration is the port of mgcv's ``newton``, so
+the default-tolerance fit is gated like for like against mgcv's default fit (Jonathan, PR #51 Q1, option (a))
+and the ``conv.tol = 1e-12`` fit against mgcv's tight refit (``tests/test_mgcv_newton.py``).
 """
 
 import numpy as np
@@ -64,21 +65,11 @@ def test_by_numeric_fit_meets_the_gates(load_fixture) -> None:
     got_edf = np.array([fit.edf_per_term[label] for label in fx["labels"]])
     assert np.all(np.abs(got_edf - ref_edf) <= np.maximum(0.05, 0.01 * ref_edf)), (got_edf, ref_edf)
 
-    # Standard errors of the linear predictor: 1% relative.
-    _, se = fit.predict(data, se_fit=True)
+    # Linear predictor at the estimated smoothing parameters, 1e-3 absolute, and its standard errors, 1%
+    # relative: like for like, against mgcv's default fit (the port follows mgcv's newton path).
+    eta, se = fit.predict(data, se_fit=True)
+    assert np.max(np.abs(eta - np.asarray(fx["eta"]))) < 1e-3
     np.testing.assert_allclose(se, fx["se"], rtol=1e-2)
-
-    # Linear predictor at the estimated smoothing parameters: 1e-3 absolute, against mgcv refitted at a
-    # tight newton conv.tol, because mgcv's default search stops short of its own REML optimum here
-    # (docs/PRIORITIES.md). The fixture's own justification first: mgcv's tight REML score is not higher
-    # than its default score.
-    tight = fx["tight"]
-    assert tight["reml"] <= fx["reml"]
-    eta, se_tight = fit.predict(data, se_fit=True)
-    assert np.max(np.abs(eta - np.asarray(tight["eta"]))) < 1e-3
-    np.testing.assert_allclose(se_tight, tight["se"], rtol=1e-2)
-    tight_edf = np.asarray(tight["edf"], dtype=np.float64)
-    assert np.all(np.abs(got_edf - tight_edf) <= np.maximum(0.05, 0.01 * tight_edf)), (got_edf, tight_edf)
 
     # The fit at mgcv's own smoothing parameters (a deterministic piece): 1e-8, relative to the largest |eta|.
     family = resolve_family(fit.model.family, fit.model.link)

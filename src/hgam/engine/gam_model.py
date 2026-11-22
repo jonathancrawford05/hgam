@@ -579,8 +579,12 @@ class EngineGAMFit:
     max_abs_projected_gradient: float | None = None
     """``max |g^P|`` of the REML score at the stop, natural-log units (Newton only)."""
     gradient_tolerance: float | None = None
-    """The score-scaled tolerance ``max |g^P|`` was tested against:
-    ``epsilon_rel * (1 + |score|)`` (Newton only)."""
+    """The bound ``max |g^P|`` was tested against (Newton only): ``conv_tol * (1 + |score|)`` for
+    hgam's iteration, ``5 * score.scale * conv_tol`` for the port of mgcv's ``newton``
+    (:attr:`~hgam.engine.gam_reml_newton.NewtonLambdaSelection.gradient_tolerance`)."""
+    conv_tol: float | None = None
+    """The Newton search's ``conv.tol`` (Newton only): ``gradient_tolerance / conv_tol`` is the scale
+    the gradient was measured on, so ``summary()`` reports the test the search ran."""
     vp_override: np.ndarray | None = None
     """A coefficient covariance ``Vp`` supplied by the fitter, in the fit's (pivoted) column layout.
     Set only by the ``bam`` path: ``bgam.fitd``'s ``Vp = PP * scale`` uses the EXPECTED (Fisher)
@@ -786,7 +790,7 @@ def fit_engine_gam(
     initial_sp_start: bool = False,
     outer: Literal["lbfgsb", "newton"] = "newton",
     conv_tol: float = MGCV_NEWTON_CONV_TOL,
-    newton_iteration: Literal["hgam", "mgcv"] = "hgam",
+    newton_iteration: Literal["hgam", "mgcv"] | None = None,
     warn_stacklevel: int = 2,
 ) -> EngineGAMFit:
     """Fit ``model`` to ``data``/``y``, selecting every smoothing parameter by
@@ -801,9 +805,12 @@ def fit_engine_gam(
         conv_tol: the Newton search's relative gradient tolerance, mgcv's
             ``gam.control(newton = list(conv.tol = ))`` (mgcv.r, mgcv 1.9-4; default
             ``1e-6``). Only for ``outer="newton"``.
-        newton_iteration: ``"hgam"`` (default) or ``"mgcv"``, the port of mgcv's ``newton``
-            (gam.fit3.r): :func:`~hgam.engine.gam_reml_newton.newton_select_lambdas`'s
-            ``iteration``. Only for ``outer="newton"``.
+        newton_iteration: ``"mgcv"`` (what ``None``, the default, selects for ``outer="newton"``), the
+            port of mgcv's ``newton`` (gam.fit3.r), or ``"hgam"``, hgam's own safeguarded iteration:
+            :func:`~hgam.engine.gam_reml_newton.newton_select_lambdas`'s ``iteration``. Only for
+            ``outer="newton"``; any other value with ``outer="lbfgsb"`` is refused. The port is the
+            default since PR #51's Q1 (option (a)): on a flat REML ridge a default-tolerance fit is
+            gated against mgcv's default fit.
         warn_stacklevel: ``warnings.warn`` stack level, relative to the caller of this
             function (2 = the caller); a wrapper such as ``gam()`` passes 3 so the
             rank-deficiency warning points at *its* caller (ADR-256).
@@ -971,7 +978,7 @@ def fit_engine_gam(
             "analytic_gradient, max_gtol_restarts and initial_sp_start -- it always uses the "
             "analytic gradient and its one start is mgcv's initial.spg."
         )
-    if outer != "newton" and newton_iteration != "hgam":
+    if outer != "newton" and newton_iteration is not None:
         raise HgamValidationError(
             f"fit_engine_gam: newton_iteration={newton_iteration!r} selects the Newton search's "
             f"iteration; outer={outer!r} does not use it."
@@ -1023,7 +1030,7 @@ def fit_engine_gam(
             maxiter=maxiter,
             conv_tol=conv_tol,
             step_halving=step_halving,
-            iteration=newton_iteration,
+            iteration="mgcv" if newton_iteration is None else newton_iteration,
         )
         n_function_evals = selection.n_function_evals
     elif multistart:
@@ -1134,4 +1141,5 @@ def fit_engine_gam(
         gradient_tolerance=(
             selection.gradient_tolerance if isinstance(selection, NewtonLambdaSelection) else None
         ),
+        conv_tol=conv_tol if isinstance(selection, NewtonLambdaSelection) else None,
     )

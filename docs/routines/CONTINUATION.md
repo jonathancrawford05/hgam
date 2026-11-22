@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-21, by the development run's forty-second slice: the first slice of PR #48 follow-up (b), the
-port of mgcv's `newton` (gam.fit3.r), opt in. PR #50 (PR #49's review nits) was merged in this run. Read
+Last updated: 2026-11-22, after PR #51 (the opt-in port of mgcv's `newton`, gam.fit3.r) was merged by Jonathan,
+who decided its Q1 as option (a); the matching `docs/PRIORITIES.md` paragraph is rewritten in the same change. Read
 `docs/PRIORITIES.md` before choosing work.
 
 ## State
@@ -299,11 +299,13 @@ tests that gate a default-tolerance fit against mgcv's tight refit (`test_t2_fit
 `test_cr_by_numeric` eta 1.4e-3, `test_tight_conv_tol_on_the_select_ridge`, which asserts the old stall), plus two
 summary tests that report the old tolerance (`epsilon_rel`).
 
-## Next slice: make the `newton` port the default (PR #48 follow-up (b), second slice), once Q1 is decided
+## Next slice: make the `newton` port the default (PR #48 follow-up (b), second slice)
 
 - Done when (Jonathan, PR #48): 27d3 meets every gate against mgcv's **default** fit (met through the port) and
   `_refuse_t2`'s REML select refusal is lifted.
-- With Q1 (a): `fit_engine_gam(newton_iteration=)` defaults to `"mgcv"`; the ridge tests (`test_t2_fit` 27b2,
+- Q1 decided (a) on PR #51; the rule is in `docs/PRIORITIES.md`. Until this slice lands, `main` still runs the
+  `"hgam"` iteration and its ridge tests still gate it against the tight refit (DEFERRED notes this).
+  `fit_engine_gam(newton_iteration=)` defaults to `"mgcv"`; the ridge tests (`test_t2_fit` 27b2,
   `test_cr_by_numeric`, `test_newton_conv_tol`) gate default-tolerance fits against mgcv's default fit and
   `control={"newton": {"conv.tol": 1e-12}}` fits against the tight refit; `_refuse_t2` stops refusing `select=True`
   in a REML gam (its refusal test is replaced by `test_mgcv_newton`'s 27d3 case, SETTINGS condition 5);
@@ -349,8 +351,13 @@ Decided on PR #21 (2026-11-16): Q1 option (A): port mgcv's constraint rows for d
 at Ref.df exact; Chi.sq 1% relative; p-value 1e-3 absolute or 1% relative, whichever is larger. The matching
 `docs/PRIORITIES.md` row is Jonathan's change (a routine slice does not edit that file).
 
-Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a fitted quantity at
-estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at the unchanged gate.
+Decided on PR #51 (2026-11-22): option (a). A fitted quantity on a flat REML ridge is gated like for like: a
+default-tolerance fit against mgcv's default fit, a `conv.tol = 1e-12` fit against mgcv's tight refit. This replaces
+PR #12's option B below. The rule is in `docs/PRIORITIES.md`.
+
+Superseded by PR #51. Decided on PR #12 (option B): where mgcv's default search stops short of its own optimum, a
+fitted quantity at estimated smoothing parameters is gated against mgcv refitted at a tight `newton` `conv.tol`, at
+the unchanged gate.
 The fixture records both mgcv fits and their REML scores, and the tight fit is the reference only where mgcv's own
 tight score is not higher than its default score. mgcv's `newton` is not ported for this (option A not taken); the
 moved Newton search stays. The rule is in `docs/PRIORITIES.md`.
@@ -360,14 +367,7 @@ fixture-backed acceptance test of the same input replaces it; the wording is in 
 
 ## Open questions
 
-Q1 (this run's PR): which mgcv fit the ridge cases are gated against once the `newton` port is the default.
-`docs/PRIORITIES.md` gates a fitted quantity on a flat REML ridge against mgcv's tight refit (PR #12 option B, made
-because hgam's search was not mgcv's). The port follows mgcv's own path, so at the default tolerance it reproduces
-mgcv's default fit (27b2 eta 8.1e-11) and misses the tight refit (27b2 1.2e-3, cr-by-numeric 1.4e-3); at `conv.tol =
-1e-12` it reproduces the tight refit (1.2e-10). Options: (a) gate like for like: a default-tolerance fit against
-mgcv's default fit, a tight-tolerance fit against mgcv's tight refit (Jonathan rewrites that PRIORITIES paragraph;
-the fixtures already hold both fits); (b) keep the rule, so the port stays opt in and 27d3's refusal stays.
-Recommendation: (a). It is the reference Jonathan already set for 27d3 on PR #48.
+None. PR #51's Q1 was decided on 2026-11-22: option (a).
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

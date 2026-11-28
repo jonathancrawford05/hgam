@@ -46,8 +46,8 @@ from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
 from hgam.engine.gam_basis_t2 import t2_raw_design
 from hgam.engine.gam_basis_te import te_basis, tensor_prod_model_matrix
-from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
-from hgam.engine.gam_term_build import fs_frame, t2_term_basis, te_frame
+from hgam.engine.gam_basis_tp import TprsState, tp_predict
+from hgam.engine.gam_term_build import fs_frame, t2_term_basis, te_frame, tp_term_basis
 from hgam.engine.gam_term_spec import ModelSpec, TermSpec
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 
@@ -116,9 +116,10 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         z = sum_to_zero_null_space(cr_basis(x, knots)[0], constraint_rows(term.variables[0], knots))
         return TermState(term=term, knots=(knots,), constraint=(z,))
     if term.basis == "tp":
+        # As build_python_tp_term builds it: on the data rows, or on discrete.mf's mf0 in a constraint frame.
         x = np.asarray(_column(data, term.variables[0], term), dtype=np.float64)
-        design, _, tp_state = tp_basis(x, term.k[0])
-        return TermState(term=term, constraint=(sum_to_zero_null_space(design),), tp=tp_state)
+        _, _, tp_state, z = tp_term_basis(x, term)
+        return TermState(term=term, constraint=(z,), tp=tp_state)
     if term.basis == "ti":
         margins = []
         for variable, k in zip(term.variables, term.k, strict=True):

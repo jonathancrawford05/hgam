@@ -937,4 +937,26 @@ put("gam_binomial_cloglog_tp_fs_tp_select_reml", c(gam_case(m29d, d24b, f29c, "b
   list(select = TRUE, rank = m29d$rank, coef_names = names(coef(m29d)), newdata = nd24b,
        n_penalties = sapply(m29d$smooth, function(s) length(s$S)),
        fit_new = as.numeric(pr29d$fit), se_new = as.numeric(pr29d$se.fit))))
+# 30. tp in bam(method = "fREML", discrete = TRUE). A one-covariate tp is not tensor.possible, so discrete.mf bins its
+# covariate as one group, like cr; gam.setup builds the basis on the padded frame mf0 (smooth.construct.tp.smooth.spec:
+# shift = colMeans over mf0, the unique values of mf0, construct_tprs's column norms over nrow(mf0) rows), then
+# smoothCon's scale.penalty and colMeans constraint over mf0; the design at the data rows is Predict.matrix.tprs.smooth.
+# shift and Xu are recorded (no gauge: they hold the frame). 30a: 28b's model, predict on 28b's new data with se, and
+# the summary s.table. 30b: 28c's Poisson model with an offset. 30c: 30a with select = TRUE.
+tp_disc_extra <- function(b, nd) {
+  pr <- predict(b, nd, se.fit = TRUE)
+  c(list(newdata = nd, fit_new = as.numeric(pr$fit), se_new = as.numeric(pr$se.fit),
+         tp_shift = b$smooth[[1]]$shift, tp_xu = as.numeric(b$smooth[[1]]$Xu),
+         s_table = unname(summary(b)$s.table)), bam_rank(b))
+}
+b30a <- bam(as.formula(f28b), family = binomial(link = "cloglog"), weights = n, data = d28, method = "fREML",
+            discrete = TRUE)
+put("bam_discrete_binomial_cloglog_tp", bam_disc_case(b30a, d28, f28b, "binomial(link='cloglog')",
+                                                      tp_disc_extra(b30a, nd28)))
+b30b <- bam(as.formula(f28c), family = poisson, data = d28, method = "fREML", discrete = TRUE)
+put("bam_discrete_poisson_tp", bam_disc_case(b30b, d28, f28c, "poisson", tp_disc_extra(b30b, nd28c)))
+b30c <- bam(as.formula(f28b), family = binomial(link = "cloglog"), weights = n, data = d28, method = "fREML",
+            discrete = TRUE, select = TRUE)
+put("bam_discrete_binomial_cloglog_tp_select", bam_disc_case(b30c, d28, f28b, "binomial(link='cloglog')",
+                                                             c(list(select = TRUE), tp_disc_extra(b30c, nd28))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

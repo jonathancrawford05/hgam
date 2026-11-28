@@ -959,4 +959,39 @@ b30c <- bam(as.formula(f28b), family = binomial(link = "cloglog"), weights = n, 
             discrete = TRUE, select = TRUE)
 put("bam_discrete_binomial_cloglog_tp_select", bam_disc_case(b30c, d28, f28b, "binomial(link='cloglog')",
                                                              c(list(select = TRUE), tp_disc_extra(b30c, nd28))))
+# 31. by= on tp. smoothCon (smooth.r) handles by for every basis alike: the tp basis is built on the covariate
+# (shift, Xu and column norms over every row), scale.penalty on the un-multiplied X; a numeric by drops the
+# sum-to-zero constraint (sd(by) > 0) and multiplies each row by it; a factor by keeps the constraint on the whole
+# X and makes one copy per level, labelled s(x):f<level>. In discrete bam the basis is built on mf0 as in section
+# 30. On section 28's data with a numeric z2 and a three-level factor g. 31a: p ~ s(x, by=z2, k=8) + s(z, bs="cr",
+# k=6); 31b: p ~ g + s(x, by=g, k=6); each as a REML gam and a discrete bam, predict on new data with se. 31c: both
+# with select = TRUE, as a REML gam and a discrete bam.
+set.seed(31)
+d31 <- d28[, c("x", "z", "n")]
+d31$z2 <- runif(nrow(d31), 0.5, 2); d31$g <- factor(sample(c("a", "b", "c"), nrow(d31), TRUE))
+d31$p <- rbinom(nrow(d31), d31$n, 1 - exp(-exp(-3.5 + 0.3 * d31$z2 * sin(d31$x / 1.6) + 0.3 * d31$z^2 +
+                                               0.2 * (d31$g == "b") * cos(d31$x / 2)))) / d31$n
+nd31 <- data.frame(x = c(-0.5, 0, 2.345, 5, 7.77, 10, 10.5), z = c(0, -1, 0.3, 0.9, -0.4, 1, 0.2),
+                   z2 = c(1, 0.6, 1.9, 1.2, 0.8, 1.5, 1.1), g = factor(c("a", "b", "c", "a", "b", "c", "a")))
+f31a <- "p ~ s(x, by=z2, k=8) + s(z, bs='cr', k=6)"
+f31b <- "p ~ g + s(x, by=g, k=6)"
+by_extra <- function(m, nd, sel = FALSE) {
+  pr <- predict(m, nd, se.fit = TRUE)
+  c(list(select = sel, newdata = nd, fit_new = as.numeric(pr$fit), se_new = as.numeric(pr$se.fit)), bam_rank(m))
+}
+for (f31 in list(list("a", f31a), list("b", f31b))) {
+  tag <- if (f31[[1]] == "a") "tp_by_numeric" else "tp_by_factor"
+  for (sel in c(FALSE, TRUE)) {
+    m31 <- gam(as.formula(f31[[2]]), family = binomial(link = "cloglog"), weights = n, data = d31, method = "REML",
+               select = sel)
+    put(paste0("gam_binomial_cloglog_", tag, if (sel) "_select" else "", "_reml"),
+        c(gam_case(m31, d31, f31[[2]], "binomial(link='cloglog')"), by_extra(m31, nd31, sel)))
+  }
+  for (sel in c(FALSE, TRUE)) {
+    b31 <- bam(as.formula(f31[[2]]), family = binomial(link = "cloglog"), weights = n, data = d31, method = "fREML",
+               discrete = TRUE, select = sel)
+    put(paste0("bam_discrete_binomial_cloglog_", tag, if (sel) "_select" else ""),
+        bam_disc_case(b31, d31, f31[[2]], "binomial(link='cloglog')", by_extra(b31, nd31, sel)))
+  }
+}
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")

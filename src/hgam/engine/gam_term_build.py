@@ -160,14 +160,7 @@ def build_python_cr_term(x: np.ndarray, term: TermSpec, by: np.ndarray | None = 
     design_unc, s_unc = cr_basis(x, knots)
     if by is not None:
         by = np.asarray(by, dtype=np.float64)
-        # mgcv counterpart: smoothCon (smooth.r), mgcv 1.9-4, the numeric-by branch: the sum-to-zero
-        # constraint is dropped only when ``sd(by) > mean(by) * .Machine$double.eps * 1000``; otherwise
-        # mgcv keeps it. That branch (a constant by) is not ported.
-        if not np.std(by, ddof=1) > np.mean(by) * np.finfo(np.float64).eps * 1000.0:
-            raise HgamNotImplementedError(
-                f"{term.label!r}: a numeric by variable {term.by!r} that is constant, for which "
-                "mgcv's smoothCon keeps the sum-to-zero constraint, is not ported."
-            )
+        _constant_by_refusal(by, term)
         design = by_scale_design(design_unc, by)
         s = s_unc
     else:
@@ -190,34 +183,52 @@ def tp_term_basis(x: np.ndarray, term: TermSpec) -> tuple[np.ndarray, np.ndarray
     """mgcv counterpart: ``smoothCon`` (smooth.r) over ``smooth.construct.tp.smooth.spec``
     (``construct_tprs``, tprs.c), then ``Predict.matrix.tprs.smooth`` at the data rows, mgcv 1.9-4.
 
-    Returns ``(design, S, state, Z)``: the constrained design at ``x``, its constrained penalty, the
-    :class:`~hgam.engine.gam_basis_tp.TprsState` and the sum-to-zero null space ``Z``. Outside a
-    :func:`~hgam.engine.gam_basis_cr.constraint_frame` (``gam()``) the basis is built on ``x`` itself.
-    Inside one (``bam(discrete = TRUE)``), ``gam.setup`` builds the smooth on ``discrete.mf``'s padded
-    frame ``mf0``: the shift (``colMeans``), the unique values, ``construct_tprs``'s column norms
-    (``nrow(mf0)`` rows), ``scale.penalty`` and the ``colMeans`` constraint are all taken over that
-    frame's column, and the design at ``x`` (the binned data rows) is ``Predict.matrix.tprs.smooth``
-    with that state. ``discrete.mf`` bins one covariate to at most 1000 values, so the ``max.knots``
-    refusal of :func:`~hgam.engine.gam_basis_tp.tp_basis` cannot fire there.
+    Returns ``(design, S, state, Z)``: the **unconstrained** design at ``x`` (before any ``by``), its
+    ``scale.penalty``-rescaled penalty, the :class:`~hgam.engine.gam_basis_tp.TprsState` and the
+    sum-to-zero null space ``Z`` (``smoothCon``'s ``colMeans(X)`` constraint, which the caller absorbs
+    unless a numeric ``by`` drops it). Outside a :func:`~hgam.engine.gam_basis_cr.constraint_frame`
+    (``gam()``) the basis is built on ``x`` itself. Inside one (``bam(discrete = TRUE)``), ``gam.setup``
+    builds the smooth on ``discrete.mf``'s padded frame ``mf0``: the shift (``colMeans``), the unique
+    values, ``construct_tprs``'s column norms (``nrow(mf0)`` rows), ``scale.penalty`` and the
+    ``colMeans`` constraint are all taken over that frame's column, and the design at ``x`` (the binned
+    data rows) is ``Predict.matrix.tprs.smooth`` with that state. ``discrete.mf`` bins one covariate to
+    at most 1000 values, so the ``max.knots`` refusal of :func:`~hgam.engine.gam_basis_tp.tp_basis`
+    cannot fire there.
     """
     x = np.asarray(x, dtype=np.float64)
     x0 = frame_column(term.variables[0])
     if x0 is None:
         design_u, s_u, state = tp_basis(x, term.k[0])
+        frame_design = design_u
     else:
         frame_design, s_u, state = tp_basis(np.asarray(x0, dtype=np.float64), term.k[0])
         design_u = tp_predict(x, state)
-    z = sum_to_zero_null_space(design_u if x0 is None else frame_design)
-    s_c = z.T @ s_u @ z
-    return design_u @ z, (s_c + s_c.T) / 2.0, state, z
+    return design_u, s_u, state, sum_to_zero_null_space(frame_design)
 
 
-def build_python_tp_term(x: np.ndarray, term: TermSpec) -> TermExtract:
+def _constant_by_refusal(by: np.ndarray, term: TermSpec) -> None:
+    """mgcv counterpart: ``smoothCon`` (smooth.r), mgcv 1.9-4, the numeric-by branch: the sum-to-zero
+    constraint is dropped only when ``sd(by) > mean(by) * .Machine$double.eps * 1000``; otherwise mgcv
+    keeps it. That branch (a constant by) is not ported."""
+    if not np.std(by, ddof=1) > np.mean(by) * np.finfo(np.float64).eps * 1000.0:
+        raise HgamNotImplementedError(
+            f"{term.label!r}: a numeric by variable {term.by!r} that is constant, for which "
+            "mgcv's smoothCon keeps the sum-to-zero constraint, is not ported."
+        )
+
+
+def build_python_tp_term(
+    x: np.ndarray, term: TermSpec, by: np.ndarray | None = None, group: np.ndarray | None = None
+) -> TermExtract:
     """The independent Python producer for a ``bs="tp"`` term (Slice R4, ADR-261).
 
     mgcv counterpart: ``smoothCon`` over ``smooth.construct.tp.smooth.spec`` (smooth.r), mgcv 1.9-4, through
     :func:`tp_term_basis` (on the data rows, or on ``discrete.mf``'s ``mf0`` inside a constraint frame).
-    Builds ``design_X`` / ``penalty_S`` from ``x`` and ``term.k`` alone; the signature takes no R payload
+    ``smoothCon`` handles ``by`` alike for every basis: a numeric ``by`` (``term.by``, values ``by``)
+    drops the constraint and multiplies each row of the unconstrained design by it; a factor ``by``
+    (``term.by_factor``, codes ``group``) keeps the constraint over the whole column and zeroes every row
+    outside ``term.by_level``. The penalty is the one ``scale.penalty`` gives before any ``by``.
+    Builds ``design_X`` / ``penalty_S`` from ``x`` and ``term`` alone; the signature takes no R payload
     (ADR-193's mechanical test). The coefficient gauge is not unique, so
     :func:`~hgam.engine.gam_basis_tp.compare_tp_basis` compares gauge-free.
     """
@@ -226,7 +237,23 @@ def build_python_tp_term(x: np.ndarray, term: TermSpec) -> TermExtract:
             f"build_python_tp_term only handles a one-covariate basis='tp'; got {term.label!r} "
             f"(basis={term.basis!r}, variables={term.variables!r}, k={term.k!r})."
         )
-    design, s, _, _ = tp_term_basis(np.asarray(x, dtype=np.float64), term)
+    if (term.by is not None) != (by is not None) or (term.by_factor is not None) != (group is not None):
+        raise HgamValidationError(
+            f"build_python_tp_term: {term.label!r} needs the by values exactly when term.by is set and the "
+            "group codes exactly when term.by_factor is set."
+        )
+    design_u, s_u, _, z = tp_term_basis(np.asarray(x, dtype=np.float64), term)
+    if by is not None:
+        by = np.asarray(by, dtype=np.float64)
+        _constant_by_refusal(by, term)
+        design, s = by_scale_design(design_u, by), s_u
+    else:
+        design = design_u @ z
+        s_c = z.T @ s_u @ z
+        s = (s_c + s_c.T) / 2.0
+        if group is not None:
+            assert term.by_level is not None  # TermSpec guarantees this alongside by_factor
+            design = by_factor_mask_design(design, np.asarray(group, dtype=np.int64), term.by_level)
     return TermExtract(
         label=term.label,
         index_start=0,

@@ -204,10 +204,10 @@ class TermSpec:
                     f"{self.variables!r} and k={self.k!r}; only a single-covariate tp "
                     "smooth with one k is built."
                 )
-            if self.knots is not None or self.by is not None or self.factor:
+            if self.knots is not None or self.factor:
                 raise HgamValidationError(
-                    f"TermSpec {self.label!r} is basis='tp' and must not carry knots, "
-                    "by or factor=True — a plain thin-plate smooth takes none of them."
+                    f"TermSpec {self.label!r} is basis='tp' and must not carry knots "
+                    "or factor=True — a thin-plate smooth takes neither."
                 )
         elif self.basis in ("ti", "te", "t2") and len(self.variables) < 2:
             raise HgamValidationError(
@@ -359,11 +359,11 @@ class TermSpec:
                 f"by_level={self.by_level!r} — a factor-by term needs both or neither."
             )
         if self.by_factor is not None:
-            if self.basis != "cr":
+            if self.basis not in ("cr", "tp"):
                 raise HgamValidationError(
                     f"TermSpec {self.label!r} sets by_factor={self.by_factor!r} with "
                     f"basis={self.basis!r} — a factor-by smooth is only built for "
-                    f"basis='cr'."
+                    f"basis='cr' or 'tp'."
                 )
             if self.by is not None:
                 raise HgamValidationError(
@@ -393,13 +393,13 @@ class TermSpec:
                 )
         if (
             self.basis not in ("sz", "fs", "re")
-            and not (self.basis == "cr" and self.by_factor is not None)
+            and not (self.basis in ("cr", "tp") and self.by_factor is not None)
             and self.n_levels is not None
         ):
             raise HgamValidationError(
                 f"TermSpec {self.label!r} has basis={self.basis!r} but sets "
                 f"n_levels={self.n_levels!r} — only a basis='sz'/'re' term, or a "
-                f"basis='cr' factor-by term, has a factor-level count."
+                f"basis='cr' factor-by term, has a factor-level count (or a basis='tp' one)."
             )
         if self.basis != "fs" and self.margin_order is not None:
             raise HgamValidationError(
@@ -474,6 +474,7 @@ def factor_by_terms(
     n_levels: int,
     knots: tuple[float, ...] | None = None,
     level_labels: tuple[str, ...] | None = None,
+    basis: str = "cr",
 ) -> tuple[TermSpec, ...]:
     """The ``n_levels`` separate :class:`TermSpec` objects a factor-``by`` smooth
     (capability ladder rung L3, ``s(x, by=fac, bs="cr")``) expands into.
@@ -503,6 +504,8 @@ def factor_by_terms(
         level_labels: One label per level for the generated terms' own suffix, or
             ``None`` to use the level's own index as a string (``"0"``, ``"1"``,
             ...). Must have length ``n_levels`` when supplied.
+        basis: ``"cr"`` (default) or ``"tp"``; ``smoothCon`` (smooth.r) expands a factor ``by`` the same
+            way for every basis.
 
     Returns:
         ``n_levels`` :class:`TermSpec` objects, ``by_level`` running ``0`` to
@@ -519,7 +522,7 @@ def factor_by_terms(
         TermSpec(
             label=f"{base_label}:{labels[level]}",
             variables=(variable,),
-            basis="cr",
+            basis=basis,
             k=(k,),
             knots=knots_arg,
             by_factor=by_factor,

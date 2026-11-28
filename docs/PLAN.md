@@ -37,7 +37,7 @@ About 40 pull-request-sized slices. The slice counts are rough estimates.
      Q1 option (a)): the port is `fit_engine_gam`'s default and the refusal is lifted; done. The ridge cases are
      gated like for like. Next: the bases (`tp` first).
    `tp`: one covariate measured in a REML gam (section 28, 2026-11-22) and in discrete bam (section 30, 2026-11-28);
-   next `by=` on tp.
+   numeric and factor `by=` on tp (section 31, 2026-11-28). Next: `ts`.
 4. **Packaging** (documentation, first release) comes after the widening, unless Jonathan asks for it sooner.
 
 ## M0, second slice: move the engine (done 2026-11-15)

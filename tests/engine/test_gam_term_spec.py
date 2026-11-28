@@ -507,13 +507,18 @@ def test_factor_by_terms_rejects_mismatched_level_labels() -> None:
         )
 
 
-def test_a_tp_term_takes_one_variable_one_k_and_no_by_knots_or_factor() -> None:
+def test_a_tp_term_takes_one_variable_one_k_and_no_knots_or_factor() -> None:
     ok = TermSpec(label="s(x)", variables=("x",), basis="tp", k=(10,))
     assert ok.basis == "tp"
+    # by= on tp is held to mgcv in section 31 (tests/test_tp_by.py): numeric and factor by are accepted.
+    assert TermSpec(label="s(x):w", variables=("x",), basis="tp", k=(10,), by="w").by == "w"
+    by_f = TermSpec(
+        label="s(x):ga", variables=("x",), basis="tp", k=(6,), by_factor="g", by_level=0, n_levels=3
+    )
+    assert by_f.by_factor == "g"
     for kwargs in (
         {"variables": ("x", "z"), "k": (5, 5)},
         {"variables": ("x",), "k": ()},
-        {"variables": ("x",), "k": (10,), "by": "w"},
         {"variables": ("x",), "k": (10,), "factor": True},
         {"variables": ("x",), "k": (10,), "knots": (("x", (0.0, 1.0)),)},
     ):

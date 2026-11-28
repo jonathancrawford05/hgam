@@ -845,6 +845,7 @@ def _build_model(
             need_numeric(call.variable, call.text)
             if call.basis == "tp":
                 refuse_knots(call.variable, call.text)
+            if call.basis == "tp" and call.by is None:
                 smooth.append(TermSpec(label=call.text, variables=(call.variable,), basis="tp", k=(call.k,)))
                 smooth_meta.append((call.text, call.k))
             elif call.by is None:
@@ -866,8 +867,13 @@ def _build_model(
                     k=call.k,
                     by_factor=call.by,
                     n_levels=len(levels),
-                    knots=dict(cr_knots(call.variable, call.k, call.text) or ()).get(call.variable),
+                    knots=(
+                        None
+                        if call.basis == "tp"
+                        else dict(cr_knots(call.variable, call.k, call.text) or ()).get(call.variable)
+                    ),
                     level_labels=tuple(f"{call.by}{lv}" for lv in levels),
+                    basis=call.basis,
                 ):
                     smooth.append(spec)
                     smooth_meta.append((spec.label, call.k))
@@ -878,9 +884,9 @@ def _build_model(
                     TermSpec(
                         label=label,
                         variables=(call.variable,),
-                        basis="cr",
+                        basis=call.basis,
                         k=(call.k,),
-                        knots=cr_knots(call.variable, call.k, call.text),
+                        knots=None if call.basis == "tp" else cr_knots(call.variable, call.k, call.text),
                         by=call.by,
                     )
                 )

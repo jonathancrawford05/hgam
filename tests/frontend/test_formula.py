@@ -62,9 +62,10 @@ def test_a_bare_smooth_is_thin_plate_with_mgcvs_default_k() -> None:
     assert parse_formula('y ~ s(x, bs="cr")').terms == (SmoothCall("x", "cr", 10),)
 
 
-def test_a_thin_plate_smooth_takes_no_by() -> None:
-    with pytest.raises(HgamNotImplementedError, match=r"by= on a thin-plate smooth"):
-        parse_formula("y ~ s(x, by=g)")
+def test_a_thin_plate_smooth_takes_a_by() -> None:
+    """Section 31 holds ``by=`` on tp to mgcv (``tests/test_tp_by.py``), so it parses."""
+    assert parse_formula("y ~ s(x, by=g)").terms == (SmoothCall("x", "tp", 10, by="g"),)
+    assert parse_formula('y ~ s(x, by=z, k=8, bs="tp")').terms == (SmoothCall("x", "tp", 8, by="z"),)
 
 
 @pytest.mark.parametrize(

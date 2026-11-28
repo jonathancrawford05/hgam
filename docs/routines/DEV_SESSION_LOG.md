@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-28 (forty-seventh slice): `by=` on tp (PLAN step 3, bases)
+
+Same run: PR #58 (tp in discrete bam) auto-merged after the Ready review of `db26679` (six conditions posted). Ported `by=` on tp: `build_python_tp_term(by=, group=)` (numeric by: no constraint, rows scaled; factor by: constraint on the whole column, one masked copy per level), the parser and `TermSpec` accept it, predict applies it. Section 31: 31a numeric by, 31b factor by, each as REML gam and discrete bam, with and without select.
+Tests: 889 → 899 (+10 in `tests/test_tp_by.py`; `test_a_thin_plate_smooth_takes_no_by` replaced by `test_a_thin_plate_smooth_takes_a_by`; the TermSpec tp test's by row now asserts acceptance). `make lint` clean. Tier 1: eta 1.8e-11, se 6.5e-4 (REML; discrete 4e-13), edf 2.1e-6 of the gate, predict 9.7e-12 / 5.2e-4, sp 1.1e-9 (not gated).
+Deferred: the REML se line gets section 31's number. Next: `ts`.
+
 ## 2026-11-28 (forty-sixth slice): `tp` in discrete bam (PLAN step 3, bases)
 
 `bam(discrete=TRUE)` accepts one-covariate tp: `tp_term_basis` builds the basis on `discrete.mf`'s `mf0` (shift, Xu, column norms, scale.penalty, constraint over its rows) and evaluates `Predict.matrix.tprs.smooth` at the binned rows; the bam refusal is gone. Section 30 (28b, 28c, 28d as discrete bam).

@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-28, by the development run's forty-sixth slice: `tp` in discrete bam (section 30). Read
-`docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-28, by the development run's forty-seventh slice: `by=` on tp (section 31); PR #58 (tp in discrete
+bam) auto-merged in the same run. Read `docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -313,7 +313,7 @@ are a gauge) with the penalty at 3.0e-14. REML gam fits `s(x) + s(z, bs="cr", k=
 with an offset (Poisson) and the first with `select=TRUE` meet every gate: eta at most 8.2e-12 on data and new data
 (x outside its range), se 3.2e-4 relative, edf 7.9e-9 of the gate, structure and coefficient names exact. Still refused
 by name (`HgamNotImplementedError`): the `max.knots` subsampling regime (more than 2000 rows and more than 2000
-distinct values; mgcv samples them at random), `by=` on tp, tp as the `fs` base (mgcv's default `xt`), two-covariate `s(x, z)`, `ts`.
+distinct values; mgcv samples them at random), tp as the `fs` base (mgcv's default `xt`), two-covariate `s(x, z)`, `ts`.
 PR #54 review (`ada3807`): that refusal now raises `HgamNotImplementedError` (was `HgamValidationError`), with a
 front-end test; `tp_basis` names its counterpart; the Poisson case predicts at a nonzero offset. Tests: 881 pass.
 
@@ -340,17 +340,29 @@ shift test holds the frame. The fs-on-tp fit stays refused (PR #55, option a), s
 `test_the_discrete_bam_path_refuses_a_thin_plate_smooth` is retired (SETTINGS condition 5), replaced by
 `test_discrete_tp_meets_the_gates`. Tests: 889 pass.
 
-## Next slice: `by=` on tp (PLAN step 3, the bases)
+`by=` on tp (2026-11-28, this run's second PR; section 31, `tests/test_tp_by.py`): `s(x, by=z)` and `s(x, by=f)` with
+the default tp basis are accepted (`formula.py` passes `by`, `api` builds them as for cr, `factor_by_terms(basis=)`,
+`TermSpec` allows `by` / `by_factor` on tp). `build_python_tp_term(by=, group=)`: the unconstrained basis from
+`tp_term_basis` (on the data rows, or `mf0` in discrete bam), a numeric by scales its rows and drops the constraint (a
+constant by is refused, as for cr), a factor by absorbs the constraint over the whole column and masks each level;
+`fit_term_state` / `predict_term_design` do the same. On section 28's data with z2 and a three-level g: 31a `p ~ s(x,
+by=z2, k=8) + s(z, bs="cr", k=6)`, 31b `p ~ g + s(x, by=g, k=6)`, each as REML gam and discrete bam, with and without
+select (8 fixtures): eta at most 1.8e-11, se 6.5e-4 relative in REML (the DEFERRED Vp line; 4e-13 discrete), edf 2.1e-6
+of the gate, predict on new data 9.7e-12 / se 5.2e-4, structure, rank, names exact; sp 1.1e-9 relative (not gated).
+`k_check` still refuses a factor-by smooth; the select refusal for a factor-by smooth beside another smooth of its
+covariate (ADR-261 amendment 2) is unchanged. Tests: 899 pass.
 
-- `s(x, by=z)` (numeric by, tp) and `s(x, by=f)` (factor by, tp) are refused today (`formula.py`'s smooth parser, "by= on a thin-plate
-  smooth"). mgcv's `smoothCon` treats them as for cr (smooth.r 1.9-4): a numeric by drops the sum-to-zero
-  constraint (unless the by is constant) and scales each row by z; a factor by keeps the constraint on the whole X and
-  makes one copy per level, labelled `s(x):f<level>`. Add section 31 to `oracle/make_fixtures.R` on section 28's data
-  (add a numeric z2 and a three-level factor): REML gam and discrete bam, each with predict on new data; measure
-  through `tp_term_basis` with `by_scale_design` / `by_factor_mask_design` first, port only where a gate is missed.
-  Watch `select=TRUE` beside a factor-by tp: `api` refuses tp beside a factor-by smooth with select (ADR-261
-  amendment 2); keep that refusal unless measured.
-- After that, in order: the remaining bases (`ts`, `cs`, `ps`, `cc`).
+## Next slice: `ts` (PLAN step 3, the bases)
+
+- `bs="ts"` is refused in `formula.py` (`_REFUSED_BASES`). mgcv's `smooth.construct.ts.smooth.spec` (smooth.r 1.9-4)
+  is the tp construction with a shrinkage term added to the penalty: read it for the exact constant (`object$xt`'s
+  shrinkage default) and where it enters relative to `scale.penalty`. Add section 32 to `oracle/make_fixtures.R`:
+  `smoothCon(s(x, bs="ts"))` on section 28's data, and 28b's model with `s(x, bs="ts")` as REML gam and discrete
+  bam, with predict on new data. Reuse `tp_term_basis`; add only the penalty change. The gauge: the shrunk penalty is
+  full rank, so compare it in mgcv's basis as `test_tp_basis_matches_smoothcon_up_to_its_gauge` does.
+- Carried PR #58 review nit (optional): section 30b has two tp smooths; record `shift` for every tp smooth there and
+  check each in `test_discrete_tp_is_built_on_the_padded_frame`.
+- After that, in order: the remaining bases (`cs`, `ps`, `cc`).
 - Optional later cleanup (not blocking): remove the `"hgam"` Newton iteration and its tests once nothing relies on it;
   ask Jonathan in that slice's PR whether to keep it as a diagnostic.
 - Not ported yet (DEFERRED): the inner P-IRLS tolerance `conv.tol/100`; `edge.correct`; quasipoisson's log-scale

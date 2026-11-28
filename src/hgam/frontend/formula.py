@@ -359,13 +359,8 @@ def _parse_smooth(text: str, positional: list[str], keyword: dict[str, str]) -> 
     if "by" in keyword:
         by = _identifier(keyword["by"], "by", text)
     if basis == "tp":
-        if by is not None:
-            raise _refuse(
-                f"by= on a thin-plate smooth {text}",
-                f'not verified ({_COVERAGE} §2.1 tp row); write bs="cr" for a by-smooth',
-            )
         k_tp = _int_k(keyword["k"], text) if "k" in keyword else _TP_DEFAULT_K
-        return SmoothCall(variable=variable, basis="tp", k=k_tp)
+        return SmoothCall(variable=variable, basis="tp", k=k_tp, by=by)
     if basis == "re":
         if "k" in keyword:
             raise HgamNotImplementedError(

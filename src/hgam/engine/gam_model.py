@@ -265,7 +265,12 @@ def _build_term_extract(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermE
         by = None if term.by is None else np.asarray(data[term.by], dtype=np.float64)
         return build_python_cr_term(x, term, by=by)
     if term.basis == "tp":
-        return build_python_tp_term(np.asarray(data[term.variables[0]], dtype=np.float64), term)
+        return build_python_tp_term(
+            np.asarray(data[term.variables[0]], dtype=np.float64),
+            term,
+            by=None if term.by is None else np.asarray(data[term.by], dtype=np.float64),
+            group=None if term.by_factor is None else np.asarray(data[term.by_factor], dtype=np.int64),
+        )
     if term.basis == "ti":
         x1 = np.asarray(data[term.variables[0]], dtype=np.float64)
         x2 = np.asarray(data[term.variables[1]], dtype=np.float64)

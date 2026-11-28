@@ -119,7 +119,8 @@ def fit_term_state(term: TermSpec, data: Mapping[str, np.ndarray]) -> TermState:
         # As build_python_tp_term builds it: on the data rows, or on discrete.mf's mf0 in a constraint frame.
         x = np.asarray(_column(data, term.variables[0], term), dtype=np.float64)
         _, _, tp_state, z = tp_term_basis(x, term)
-        return TermState(term=term, constraint=(z,), tp=tp_state)
+        # A numeric by drops the constraint (smoothCon), as for cr.
+        return TermState(term=term, constraint=() if term.by is not None else (z,), tp=tp_state)
     if term.basis == "ti":
         margins = []
         for variable, k in zip(term.variables, term.k, strict=True):
@@ -201,7 +202,16 @@ def predict_term_design(state: TermState, data: Mapping[str, np.ndarray]) -> np.
                 f"predict_term_design: tp term {term.label!r} has no stored thin-plate state."
             )
         x = np.asarray(_column(data, term.variables[0], term), dtype=np.float64)
-        return np.asarray(tp_predict(x, state.tp) @ state.constraint[0], dtype=np.float64)
+        design = tp_predict(x, state.tp)
+        if term.by is not None:
+            return by_scale_design(design, np.asarray(_column(data, term.by, term)))
+        design = design @ state.constraint[0]
+        if term.by_factor is not None:
+            assert term.n_levels is not None and term.by_level is not None
+            return by_factor_mask_design(
+                design, _codes(data, term.by_factor, term.n_levels, term), term.by_level
+            )
+        return np.asarray(design, dtype=np.float64)
     if term.basis == "ti":
         x1 = np.asarray(_column(data, term.variables[0], term), dtype=np.float64)
         x2 = np.asarray(_column(data, term.variables[1], term), dtype=np.float64)

@@ -53,7 +53,9 @@ directory outside this repository, where `<tag>` is the mgcv version of the pinn
 ## 2. Decide what this run is for
 
 List open pull requests against `main`. The open development pull request is one whose head branch starts with
-`dev/`, or whose body contains `_Daily development run_`.
+`dev/`, or whose body contains `_Daily development run_`. Another session may be working at the same time: a
+scheduled run, or a manual session started while one is running. Nothing locks the repository, so this list is
+checked again before a new pull request is opened (step 8).
 
 Feedback that counts:
 - **Routine reviews of the head:** reviews whose body contains `Reviewed commit <sha>` with the current head SHA.
@@ -145,7 +147,15 @@ tier. Anything outside the key results that differs gets one line in `docs/DEFER
 git push -u origin <branch>
 ```
 
-If the push is rejected, stop and report. For a new slice open a **ready-for-review** pull request against `main`:
+If the push is rejected, stop and report.
+
+**Before opening a new pull request, list open pull requests against `main` again.** If an open development pull
+request has appeared since step 2, another session took this slice. Do not open a second pull request: the branch is
+already pushed, so the work is kept. Report "overlap with <link>; work kept on <branch>, no pull request opened",
+note it in `DEV_SESSION_LOG.md`, and stop. (PR #56 duplicated PR #55 this way on 2026-11-22: a manual session
+overlapped the scheduled run.)
+
+For a new slice open a **ready-for-review** pull request against `main`:
 
 ```markdown
 ## Summary

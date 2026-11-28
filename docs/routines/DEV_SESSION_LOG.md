@@ -1,5 +1,11 @@
 # Development session log
 
+## 2026-11-28 (forty-sixth slice): `tp` in discrete bam (PLAN step 3, bases)
+
+`bam(discrete=TRUE)` accepts one-covariate tp: `tp_term_basis` builds the basis on `discrete.mf`'s `mf0` (shift, Xu, column norms, scale.penalty, constraint over its rows) and evaluates `Predict.matrix.tprs.smooth` at the binned rows; the bam refusal is gone. Section 30 (28b, 28c, 28d as discrete bam).
+Tests: 883 → 889 (+7 in `tests/test_tp_discrete.py`; `test_the_discrete_bam_path_refuses_a_thin_plate_smooth` retired, SETTINGS condition 5). `make lint` clean. Tier 1: eta 1.7e-8, se 4.6e-12, edf 1.7e-5 of the gate, predict 2.8e-8, shift/Xu 8.7e-16, select summary Chi.sq 4.2e-8, Ref.df exact.
+Built on the data rows instead: eta still 1e-12 but shift 7.2e-2 off and sp 1.2e-2 relative. Nothing deferred. Next: `by=` on tp.
+
 ## 2026-11-28 (PR #55, Jonathan's decision)
 
 Jonathan chose Q1 option (a) on PR #55: fs fits on a tp base stay refused (mgcv's own fit moves 1.6e-2 under a 1e-12 shift of x on tp, per PR #56's section 29e). Recorded in CONTINUATION, PLAN and DEFERRED. Review nit on `084fb08` done: `fs_basis` refuses knots on a tp base and a k that disagrees with cr's knots.

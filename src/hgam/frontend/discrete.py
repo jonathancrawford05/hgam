@@ -236,16 +236,17 @@ def compress_covariates(
 def _smooth_groups(term: TermSpec) -> list[tuple[str, ...]]:
     """The covariate groups ``discrete.mf`` compresses for one smooth, in its order: the ``by`` variable
     (numeric or factor) first, then each margin. A ``tensor.smooth.spec`` (``ti``, ``te``, after ``tero``)
-    has one one-covariate margin per variable. ``sz`` is a tensor of one-covariate margins there
+    has one one-covariate margin per variable; a one-covariate smooth (``cr``, ``tp``) is one group.
+    ``sz`` is a tensor of one-covariate margins there
     (``tensor.possible``, bam.r), factor first; ``re`` is its factor. ``fs`` is ``tensor.possible`` too,
     with one margin per written term (``TermSpec.margin_order``). A ``t2`` term is not a
     ``tensor.smooth.spec`` (``nmarg <- 1``), so its covariates are one group, compressed jointly."""
     if term.basis == "parametric":
         return []
-    if term.basis not in ("cr", "ti", "te", "t2", "sz", "fs", "re"):
+    if term.basis not in ("cr", "tp", "ti", "te", "t2", "sz", "fs", "re"):
         raise HgamNotImplementedError(
             f"discrete_model_frame: {term.basis!r} terms are not discretised "
-            "(only cr, ti, te, t2, sz, fs, re and factors)."
+            "(only cr, tp, ti, te, t2, sz, fs, re and factors)."
         )
     by = term.by if term.by is not None else term.by_factor
     head = [(by,)] if by is not None else []

@@ -322,12 +322,6 @@ def test_select_true_with_thin_plate_smooths_fits_and_shrinks_a_noise_smooth(
     assert shrunk.edf_total <= plain.edf_total + 1e-6
 
 
-def test_the_discrete_bam_path_refuses_a_thin_plate_smooth(frame: Frame) -> None:
-    counts = _with(frame, c=np.round(np.abs(frame["y"]) * 3).astype(np.int64))
-    with pytest.raises(HgamNotImplementedError, match=r"tp terms"):
-        gam("c ~ s(x)", counts, "poisson", method="fREML", discrete=True)
-
-
 def test_a_thin_plate_smooth_of_a_factor_column_is_refused(frame: Frame) -> None:
     with pytest.raises(HgamValidationError, match="factor column"):
         gam("y ~ s(g)", frame, "gaussian")

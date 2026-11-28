@@ -45,7 +45,7 @@ def fit_engine_bam(model: ModelSpec, data: Mapping[str, np.ndarray], y: np.ndarr
     """Fit ``model`` by the ``bgam.fitd`` performance iteration.
 
     Args:
-        model: Poisson or binomial; terms ``cr`` / ``ti`` / ``sz`` / ``re`` / parametric (``select``
+        model: Poisson or binomial; terms ``cr`` / ``tp`` / ``ti`` / ``sz`` / ``re`` / parametric (``select``
             as set on the model).
         data: covariate arrays keyed by name, plus the weights/offset columns if named.
         y: the response.
@@ -61,12 +61,6 @@ def fit_engine_bam(model: ModelSpec, data: Mapping[str, np.ndarray], y: np.ndarr
             f"gam(method='fREML', discrete=True): family {model.family!r} is not supported — "
             "only poisson and binomial (the fixed-scale branch of bgam.fitd). Free-scale, "
             "quasi and extended families are different builds (ADR-260 amendment 2)."
-        )
-    if any(term.basis == "tp" for term in model.terms):
-        raise HgamNotImplementedError(
-            "gam(method='fREML', discrete=True): tp terms (including a bare s(x)) are not "
-            'supported — bam builds them on its compressed frame; write bs="cr" '
-            "(ADR-261)."
         )
     # discrete.mf (bam.r): every numeric covariate is binned before the design is built, so the
     # fit, its edf and its term states (prediction) are at the discretised covariates.

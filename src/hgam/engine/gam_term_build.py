@@ -23,6 +23,7 @@ from hgam.engine.gam_basis_cr import (
     cr_basis,
     cr_default_knots,
     frame_column,
+    sum_to_zero_null_space,
     sz_basis,
     ti_basis,
 )
@@ -31,7 +32,7 @@ from hgam.engine.gam_basis_parametric import parametric_design
 from hgam.engine.gam_basis_re import re_basis
 from hgam.engine.gam_basis_t2 import T2Basis, t2_basis
 from hgam.engine.gam_basis_te import te_basis
-from hgam.engine.gam_basis_tp import tp_basis
+from hgam.engine.gam_basis_tp import TprsState, tp_basis, tp_predict
 from hgam.engine.gam_term_spec import TermSpec
 from hgam.errors import HgamNotImplementedError, HgamValidationError
 
@@ -50,6 +51,7 @@ __all__ = [
     "build_python_te_term",
     "build_python_ti_term",
     "build_python_tp_term",
+    "tp_term_basis",
 ]
 
 
@@ -184,11 +186,38 @@ def build_python_cr_term(x: np.ndarray, term: TermSpec, by: np.ndarray | None = 
     )
 
 
+def tp_term_basis(x: np.ndarray, term: TermSpec) -> tuple[np.ndarray, np.ndarray, TprsState, np.ndarray]:
+    """mgcv counterpart: ``smoothCon`` (smooth.r) over ``smooth.construct.tp.smooth.spec``
+    (``construct_tprs``, tprs.c), then ``Predict.matrix.tprs.smooth`` at the data rows, mgcv 1.9-4.
+
+    Returns ``(design, S, state, Z)``: the constrained design at ``x``, its constrained penalty, the
+    :class:`~hgam.engine.gam_basis_tp.TprsState` and the sum-to-zero null space ``Z``. Outside a
+    :func:`~hgam.engine.gam_basis_cr.constraint_frame` (``gam()``) the basis is built on ``x`` itself.
+    Inside one (``bam(discrete = TRUE)``), ``gam.setup`` builds the smooth on ``discrete.mf``'s padded
+    frame ``mf0``: the shift (``colMeans``), the unique values, ``construct_tprs``'s column norms
+    (``nrow(mf0)`` rows), ``scale.penalty`` and the ``colMeans`` constraint are all taken over that
+    frame's column, and the design at ``x`` (the binned data rows) is ``Predict.matrix.tprs.smooth``
+    with that state. ``discrete.mf`` bins one covariate to at most 1000 values, so the ``max.knots``
+    refusal of :func:`~hgam.engine.gam_basis_tp.tp_basis` cannot fire there.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    x0 = frame_column(term.variables[0])
+    if x0 is None:
+        design_u, s_u, state = tp_basis(x, term.k[0])
+    else:
+        frame_design, s_u, state = tp_basis(np.asarray(x0, dtype=np.float64), term.k[0])
+        design_u = tp_predict(x, state)
+    z = sum_to_zero_null_space(design_u if x0 is None else frame_design)
+    s_c = z.T @ s_u @ z
+    return design_u @ z, (s_c + s_c.T) / 2.0, state, z
+
+
 def build_python_tp_term(x: np.ndarray, term: TermSpec) -> TermExtract:
     """The independent Python producer for a ``bs="tp"`` term (Slice R4, ADR-261).
 
-    Builds ``design_X`` / ``penalty_S`` from ``x`` and ``term.k`` alone via
-    :mod:`hgam.engine.gam_basis_tp`; the signature takes no R payload
+    mgcv counterpart: ``smoothCon`` over ``smooth.construct.tp.smooth.spec`` (smooth.r), mgcv 1.9-4, through
+    :func:`tp_term_basis` (on the data rows, or on ``discrete.mf``'s ``mf0`` inside a constraint frame).
+    Builds ``design_X`` / ``penalty_S`` from ``x`` and ``term.k`` alone; the signature takes no R payload
     (ADR-193's mechanical test). The coefficient gauge is not unique, so
     :func:`~hgam.engine.gam_basis_tp.compare_tp_basis` compares gauge-free.
     """
@@ -197,8 +226,7 @@ def build_python_tp_term(x: np.ndarray, term: TermSpec) -> TermExtract:
             f"build_python_tp_term only handles a one-covariate basis='tp'; got {term.label!r} "
             f"(basis={term.basis!r}, variables={term.variables!r}, k={term.k!r})."
         )
-    design_u, s_u, _ = tp_basis(np.asarray(x, dtype=np.float64), term.k[0])
-    design, s = absorb_sum_to_zero_constraint(design_u, s_u)
+    design, s, _, _ = tp_term_basis(np.asarray(x, dtype=np.float64), term)
     return TermExtract(
         label=term.label,
         index_start=0,

@@ -1,7 +1,7 @@
 # Continuation
 
-Last updated: 2026-11-22, by the development run's forty-fifth slice: `fs` on its default tp base, engine only, with a
-question for Jonathan on PR #55; PR #54 (the one-covariate tp basis, measured) auto-merged in the same run. Read
+Last updated: 2026-11-22, by the development run's forty-fifth slice: `fs` on its default tp base, engine only (Jonathan chose
+PR #55's Q1 option (a) on 2026-11-28: fits on a tp base stay refused); PR #54 (the one-covariate tp basis, measured) auto-merged in the same run. Read
 `docs/PRIORITIES.md` before choosing work.
 
 ## State
@@ -393,15 +393,15 @@ that follow mgcv's `newton`. The rule is in `docs/PRIORITIES.md` (PR #52). Done 
 
 ## Open questions
 
-PR #55 Q1 (2026-11-22): what to gate an fs fit on a tp base against, given that mgcv's own fit depends on the rounding
-that sets the null pair's rotation. Options: (a) leave fs on a tp base refused and record it (the PR as it stands);
-(b) record mgcv's null-space columns (or its fitted `P`) in the fixture and gate an hgam fit built on mgcv's null
-basis, like the existing "eta at mgcv's sp" checks (the reviewer's route), plus the rotation-invariant results;
-(c) gate eta at a looser, measured tolerance (a gate change, yours to make); (d) look for a tie-break mgcv 1.9-4 follows
-(none in `nat.param`: `eigen(RSR, symmetric=TRUE)`). Recommendation: (a) now, (b) if hierarchical models on the
-default fs base are needed soon. A fit is sensitive to an explicit rotation on either base (1.2e-3 per 0.1 rad), but
-rounding rotates only the tp base's pair in practice: the PR #55 review perturbed x by 1e-15 to 1e-13 relative and the
-cr fit did not move, while the tp fit moved by up to 3e-2.
+None.
+
+Decided on PR #55 (2026-11-28): Q1 option (a). An fs fit on a tp base (no `xt`, or `xt="tp"`) stays refused by name;
+users write `xt="cr"`. Reason: mgcv's own fit there is set by rounding (the null pair's rotation): with x shifted by
+1e-12 to 1e-9, mgcv 1.9.4's eta moves by 1.6e-2 on the tp base and by 1e-14 on cr (PR #56's section 29e, pinned
+image), so no recorded mgcv fit is a reproducible reference. The engine's `fs_basis(base="tp")` stays, held to section
+29a up to that rotation. Revisit only if Jonathan asks for the default fs base; the candidate then is a canonical
+orientation of the null pair in hgam, documented as a difference from mgcv rather than gated. Q2 (PR #56, a duplicate)
+is settled: #56 was closed in favour of #55.
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

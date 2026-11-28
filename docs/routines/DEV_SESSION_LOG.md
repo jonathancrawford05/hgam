@@ -1,5 +1,10 @@
 # Development session log
 
+## 2026-11-28 (PR #55, Jonathan's decision)
+
+Jonathan chose Q1 option (a) on PR #55: fs fits on a tp base stay refused (mgcv's own fit moves 1.6e-2 under a 1e-12 shift of x on tp, per PR #56's section 29e). Recorded in CONTINUATION, PLAN and DEFERRED. Review nit on `084fb08` done: `fs_basis` refuses knots on a tp base and a k that disagrees with cr's knots.
+Tests: 882 → 883 (`test_fs_basis_refuses_arguments_its_base_would_ignore`). `make lint` clean. No key result changed. Next: tp in discrete bam.
+
 ## 2026-11-22 (forty-fifth slice): `fs` on its default tp base, engine only (PLAN step 3, bases)
 
 Same run: PR #54 auto-merged after the Ready review of `74f9069` (six conditions posted; branch delete cut by the git proxy). Ported `tp_construct` and `fs_basis(base="tp")`; fits passed against local mgcv 1.9.1 (eta 1.8e-11) but CI's `oracle` (mgcv 1.9.4) failed: X 0.35, eta 2.2e-3 / 3.0e-2. Cause measured: the null pair's rotation is set by rounding and a 0.1 rad rotation moves eta 1.2e-3 (cr and tp). Front-end acceptance reverted; question for Jonathan on PR #55.

@@ -233,10 +233,19 @@ def fs_basis(
             )
         if k is None:
             raise HgamValidationError("fs_basis: a tp base needs k.")
+        if knots is not None:
+            raise HgamNotImplementedError(
+                "fs_basis: knots for a tp base are not ported "
+                "(smooth.construct.tp.smooth.spec places its own)."
+            )
         base_x, base_s, tp_state = tp_construct(x, k)
     elif base == "cr":
         if knots is None:
             raise HgamValidationError("fs_basis: a cr base needs knots.")
+        if k is not None and k != len(knots):
+            raise HgamValidationError(
+                f"fs_basis: k={k} but {len(knots)} cr knots; a cr base's k is len(knots)."
+            )
         if frame is not None:
             built = fs_basis(frame[0], frame[1], n_levels, knots)
             design = fs_predict_design(x, group, n_levels, knots, built.p_mat)

@@ -193,4 +193,4 @@ the outer smoothing-parameter search, where the old engine recorded disagreement
   `scale.penalty`) and `fs_basis(base="tp")` are in the engine, held to section 29a up to the null pair's rotation
   (range columns 2.5e-14; null pair as a subspace 4.5e-15). Fits stay refused: the null pair's rotation is set by
   rounding and moves an mgcv fs fit by about 1e-3 per 0.1 rad, and on the tp base the pinned image disagreed with
-  mgcv 1.9.1 (eta 2.2e-3 and 3.0e-2 against hgam). Waiting for Jonathan's decision on PR #55.
+  mgcv 1.9.1 (eta 2.2e-3 and 3.0e-2 against hgam). Jonathan chose option (a) on PR #55 (2026-11-28): fits on a tp base stay refused; write `xt="cr"`.

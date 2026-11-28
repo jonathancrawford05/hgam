@@ -15,10 +15,12 @@ fitted term is held to a REML gam fit in ``tests/test_fs_fit.py`` (section 24b).
 import itertools
 
 import numpy as np
+import pytest
 
 from hgam.engine.gam_basis_cr import _r_norm_inf
 from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
 from hgam.engine.gam_basis_tp import subspace_distance
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 GATE = 1e-8
 
@@ -147,3 +149,13 @@ def test_fs_tp_basis_matches_smoothcon_up_to_the_null_pair(load_fixture, margin)
     assert rel_s_null < GATE
     assert rel_new < GATE
     assert d_null_new < GATE
+
+
+def test_fs_basis_refuses_arguments_its_base_would_ignore() -> None:
+    """A tp base places its own knots, and a cr base's k is len(knots): neither is accepted and ignored."""
+    x = np.linspace(0.0, 10.0, 60)
+    group = np.tile([0, 1, 2], 20)
+    with pytest.raises(HgamNotImplementedError, match="knots for a tp base"):
+        fs_basis(x, group, 3, np.array([9.0, 9.0]), base="tp", k=6)
+    with pytest.raises(HgamValidationError, match="k=5 but 6 cr knots"):
+        fs_basis(x, group, 3, np.linspace(0.0, 10.0, 6), k=5)

@@ -1,7 +1,8 @@
 # Continuation
 
-Last updated: 2026-11-22, by the development run's forty-fourth slice: the one-covariate `tp` basis, measured against
-section 28 and not ported (PLAN step 3, the bases). Read `docs/PRIORITIES.md` before choosing work.
+Last updated: 2026-11-22, by the development run's forty-fifth slice: `fs` on its default tp base, engine only (Jonathan chose
+PR #55's Q1 option (a) on 2026-11-28: fits on a tp base stay refused); PR #54 (the one-covariate tp basis, measured) auto-merged in the same run. Read
+`docs/PRIORITIES.md` before choosing work.
 
 ## State
 
@@ -317,16 +318,25 @@ distinct values; mgcv samples them at random), tp in discrete bam, `by=` on tp, 
 PR #54 review (`ada3807`): that refusal now raises `HgamNotImplementedError` (was `HgamValidationError`), with a
 front-end test; `tp_basis` names its counterpart; the Poisson case predicts at a nonzero offset. Tests: 881 pass.
 
-## Next slice: `fs` on its default tp base (PLAN step 3, the bases)
+`fs` on its default tp base (2026-11-22, this run, PR #55): engine only. `tp_construct` (the tp design and penalty as
+`smooth.construct` returns them, before smoothCon's `scale.penalty`) and `fs_basis(base="tp", k=)` /
+`fs_predict_design(..., tp_state)` exist and are held to section 29a up to the null pair's rotation
+(`test_fs_tp_basis_matches_smoothcon_up_to_the_null_pair`). The front end still refuses fs without `xt` or with
+`xt="tp"`. Why: first pushed with fits accepted, they met every gate against local mgcv 1.9.1 (eta 1.8e-11) but CI's
+pinned image (mgcv 1.9.4) failed: X 0.35 relative, eta 2.2e-3 (29b) and 3.0e-2 (29c). The fs and nat.param code is the
+same in both versions; the two null-space eigenvalues are near 1e-20, so the null pair's rotation is set by rounding,
+and a 0.1 rad rotation moves an fs fit's eta by 1.2e-3 on either base (measured in hgam). Sections 29b-29d are
+recorded, not gated. Tests: 882 pass.
 
-- `s(x, f, bs="fs")` with no `xt` is tp-based in mgcv (`smooth.construct.fs.smooth.spec`, smooth.r: `xt` defaults to
-  `"tp"`), the most common hierarchical-GAM form; hgam refuses it today (only `xt="cr"`). Add section 29 to
-  `oracle/make_fixtures.R`: `smoothCon(s(x, f, bs="fs", k=5))` and a REML gam `p ~ s(x, f, bs="fs", k=5)` (and with
-  `s(x)` beside it), held at the gates as `tests/test_fs_fit.py` does for cr. Measure first with `tp_basis` as the
-  base; port the fs-on-tp pieces of `smooth.construct.fs.smooth.spec` (the base's null space gets its own penalty per
-  level) only where a gate is missed. Lift the refusal only for the measured form.
-- After that, in order: tp in discrete bam (`discrete.mf` bins the covariate; tp is built on the compressed frame),
-  `by=` on tp, then the remaining bases (`ts`, `cs`, `ps`, `cc`).
+## Next slice: tp in discrete bam (PLAN step 3, the bases)
+
+- `bam(method="fREML", discrete=TRUE)` refuses every tp term today (`hgam.frontend.bam_fit`). mgcv's `discrete.mf`
+  bins the tp covariate like any other one-covariate smooth, and `gam.setup` builds the tp basis on the padded frame
+  `mf0` (as for cr and fs, `constraint_frame`); prediction re-runs `discrete.mf`. Add section 30 to
+  `oracle/make_fixtures.R`: section 28b's model and section 29b's fs-on-tp model as discrete bam, with predict on new
+  data. Measure with `tp_construct` / `tp_basis` built on `mf0`; port only where a gate is missed. Watch the max.knots
+  rule: on `mf0` the row count is the padded frame's.
+- After that, in order: `by=` on tp, then the remaining bases (`ts`, `cs`, `ps`, `cc`).
 - Optional later cleanup (not blocking): remove the `"hgam"` Newton iteration and its tests once nothing relies on it;
   ask Jonathan in that slice's PR whether to keep it as a diagnostic.
 - Not ported yet (DEFERRED): the inner P-IRLS tolerance `conv.tol/100`; `edge.correct`; quasipoisson's log-scale
@@ -384,6 +394,14 @@ that follow mgcv's `newton`. The rule is in `docs/PRIORITIES.md` (PR #52). Done 
 ## Open questions
 
 None.
+
+Decided on PR #55 (2026-11-28): Q1 option (a). An fs fit on a tp base (no `xt`, or `xt="tp"`) stays refused by name;
+users write `xt="cr"`. Reason: mgcv's own fit there is set by rounding (the null pair's rotation): with x shifted by
+1e-12 to 1e-9, mgcv 1.9.4's eta moves by 1.6e-2 on the tp base and by 1e-14 on cr (PR #56's section 29e, pinned
+image), so no recorded mgcv fit is a reproducible reference. The engine's `fs_basis(base="tp")` stays, held to section
+29a up to that rotation. Revisit only if Jonathan asks for the default fs base; the candidate then is a canonical
+orientation of the null pair in hgam, documented as a difference from mgcv rather than gated. Q2 (PR #56, a duplicate)
+is settled: #56 was closed in favour of #55.
 
 (PR #15's nit on `s(x, f, bs="sz")` was already met: `api.py` refuses it by name and `tests/test_sz_basis.py` holds
 the refusal. Removed from this list on 2026-11-17.)

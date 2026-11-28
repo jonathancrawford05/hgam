@@ -64,6 +64,7 @@ __all__ = [
     "eigenspace_rounding_bound",
     "subspace_distance",
     "tp_basis",
+    "tp_construct",
     "tp_predict",
 ]
 
@@ -106,7 +107,7 @@ def _eval_unique(xs: np.ndarray, state: TprsState) -> np.ndarray:
 
 
 def tp_predict(x: np.ndarray, state: TprsState) -> np.ndarray:
-    """mgcv counterpart: ``smooth.construct.tp.smooth.spec`` (smooth.r), ``construct_tprs`` (tprs.c),
+    """mgcv counterpart: ``Predict.matrix.tprs.smooth`` (smooth.r), which calls ``predict_tprs`` (tprs.c),
     mgcv 1.9-4.
 
     The **unconstrained** ``tp`` design at ``x`` (``mgcv``'s ``Predict.matrix``): the
@@ -163,18 +164,18 @@ def _check_inputs(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, np.nda
     return xs, xu, inverse.reshape(-1), counts
 
 
-def tp_basis(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, TprsState]:
+def tp_construct(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, TprsState]:
     """mgcv counterpart: ``smooth.construct.tp.smooth.spec`` (smooth.r), ``construct_tprs`` (tprs.c),
-    mgcv 1.9-4.
+    mgcv 1.9-4, as ``smooth.construct`` returns it: before ``smoothCon``'s ``scale.penalty``.
 
-    The **unconstrained** ``tp`` design ``(n, k)``, the (``scale.penalty``-rescaled)
-    penalty ``(k, k)`` and the :class:`TprsState` — ``smoothCon(..., absorb.cons=FALSE)``.
+    The unconstrained design ``(n, k)`` with ``construct_tprs``'s column scaling, its penalty ``(k, k)``
+    and the :class:`TprsState`. ``fs`` builds its base smooth this way (``smooth.construct.fs.smooth.spec``
+    calls ``smooth.construct``, not ``smoothCon``); :func:`tp_basis` adds the penalty scaling.
 
     Raises:
         HgamValidationError: ``k < 3``; fewer than ``k`` distinct values.
-        HgamNotImplementedError: the ``max.knots`` subsampling regime (smooth.r: more than 2000 rows and
-            more than 2000 distinct values), which is not ported.
-        HgamComputationError: a degenerate (zero) column or penalty.
+        HgamNotImplementedError: the ``max.knots`` subsampling regime (module docstring).
+        HgamComputationError: a degenerate (zero) column.
     """
     xs, xu, inverse, counts = _check_inputs(x, k)
     n = xs.shape[0]
@@ -200,15 +201,28 @@ def tp_basis(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, TprsState]:
     uz = uz * col_scale
     s_scaled = s_raw * np.outer(col_scale, col_scale)
     s_scaled = (s_scaled + s_scaled.T) / 2.0
-    x_inf_sq = _r_norm_inf(design_u) ** 2
+    return design_u[inverse], s_scaled, TprsState(shift=state.shift, xu=xu, uz=uz)
+
+
+def tp_basis(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, TprsState]:
+    """mgcv counterpart: ``smooth.construct.tp.smooth.spec`` (smooth.r), ``construct_tprs`` (tprs.c),
+    mgcv 1.9-4.
+
+    The **unconstrained** ``tp`` design ``(n, k)``, the (``scale.penalty``-rescaled)
+    penalty ``(k, k)`` and the :class:`TprsState` — ``smoothCon(..., absorb.cons=FALSE)``.
+
+    Raises:
+        HgamValidationError: ``k < 3``; fewer than ``k`` distinct values.
+        HgamNotImplementedError: the ``max.knots`` subsampling regime (smooth.r: more than 2000 rows and
+            more than 2000 distinct values), which is not ported.
+        HgamComputationError: a degenerate (zero) column or penalty.
+    """
+    design, s_scaled, state = tp_construct(x, k)
+    x_inf_sq = _r_norm_inf(design) ** 2
     scale = _r_norm_one(s_scaled) / x_inf_sq
     if scale == 0.0:
         raise HgamComputationError("tp_basis: the unscaled penalty is identically zero.")
-    return (
-        design_u[inverse],
-        s_scaled / scale,
-        TprsState(shift=state.shift, xu=xu, uz=uz),
-    )
+    return design, s_scaled / scale, state
 
 
 def subspace_distance(a: np.ndarray, b: np.ndarray) -> float:

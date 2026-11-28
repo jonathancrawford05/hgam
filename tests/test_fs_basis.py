@@ -15,8 +15,12 @@ fitted term is held to a REML gam fit in ``tests/test_fs_fit.py`` (section 24b).
 import itertools
 
 import numpy as np
+import pytest
 
+from hgam.engine.gam_basis_cr import _r_norm_inf
 from hgam.engine.gam_basis_fs import fs_basis, fs_predict_design
+from hgam.engine.gam_basis_tp import subspace_distance
+from hgam.errors import HgamNotImplementedError, HgamValidationError
 
 GATE = 1e-8
 
@@ -78,3 +82,80 @@ def test_fs_basis_matches_smoothcon(load_fixture, margin) -> None:
     assert rel_p < GATE
     assert rel_s < GATE
     assert rel_new < GATE
+
+
+def test_fs_tp_basis_matches_smoothcon_up_to_the_null_pair(load_fixture, margin) -> None:
+    """Section 29a: ``smoothCon(s(x, f, bs="fs", k=6))``, mgcv's default tp base, against
+    ``fs_basis(base="tp")``.
+
+    The range columns are held column by column (up to sign), like cr's. The two null-space directions of
+    ``R^-T S R^-1`` have eigenvalues at rounding level (about 1e-20), so LAPACK may return any rotation of
+    that pair, not only a swap: they are held as a subspace (the sine of the largest principal angle), with
+    the null-space penalties' sum, which is the identity on that subspace whatever the rotation. Penalties are
+    compared after smoothCon's ``norm(X, "I")^2`` scaling from each side's own design, since that norm also
+    changes with the rotation (pinned image: 3.5e-2 without it). ``P`` is not
+    compared: it maps the tp base's own coordinates, which carry tp's eigenvector gauge
+    (``tests/test_tp_fit.py``). An mgcv fit is not invariant to a rotation of the null pair
+    (measured: 0.1 rad moves eta by 1.2e-3 on both bases), and on a tp base rounding does rotate it (x
+    perturbed at 1e-15 moves the fit by up to 3e-2; the cr fit does not move), so a fit on this base is
+    refused until Jonathan decides (PR #55)."""
+    fx = load_fixture("smoothcon_fs_tp")
+    n_levels, k = fx["n_levels"], fx["k"]
+    base_rank = k - 2
+    got = fs_basis(np.asarray(fx["x"]), np.asarray(fx["group"]), n_levels, None, base="tp", k=k)
+    ref_x = np.asarray(fx["X"])
+    assert got.design.shape == ref_x.shape == (len(fx["x"]), k * n_levels)
+    assert fx["C_rows"] == 0 and fx["null_space_dim"] == 0
+    assert got.rank == tuple(fx["rank"]) == (base_rank * n_levels, n_levels, n_levels)
+    assert len(got.penalties) == len(fx["S"]) == 3
+
+    x_new = fs_predict_design(
+        np.asarray(fx["new_x"]), np.asarray(fx["new_group"]), n_levels, None, got.p_mat, got.tp_state
+    )
+    ref_new = np.asarray(fx["X_new"])
+    rng = np.arange(base_rank)
+    null = np.arange(base_rank, k)
+    rel_range, rel_new, d_null, d_null_new = 0.0, 0.0, 0.0, 0.0
+    for level in range(n_levels):
+        cols, ncols = rng + level * k, null + level * k
+        rows = np.asarray(fx["group"]) == level
+        signs = np.sign(np.sum(got.design[:, cols] * ref_x[:, cols], axis=0))
+        rel_range = max(rel_range, _rel(got.design[:, cols] * signs, ref_x[:, cols]))
+        rel_new = max(rel_new, _rel(x_new[:, cols] * signs, ref_new[:, cols]))
+        d_null = max(d_null, subspace_distance(got.design[rows][:, ncols], ref_x[rows][:, ncols]))
+        new_rows = np.asarray(fx["new_group"]) == level
+        d_null_new = max(
+            d_null_new, subspace_distance(x_new[new_rows][:, ncols], ref_new[new_rows][:, ncols])
+        )
+    # smoothCon scales each penalty by norm(X, "I")^2 / norm(S): the row-sum norm of the design changes with
+    # the null pair's rotation, so each side's penalties are compared at the other's design norm.
+    ref_s = [np.asarray(s) for s in fx["S"]]
+    rescale = _r_norm_inf(ref_x) ** 2 / _r_norm_inf(got.design) ** 2
+    rel_s_range = _rel(got.penalties[0] * rescale, ref_s[0])
+    rel_s_null = _rel((got.penalties[1] + got.penalties[2]) * rescale, ref_s[1] + ref_s[2])
+
+    for quantity, value in (
+        ("X range columns, max rel", rel_range),
+        ("X null pair, subspace sine", d_null),
+        ("range penalty, max rel", rel_s_range),
+        ("summed null penalties, max rel", rel_s_null),
+        ("PredictMat range columns, max rel", rel_new),
+        ("PredictMat null pair, subspace sine", d_null_new),
+    ):
+        margin("fs basis (smoothcon_fs_tp)", quantity, value, "1e-8 rel", "smoothcon_fs_tp")
+    assert rel_range < GATE
+    assert d_null < GATE
+    assert rel_s_range < GATE
+    assert rel_s_null < GATE
+    assert rel_new < GATE
+    assert d_null_new < GATE
+
+
+def test_fs_basis_refuses_arguments_its_base_would_ignore() -> None:
+    """A tp base places its own knots, and a cr base's k is len(knots): neither is accepted and ignored."""
+    x = np.linspace(0.0, 10.0, 60)
+    group = np.tile([0, 1, 2], 20)
+    with pytest.raises(HgamNotImplementedError, match="knots for a tp base"):
+        fs_basis(x, group, 3, np.array([9.0, 9.0]), base="tp", k=6)
+    with pytest.raises(HgamValidationError, match="k=5 but 6 cr knots"):
+        fs_basis(x, group, 3, np.linspace(0.0, 10.0, 6), k=5)

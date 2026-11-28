@@ -905,4 +905,36 @@ pr28d <- predict(m28d, nd28, se.fit = TRUE)
 put("gam_binomial_cloglog_tp_select_reml", c(gam_case(m28d, d28, f28b, "binomial(link='cloglog')"),
     list(rank = m28d$rank, coef_names = names(coef(m28d)), newdata = nd28,
          fit_new = as.numeric(pr28d$fit), se_new = as.numeric(pr28d$se.fit))))
+# 29. fs on its default tp base (smooth.construct.fs.smooth.spec, smooth.r: xt NULL gives base.bs "tp"), the form
+# hierarchical GAMs write: smooth.construct.tp.smooth.spec builds the base on every row (no constraint, construct_tprs's
+# column scaling, no smoothCon scale.penalty), then nat.param(type = 1) as for cr (section 24). 29a: smoothCon on section
+# 24's data, with PredictMat at its new values (Predict.matrix.fs.interaction calls Predict.matrix.tprs.smooth).
+# 29b: section 24b's REML fit at the tp base, predict on 24b's new data with se. 29c: the global-plus-group-curves form
+# s(x) + s(x, f, bs = "fs") on 24b's data, both tp. 29d: 29c with select = TRUE. 29b to 29d are recorded for PR #55's
+# question and not yet gated: the fit depends on the rotation LAPACK gives the null-space pair (eigenvalues ~1e-20).
+sm29 <- smoothCon(s(x, f, bs = "fs", k = 6), d24)[[1]]
+put("smoothcon_fs_tp", list(x = d24$x, group = as.integer(d24$f) - 1L, n_levels = 3L, k = 6L, label = sm29$label,
+  X = sm29$X, S = sm29$S, rank = sm29$rank, P = sm29$P, C_rows = nrow(sm29$C), null_space_dim = sm29$null.space.dim,
+  new_x = nd24$x, new_group = as.integer(nd24$f) - 1L, X_new = PredictMat(sm29, nd24)))
+f29b <- "p ~ s(x, f, bs='fs', k=6)"
+m29b <- gam(as.formula(f29b), family = binomial(link = "cloglog"), weights = n, data = d24b, method = "REML")
+pr29b <- predict(m29b, nd24b, se.fit = TRUE)
+put("gam_binomial_cloglog_fs_tp_reml", c(gam_case(m29b, d24b, f29b, "binomial(link='cloglog')"),
+  list(rank = m29b$rank, coef_names = names(coef(m29b)), newdata = nd24b,
+       fit_new = as.numeric(pr29b$fit), se_new = as.numeric(pr29b$se.fit))))
+f29c <- "p ~ s(x) + s(x, f, bs='fs', k=6)"
+m29c <- gam(as.formula(f29c), family = binomial(link = "cloglog"), weights = n, data = d24b, method = "REML")
+pr29c <- predict(m29c, nd24b, se.fit = TRUE)
+put("gam_binomial_cloglog_tp_fs_tp_reml", c(gam_case(m29c, d24b, f29c, "binomial(link='cloglog')"),
+  list(rank = m29c$rank, coef_names = names(coef(m29c)), newdata = nd24b,
+       fit_new = as.numeric(pr29c$fit), se_new = as.numeric(pr29c$se.fit))))
+# 29d. 29c with select = TRUE: the fs penalties sum to full rank, so fs gets no extra penalty (as on cr, section 24e),
+# and the tp s(x) gets its null-space penalty (as in 28d).
+m29d <- gam(as.formula(f29c), family = binomial(link = "cloglog"), weights = n, data = d24b, method = "REML",
+            select = TRUE)
+pr29d <- predict(m29d, nd24b, se.fit = TRUE)
+put("gam_binomial_cloglog_tp_fs_tp_select_reml", c(gam_case(m29d, d24b, f29c, "binomial(link='cloglog')"),
+  list(select = TRUE, rank = m29d$rank, coef_names = names(coef(m29d)), newdata = nd24b,
+       n_penalties = sapply(m29d$smooth, function(s) length(s$S)),
+       fit_new = as.numeric(pr29d$fit), se_new = as.numeric(pr29d$se.fit))))
 cat("fixtures written to", out, "with mgcv", meta$mgcv, "tier", meta$tier, "\n")
